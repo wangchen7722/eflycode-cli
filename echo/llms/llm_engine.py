@@ -31,7 +31,7 @@ ALLOWED_GENERATE_CONFIG_KEYS = [
 
 def build_generate_config(
     llm_config: LLMConfig,
-    **kwargs: Dict[str, Any]
+    **kwargs
 ) -> Dict[str, Any]:
     """构建生成配置
 
@@ -60,7 +60,7 @@ class LLMEngine:
             self,
             llm_config: LLMConfig,
             headers: Optional[Dict[str, str]] = None,
-            **kwargs: Dict[str, Any]
+            **kwargs
     ):
         """初始化LLM引擎
         
@@ -76,13 +76,13 @@ class LLMEngine:
             raise ValueError("LLM配置中缺少base_url字段")
         if "api_key" not in self.llm_config:
             raise ValueError("LLM配置中缺少api_key字段")
-        self.model = self.llm_config.get('model')
-        self.base_url = self.llm_config.get('base_url')
-        self.api_key = self.llm_config.get('api_key')
+        self.model = self.llm_config.get("model")
+        self.base_url = self.llm_config.get("base_url")
+        self.api_key = self.llm_config.get("api_key")
         self.headers = headers or {}
 
     def generate(self, messages: List[Dict[str, str]],
-                 **kwargs: Dict[str, Any]) -> ChatCompletion | Generator[
+                 **kwargs) -> ChatCompletion | Generator[
         ChatCompletionChunk, None, None]:
         """生成LLM响应
         

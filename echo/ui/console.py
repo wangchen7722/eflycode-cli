@@ -22,7 +22,7 @@ class ConsoleUI:
         Returns:
             str: 用户输入的内容
         """
-        return Prompt.ask("user")
+        return Prompt.ask("User")
 
     def exit(self) -> None:
         """退出控制台程序"""
@@ -124,7 +124,7 @@ class ConsoleUI:
 
         table = Table(title=title)
         for column in columns:
-            table.add_column(column, style='default', width=20)
+            table.add_column(column, style="default", width=20)
 
         for row in rows:
             table.add_row(*row)

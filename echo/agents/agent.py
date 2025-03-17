@@ -2,7 +2,7 @@ from typing import Dict, List, Optional, Generator
 from enum import Enum
 from pydantic import BaseModel, Field
 
-from prompt import prompt_loader
+from prompt.prompt_loader import PromptLoader
 from llms.llm_engine import LLMEngine
 from llms.schema import ChatCompletion, ChatCompletionChunk, Usage, ToolCall
 from utils.system import system_info
@@ -96,7 +96,7 @@ class Agent:
     
     def system_prompt(self) -> str:
         """渲染系统提示词"""
-        return prompt_loader.render_template(
+        return PromptLoader.get_instance().render_template(
             f"{self.role}/system.prompt",
             name=self.name,
             role=self.role,

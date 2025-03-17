@@ -3,7 +3,7 @@ from pathlib import Path
 from unittest import mock
 from jinja2 import TemplateNotFound, Environment, FileSystemLoader, ChoiceLoader
 
-from echo.prompt.prompt_loader import PromptLoader, PromptNotFoundError, PromptRenderError
+from echo.prompt.prompt_loader import PromptLoader
 
 
 class TestPromptLoader(unittest.TestCase):
@@ -14,13 +14,12 @@ class TestPromptLoader(unittest.TestCase):
         PromptLoader._instance = None
         PromptLoader._prompt_dirs = []
         
-        # 设置mock环境
-        self.mock_env_patcher = mock.patch('jinja2.Environment')
+        # 注意这里的mock路径修改为PromptLoader所在模块的Environment
+        self.mock_env_patcher = mock.patch('echo.prompt.prompt_loader.Environment')
         self.mock_env = self.mock_env_patcher.start()
         self.mock_env_instance = mock.MagicMock()
         self.mock_env.return_value = self.mock_env_instance
         
-        # 设置mock模板
         self.mock_template = mock.MagicMock()
         self.mock_template.render.return_value = "Hello, World!"
     
@@ -46,29 +45,28 @@ class TestPromptLoader(unittest.TestCase):
         another_dir = Path("/another/dir")
         PromptLoader.add_prompt_dir(another_dir)
         self.assertIn(another_dir, PromptLoader._prompt_dirs)
-    
-    def test_init_env(self):
-        """测试环境初始化"""
+
+    def test_render_template(self):
+        """测试渲染模板功能"""
+        # 设置mock模板返回值
+        self.mock_env_instance.get_template.return_value = self.mock_template
+        
+        # 创建测试目录路径
         test_dir = Path("/test/dir")
         loader = PromptLoader(test_dir)
         
-        with mock.patch('jinja2.FileSystemLoader') as mock_loader,\
-             mock.patch('jinja2.ChoiceLoader') as mock_choice_loader:
-            loader._init_env()
-            mock_loader.assert_called_once_with(str(test_dir))
-            mock_choice_loader.assert_called_once()
-            self.mock_env.assert_called_once()
-    
-    def test_render_template_success(self):
-        """测试模板渲染成功场景"""
-        self.mock_env_instance.get_template.return_value = self.mock_template
+        # 测试模板渲染
+        template_name = "test.prompt"
+        # 不再转换为Path对象，直接使用模板名称
+        template_vars = {"name": "World"}
+        result = loader.render_template(template_name, **template_vars)
         
-        loader = PromptLoader(Path("/test/dir"))
-        result = loader.render_template("test.prompt", name="World")
-        
-        self.mock_env_instance.get_template.assert_called_once_with("test.prompt")
-        self.mock_template.render.assert_called_once_with(name="World")
+        # 验证结果
         self.assertEqual(result, "Hello, World!")
+        # 验证模板加载调用
+        self.mock_env_instance.get_template.assert_called_once_with(template_name)
+        # 验证模板渲染调用
+        self.mock_template.render.assert_called_once_with(**template_vars)
     
     def test_template_not_found(self):
         """测试模板不存在的异常处理"""

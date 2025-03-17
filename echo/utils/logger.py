@@ -1,7 +1,7 @@
 import os
 import logging
 from logging.handlers import RotatingFileHandler
-from typing import Optional, Dict, Any
+from typing import Dict
 from threading import Lock
 
 # 用于存储已创建的logger实例
@@ -11,10 +11,10 @@ class ThreadSafeRotatingFileHandler(RotatingFileHandler):
     """线程安全的日志文件处理器"""
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.lock = Lock()
+        self._lock = Lock()
 
     def emit(self, record):
-        with self.lock:
+        with self._lock:
             super().emit(record)
 
 def get_logger(

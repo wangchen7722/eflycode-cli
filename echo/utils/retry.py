@@ -1,9 +1,7 @@
 import time
-import logging
 from functools import wraps
 from typing import Type, Union, Tuple, Optional, Callable, Any
 
-from echo.utils.logger import get_logger
 
 def retry(
     max_retries: int = 3,

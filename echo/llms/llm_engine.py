@@ -1,35 +1,66 @@
-from typing import Dict, Any, List, Optional, TypedDict
-import os
+import logging
+from typing import Dict, Any, List, Optional, TypedDict, Generator, Iterator
+from echo.llms.schema import ChatCompletion, ChatCompletionChunk
+
+from echo.utils.logger import get_logger
+
 
 class LLMConfig(TypedDict):
     """LLM配置类型定义"""
-    base_url: Optional[str]
-    api_key: Optional[str]
-    model: Optional[str]
+    model: str
+    base_url: str
+    api_key: str
     temperature: Optional[float]
     max_tokens: Optional[int]
 
+
+logger: logging.Logger = get_logger("llm_engine")
+
+ALLOWED_GENERATE_CONFIG_KEYS = [
+    "max_tokens",
+    "frequency_penalty",
+    "presence_penalty",
+    "stop",
+    "temperature",
+    "top_p",
+    "tools",
+    "tool_choice",
+    "logprobs",
+]
+
+
+def build_generate_config(
+    llm_config: LLMConfig,
+    **kwargs: Dict[str, Any]
+) -> Dict[str, Any]:
+    """构建生成配置
+
+    Args:
+        llm_config: LLM配置
+        **kwargs: 其他参数
+
+    Returns:
+        Dict[str, Any]: 生成配置字典
+    """
+    config = {}
+    for key in llm_config:
+        if key in ALLOWED_GENERATE_CONFIG_KEYS:
+            config[key] = llm_config[key]
+    if kwargs:
+        for key in kwargs:
+            if key in ALLOWED_GENERATE_CONFIG_KEYS:
+                config[key] = kwargs[key]
+    return config
+
+
 class LLMEngine:
     """大语言模型引擎，负责处理与LLM的交互"""
-    
-    ALLOW_GENERATE_CONFIG_KEYS = [
-        "stream"
-        "max_tokens",
-        "frequency_penalty",
-        "presence_penalty",
-        "stop",
-        "temperature",
-        "top_p",
-        "tools",
-        "tool_choice",
-        "logprobs",
-    ]
-    
+
     def __init__(
-        self,
-        llm_config: Optional[LLMConfig] = None,
-        headers: Optional[Dict[str, str]] = None,
-        **kwargs: Dict[str, Any]
+            self,
+            llm_config: LLMConfig,
+            headers: Optional[Dict[str, str]] = None,
+            **kwargs: Dict[str, Any]
     ):
         """初始化LLM引擎
         
@@ -38,31 +69,21 @@ class LLMEngine:
             headers: 请求头
             **kwargs: 其他参数
         """
-        self.llm_config = llm_config or {}
-        self.base_url = self.llm_config.get('base_url') or os.getenv('ECHO_BASE_URL')
-        self.api_key = self.llm_config.get('api_key') or os.getenv('ECHO_API_KEY')
-        self.headers = headers or {}
-        
-        self.generate_config = self._build_generate_config()
-        
-        # 设置默认的模型参数
+        self.llm_config = llm_config
+        if "model" not in self.llm_config:
+            raise ValueError("LLM配置中缺少model字段")
+        if "base_url" not in self.llm_config:
+            raise ValueError("LLM配置中缺少base_url字段")
+        if "api_key" not in self.llm_config:
+            raise ValueError("LLM配置中缺少api_key字段")
         self.model = self.llm_config.get('model')
-        self.temperature = self.llm_config.get('temperature')
-        self.max_tokens = self.llm_config.get('max_tokens')
-    
-    def _build_generate_config(self) -> Dict[str, Any]:
-        """构建生成配置
-        
-        Returns:
-            Dict[str, Any]: 生成配置字典
-        """
-        config = {}
-        for key in self.ALLOW_GENERATE_CONFIG_KEYS:
-            if key in self.llm_config:
-                config[key] = self.llm_config[key]
-        return config
-    
-    def generate(self, messages: List[Dict[str, str]], **kwargs: Dict[str, Any]) -> str:
+        self.base_url = self.llm_config.get('base_url')
+        self.api_key = self.llm_config.get('api_key')
+        self.headers = headers or {}
+
+    def generate(self, messages: List[Dict[str, str]],
+                 **kwargs: Dict[str, Any]) -> ChatCompletion | Generator[
+        ChatCompletionChunk, None, None]:
         """生成LLM响应
         
         Args:
@@ -70,6 +91,6 @@ class LLMEngine:
             **kwargs: 其他参数
             
         Returns:
-            str: LLM的响应文本
+            ChatCompletion | Generator[ChatCompletionChunk, None, None]: LLM响应
         """
         raise NotImplementedError

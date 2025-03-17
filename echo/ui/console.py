@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from rich.console import Console
 from rich.prompt import Prompt
 from rich.table import Table
-from rich.progress import Progress, SpinnerColumn, TextColumn, TaskID
+from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.panel import Panel
 from rich.text import Text
 
@@ -22,7 +22,7 @@ class ConsoleUI:
         Returns:
             str: 用户输入的内容
         """
-        return Prompt.ask("user", default=None)
+        return Prompt.ask("user")
 
     def exit(self) -> None:
         """退出控制台程序"""

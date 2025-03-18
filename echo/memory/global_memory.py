@@ -26,10 +26,10 @@ class GlobalMemory:
         return cls._instance
 
     def __init__(
-            self,
-            vector_db_path: Optional[str] = None,
-            embedding_model: Optional[str] = None,
-            capacity: int = 100,
+        self,
+        vector_db_path: Optional[str] = None,
+        embedding_model: Optional[str] = None,
+        capacity: int = 100,
     ):
         """初始化全局记忆管理器
         

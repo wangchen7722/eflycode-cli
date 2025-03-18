@@ -62,6 +62,10 @@ class AgentMemory:
         # 加载记忆项元数据
         if self.vector_db_path:
             self._load_memory_metadata()
+    
+    def is_empty(self) -> bool:
+        """检查记忆是否为空"""
+        return not (self.short_term_memory or self.long_term_memory)
 
     def _load_memory_metadata(self):
         """加载记忆项元数据"""

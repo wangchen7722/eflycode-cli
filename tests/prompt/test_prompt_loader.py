@@ -1,7 +1,7 @@
 import unittest
 from pathlib import Path
 from unittest import mock
-from jinja2 import TemplateNotFound, Environment, FileSystemLoader, ChoiceLoader
+from jinja2 import TemplateNotFound
 
 from echo.prompt.prompt_loader import PromptLoader
 

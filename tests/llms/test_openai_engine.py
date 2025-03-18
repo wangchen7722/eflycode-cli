@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 from echo.llms.openai_engine import OpenAIEngine
 from echo.llms.llm_engine import LLMConfig
-from echo.llms.schema import ChatCompletion, ChatCompletionChunk, StreamChoice
+from echo.llms.schema import ChatCompletion, ChatCompletionChunk
 
 
 class TestOpenAIEngine(unittest.TestCase):

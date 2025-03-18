@@ -1,9 +1,6 @@
 import unittest
-from unittest.mock import MagicMock, patch
-from typing import Dict, Any
 
 from echo.llms.llm_engine import LLMEngine, LLMConfig, build_generate_config
-from echo.llms.schema import ChatCompletion, ChatCompletionChunk
 
 
 class TestLLMEngine(unittest.TestCase):

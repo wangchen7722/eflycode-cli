@@ -1,20 +1,13 @@
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 from jinja2 import Environment, FileSystemLoader, ChoiceLoader, TemplateNotFound
 
-class PromptNotFoundError(Exception):
-    """当请求的提示词模板不存在时抛出此异常"""
-    pass
-
-class PromptRenderError(Exception):
-    """当提示词模板渲染失败时抛出此异常"""
-    pass
 
 class PromptLoader:
     """提示词加载器，负责加载和渲染jinja2模板"""
     _instance: Optional["PromptLoader"] = None
     _prompt_dirs: List[Path] = []
-    
+
     def __new__(cls, prompt_dir: Optional[Path] = None) -> "PromptLoader":
         """实现单例模式
         
@@ -25,26 +18,27 @@ class PromptLoader:
             cls._instance = super().__new__(cls)
             cls._instance._initialized = False
         return cls._instance
-    
+
     def __init__(self, prompt_dir: Optional[Path] = None):
         """初始化提示词加载器
         
         Args:
             prompt_dir: 提示词模板目录路径
         """
-        if not self._initialized:
-            self._initialized = True
-            if prompt_dir:
-                self.add_prompt_dir(prompt_dir)
-            self._init_env()
-    
+        if getattr(self, '_initialized', False):
+            return
+        if prompt_dir:
+            self.add_prompt_dir(prompt_dir)
+        self._init_env()
+        self._initialized = True
+
     @classmethod
     def get_instance(cls) -> "PromptLoader":
         """获取PromptLoader全局唯一实例"""
         if cls._instance is None:
             cls._instance = cls()
         return cls._instance
-    
+
     @classmethod
     def add_prompt_dir(cls, prompt_dir: Path) -> None:
         """添加提示词模板目录
@@ -56,7 +50,7 @@ class PromptLoader:
             cls._prompt_dirs.append(prompt_dir)
             if cls._instance:
                 cls._instance._init_env()
-    
+
     def _init_env(self) -> None:
         """初始化jinja2模板环境"""
         loaders = [FileSystemLoader(str(path)) for path in self._prompt_dirs]
@@ -65,7 +59,7 @@ class PromptLoader:
             trim_blocks=True,
             lstrip_blocks=True
         )
-    
+
     def render_template(self, template_path: str, **kwargs) -> str:
         """加载并渲染指定模板
         

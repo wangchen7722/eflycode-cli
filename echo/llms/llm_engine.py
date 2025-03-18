@@ -1,7 +1,7 @@
 import logging
-from typing import Dict, Any, List, Optional, TypedDict, Generator, Iterator
-from echo.llms.schema import ChatCompletion, ChatCompletionChunk
+from typing import Dict, Any, List, Optional, TypedDict, Generator
 
+from echo.llms.schema import ChatCompletion, ChatCompletionChunk
 from echo.utils.logger import get_logger
 
 

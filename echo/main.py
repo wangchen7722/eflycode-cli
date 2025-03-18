@@ -1,7 +1,7 @@
 """Echo - 基于控制台的交互程序"""
 import time
 
-from ui.console import ConsoleUI
+from echo.ui.console import ConsoleUI
 
 
 def main():

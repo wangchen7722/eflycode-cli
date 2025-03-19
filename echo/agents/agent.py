@@ -286,7 +286,7 @@ class Agent:
             content: 用户输入的消息
             stream: 是否流式输出
 
-        Yields:
+        Returns:
             AgentResponse: 智能体的响应结果
         """
         # history_messages = self.retrieve_memories(content, top_k=5)

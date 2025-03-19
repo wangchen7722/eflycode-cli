@@ -5,7 +5,7 @@ from typing import Dict, Any, List, Optional, Generator, Literal, Union, overloa
 import httpx
 
 from echo.llms.llm_engine import LLMEngine, LLMConfig, build_generate_config
-from echo.llms.schema import ChatCompletion, ChatCompletionChunk
+from echo.llms.schema import ChatCompletion, ChatCompletionChunk, Message
 from echo.utils.logger import get_logger
 
 logger: logging.Logger = get_logger("openai_engine")
@@ -18,7 +18,7 @@ class OpenAIEngine(LLMEngine):
             self,
             llm_config: LLMConfig,
             headers: Optional[Dict[str, str]] = None,
-            **kwargs: Dict[str, Any]
+            **kwargs
     ):
         """初始化OpenAI Compatible API引擎
         
@@ -40,7 +40,6 @@ class OpenAIEngine(LLMEngine):
 
     def _generate_non_stream(
             self,
-            messages: List[Dict[str, str]],
             request_data: Dict[str, Any]
     ) -> ChatCompletion:
         """非流式生成回复
@@ -57,11 +56,10 @@ class OpenAIEngine(LLMEngine):
             json=request_data
         )
         response.raise_for_status()
-        return ChatCompletion.model_validate(response.json())
+        return ChatCompletion(**response.json())
 
     def _generate_stream(
             self,
-            messages: List[Dict[str, str]],
             request_data: Dict[str, Any]
     ) -> Generator[ChatCompletionChunk, None, None]:
         """流式生成回复
@@ -85,31 +83,31 @@ class OpenAIEngine(LLMEngine):
                     if data == "[DONE]":
                         break
                     chunk_data = json.loads(data)
-                    yield ChatCompletionChunk.model_validate(chunk_data)
+                    yield ChatCompletionChunk(**chunk_data)
 
     @overload
     def generate(
         self,
-        messages: List[Dict[str, str]],
+        messages: List[Message],
         stream: Literal[False] = False,
-        **kwargs: Dict[str, Any]
+        **kwargs
     ) -> ChatCompletion:
         ...
 
     @overload
     def generate(
-            self,
-            messages: List[Dict[str, str]],
-            stream: Literal[True],
-            **kwargs: Dict[str, Any]
+        self,
+        messages: List[Message],
+        stream: Literal[True],
+        **kwargs
     ) -> Generator[ChatCompletionChunk, None, None]:
         ...
 
     def generate(
             self,
-            messages: List[Dict[str, str]],
+            messages: List[Message],
             stream: bool = False,
-            **kwargs: Dict[str, Any]
+            **kwargs
     ) -> Union[ChatCompletion, Generator[ChatCompletionChunk, None, None]]:
         """生成回复
 
@@ -129,6 +127,6 @@ class OpenAIEngine(LLMEngine):
         }
 
         if not stream:
-            return self._generate_non_stream(messages, request_data)
+            return self._generate_non_stream(request_data)
         else:
-            return self._generate_stream(messages, request_data)
+            return self._generate_stream(request_data)

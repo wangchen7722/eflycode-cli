@@ -1,7 +1,7 @@
 import logging
-from typing import Dict, Any, List, Optional, TypedDict, Generator
+from typing import Dict, Any, List, Optional, TypedDict, Generator, Literal, overload
 
-from echo.llms.schema import ChatCompletion, ChatCompletionChunk
+from echo.llms.schema import Message, ChatCompletion, ChatCompletionChunk
 from echo.utils.logger import get_logger
 
 
@@ -81,13 +81,36 @@ class LLMEngine:
         self.api_key = self.llm_config.get("api_key")
         self.headers = headers or {}
 
-    def generate(self, messages: List[Dict[str, str]],
-                 **kwargs) -> ChatCompletion | Generator[
+    @overload
+    def generate(
+        self,
+        messages: List[Message],
+        stream: Literal[False] = False,
+        **kwargs
+    ) -> ChatCompletion:
+        ...
+
+    @overload
+    def generate(
+            self,
+            messages: List[Message],
+            stream: Literal[True],
+            **kwargs
+    ) -> Generator[ChatCompletionChunk, None, None]:
+        ...
+
+    def generate(
+        self, 
+        messages: List[Message], 
+        stream: bool = True,
+        **kwargs
+    ) -> ChatCompletion | Generator[
         ChatCompletionChunk, None, None]:
         """生成LLM响应
         
         Args:
             messages: 消息列表，每个消息是一个字典，包含role和content字段
+            stream: 是否流式响应
             **kwargs: 其他参数
             
         Returns:

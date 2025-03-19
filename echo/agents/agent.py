@@ -76,7 +76,7 @@ class AgentResponse(BaseModel):
     usage: Optional[Usage]
     metadata: Optional[AgentResponseMetadata]
 
-    is_streaming: Optional[bool] = Field(default=None, alias="_is_streaming")
+    is_streaming: Optional[bool] = Field(default=False, alias="_is_streaming")
     stream_generator: Optional[Generator[AgentResponseChunk, None, None]] = Field(default=None, alias="_stream_generator")
 
     def set_stream_generator(

@@ -1,5 +1,6 @@
 from typing import Any, Dict, List, Optional, Literal, TypedDict, Required, NotRequired
 
+
 class ToolFunction(TypedDict, total=False):
     """工具函数参数规范
     
@@ -12,6 +13,7 @@ class ToolFunction(TypedDict, total=False):
     description: Required[str]
     parameters: Required[Dict[str, Any]]
 
+
 class ToolCallFunction(TypedDict, total=False):
     """工具调用信息
     
@@ -21,6 +23,7 @@ class ToolCallFunction(TypedDict, total=False):
     """
     name: Required[str]
     arguments: Required[str]
+
 
 class ToolCall(TypedDict, total=False):
     """工具调用信息
@@ -33,6 +36,7 @@ class ToolCall(TypedDict, total=False):
     id: Required[str]  # 调用ID
     type: Required[Literal["function"]]
     function: Required[ToolCallFunction]
+
 
 class Message(TypedDict, total=False):
     """聊天消息格式
@@ -47,10 +51,11 @@ class Message(TypedDict, total=False):
     """
     role: Required[Literal["system", "user", "assistant", "tool"]]
     reasoning_content: NotRequired[Optional[str]]
-    content: Required[Optional[str]]
+    content: NotRequired[Optional[str]]
     name: NotRequired[Optional[str]]
     tool_calls: NotRequired[Optional[List[ToolCall]]]
     tool_call_id: NotRequired[Optional[str]]
+
 
 class Choice(TypedDict, total=False):
     """完成选项
@@ -64,6 +69,7 @@ class Choice(TypedDict, total=False):
     message: Required[Message]
     finish_reason: Required[Optional[str]]
 
+
 class Usage(TypedDict, total=False):
     """API使用量统计
     
@@ -75,6 +81,7 @@ class Usage(TypedDict, total=False):
     prompt_tokens: Required[int]
     completion_tokens: Required[int]
     total_tokens: Required[int]
+
 
 class ChatCompletion(TypedDict, total=False):
     """聊天完成响应
@@ -94,6 +101,7 @@ class ChatCompletion(TypedDict, total=False):
     choices: Required[List[Choice]]
     usage: Required[Usage]
 
+
 class StreamChoice(TypedDict, total=False):
     """流式响应的选项格式
     
@@ -105,6 +113,7 @@ class StreamChoice(TypedDict, total=False):
     index: Required[int]
     delta: Required[Message]
     finish_reason: Required[Optional[str]]
+
 
 class ChatCompletionChunk(TypedDict, total=False):
     """流式聊天完成响应
@@ -121,4 +130,4 @@ class ChatCompletionChunk(TypedDict, total=False):
     created: Required[int]
     model: Required[str]
     choices: Required[List[StreamChoice]]
-    usage: Required[Optional[Usage]]
+    usage: NotRequired[Optional[Usage]]

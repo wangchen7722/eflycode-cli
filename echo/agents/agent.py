@@ -1,4 +1,4 @@
-from typing import Dict, List, Literal, Optional, Generator, TypedDict, Any, Tuple, Required
+from typing import Dict, Iterable, List, Literal, Optional, Generator, Type, TypedDict, Any, Required, Sequence
 from enum import Enum
 
 from pydantic import BaseModel, Field
@@ -9,6 +9,7 @@ from echo.llms.schema import ChatCompletionChunk, Message, Usage, ToolCall
 from echo.utils.system_utils import system_info
 from echo.utils.tool_utils import apply_tool_calls_template
 from echo.memory import AgentMemory
+from echo.tools import BaseTool
 
 
 class AgentCapability(Enum):
@@ -26,7 +27,7 @@ class AgentResponseMetadata(TypedDict, total=False):
     Attributes:
         request_context (Dict[str, Any]): 请求上下文信息，可以包含原始请求消息、时间戳等
             示例: {"message": "用户输入", "timestamp": "2024-01-01 12:00:00"}
-    """    
+    """
     request_context: Required[Dict[str, Any]]
 
 
@@ -77,10 +78,11 @@ class AgentResponse(BaseModel):
     metadata: Optional[AgentResponseMetadata]
 
     is_streaming: Optional[bool] = Field(default=False, alias="_is_streaming")
-    stream_generator: Optional[Generator[AgentResponseChunk, None, None]] = Field(default=None, alias="_stream_generator")
+    stream_generator: Optional[Generator[AgentResponseChunk, None, None]] = Field(default=None,
+                                                                                  alias="_stream_generator")
 
     def set_stream_generator(
-        self, generator: Generator[AgentResponseChunk, None, None]
+            self, generator: Generator[AgentResponseChunk, None, None]
     ):
         """设置流式输出生成器
         Args:
@@ -115,6 +117,138 @@ class AgentResponse(BaseModel):
                 if not self.tool_calls:
                     self.tool_calls = []
                 self.tool_calls.extend(chunk.tool_calls)
+        self.is_streaming = False
+        self.stream_generator = None
+
+
+class AgentMessageParserResult(TypedDict, total=False):
+    """
+    工具调用解析结果
+    Attributes:
+        type (Literal["message", "tool_call"]): 结果类型
+        content (str): 消息内容
+        tool_call_name (Optional[str]): 工具名称
+        tool_call_arguments (Optional[Dict[str, Any]]): 工具参数
+        partial (bool): 是否为部分解析结果
+    """
+    partial: Required[bool]
+    type: Required[Literal["message", "tool_call"]]
+    content: Required[Optional[str]]
+    tool_call_name: Required[Optional[str]]
+    tool_call_arguments: Required[Optional[Dict[str, Any]]]
+
+
+def agent_message_stream_parser(
+        tools: Sequence[BaseTool],
+        stream_generator: Iterable[str]
+) -> Generator[AgentMessageParserResult, None, None]:
+    """解析工具调用消息
+
+    Args:
+        tools (List[BaseTool]): 工具列表
+        stream_generator (str): 消息生成器
+    """
+    # 计算最大工具名长度，防止在 content 中输出工具调用标签
+    possible_tool_call_tag = [f"<{tool.name}>" for tool in tools]
+    max_possible_tool_call_tag_length = max([len(tag) for tag in possible_tool_call_tag])
+    # 累计接收到的字符
+    accumulator = ""
+    # 工具调用相关信息
+    tool_map = {tool.name: tool for tool in tools}
+    tool_call_param_name = None  # 当前正在解析的工具调用参数的名称
+    tool_call_param_start_index = 0  # 当前正在解析的工具调用参数的起始位置
+    tool_call_start_index = 0  # 这个指针并非指向工具tag的起始位置，而是指向第一个工具tag的结束位置（即参数解析的第一位）
+    # 解析进度以及返回结果
+    should_look_ahead = True
+    look_ahead_char_count = max_possible_tool_call_tag_length
+    result_pos = 0
+    result: Optional[AgentMessageParserResult] = None  # type: Optional[Dict[str, Any]]
+
+    for pos, char in enumerate(stream_generator, start=1):
+        accumulator += char
+
+        if should_look_ahead and look_ahead_char_count > 0:
+            look_ahead_char_count -= 1
+            continue
+
+        # 如果正在解析工具调用中的参数，则先处理参数内容
+        if result is not None and result["type"] == "tool_call" and tool_call_param_name is not None:
+            tool_call_param_string = accumulator[tool_call_param_start_index:]
+            # 构造参数的闭合标签
+            param_closing_tag = f"</{tool_call_param_name}>"
+            if tool_call_param_string.endswith(param_closing_tag):
+                # 检测到参数的结束标签，结束参数解析
+                result["tool_call_arguments"][tool_call_param_name] = tool_call_param_string[:-len(param_closing_tag)].strip()
+                tool_call_param_name = None
+            continue
+
+        # 若当前正在工具调用中，但不在解析参数，则继续检查工具调用是否结束
+        if result is not None and result["type"] == "tool_call":
+            # 从工具调用的起始位置到目前位置的字符串
+            tool_call_string = accumulator[tool_call_start_index:]
+            # 构造工具调用的闭合标签
+            tool_call_closing_tag = f"</{result['tool_call_name']}>"
+            if tool_call_string.endswith(tool_call_closing_tag):
+                # 检测到工具调用的结束标签，结束工具调用块的解析
+                result["partial"] = False
+                yield result
+                result = None
+                result_pos = pos
+                look_ahead_char_count = max_possible_tool_call_tag_length
+                continue
+            else:
+                # 检查是否有新的参数开始
+                for param_name in tool_map[result["tool_call_name"]].parameters["properties"]:
+                    param_opening_tag = f"<{param_name}>"
+                    if tool_call_string.endswith(param_opening_tag):
+                        # 检测到参数的起始标签，开始解析参数
+                        tool_call_param_name = param_name
+                        tool_call_param_start_index = len(accumulator)
+                        break
+                # TODO: 特殊处理工具中同样出现闭合标签的情况
+
+                # 工具调用内容仍在累积中，继续处理下一个字符
+                continue
+
+        # 检查是否有工具调用标签
+        for tool_use_opening_tag in possible_tool_call_tag:
+            if accumulator.endswith(tool_use_opening_tag):
+                # 类型转变，若 result 不为空且为 message，先将之前的 result 返回
+                if result is not None and result["type"] == "message":
+                    result["content"] = ""
+                    result["partial"] = False
+                    yield result
+                    result_pos = pos
+                # 如果有工具调用标签，则开始解析工具调用
+                result = {
+                    "partial": True,
+                    "type": "tool_call",
+                    "content": None,
+                    "tool_call_name": tool_use_opening_tag[1:-1],
+                    "tool_call_arguments": {},
+                }
+                tool_call_start_index = len(accumulator)
+                break  # 跳出循环，不再检查其他标签
+
+        # 当前没有检查到工具调用，则说明当前字符是文本内容
+        if result is None or result["type"] == "message":
+            char_index = pos - max_possible_tool_call_tag_length - 1
+            content_char = accumulator[char_index]
+            if result is None:
+                result = {"partial": True, "type": "message", "content": content_char, "tool_call_name": None, "tool_call_arguments": None}
+            else:
+                result["content"] = content_char
+            yield result
+            result_pos = pos - max_possible_tool_call_tag_length
+
+    # 遍历结束后，检查是否还有未完成的工具调用（流未结束），若有则添加到内容块中
+    yield {
+        "partial": False,
+        "type": "message",
+        "content": accumulator[result_pos:],
+        "tool_call_name": None,
+        "tool_call_arguments": None
+    }
 
 
 class VectorDBConfig(TypedDict):
@@ -132,14 +266,14 @@ class Agent:
     DESCRIPTION = "一个通用对话智能助手"
 
     def __init__(
-        self,
-        name: str,
-        llm_engine: LLMEngine,
-        vector_db_config: Optional[VectorDBConfig] = None,
-        capabilities: Optional[List[AgentCapability]] = None,
-        description: Optional[str] = None,
-        tools: Optional[Dict[str, Any]] = None,
-        **kwargs,
+            self,
+            name: str,
+            llm_engine: LLMEngine,
+            vector_db_config: Optional[VectorDBConfig] = None,
+            capabilities: Optional[List[AgentCapability]] = None,
+            description: Optional[str] = None,
+            tools: Optional[List[Type[BaseTool]]] = None,
+            **kwargs,
     ):
         """初始化智能体
         Args:
@@ -159,7 +293,8 @@ class Agent:
         self.kwargs = kwargs
         self._history_messages: List[Message] = []
         self._history_messages_limit = 10
-        self._tools = tools or {}
+        self._tools = tools or []
+        self._tool_map = {tool.NAME: tool for tool in self._tools}
 
         # 初始化记忆管理器
         self.memory = AgentMemory(
@@ -169,7 +304,7 @@ class Agent:
         )
 
     @property
-    def tools(self) -> Dict[str, Any]:
+    def tools(self) -> List[Type[BaseTool]]:
         """获取工具字典"""
         return self._tools
 
@@ -205,19 +340,8 @@ class Agent:
 
         return [memory.to_message() for memory in agent_memories]
 
-    def _parse_content(self, content: str) -> Tuple[str, Optional[List[ToolCall]]]:
-        """解析消息内容，提取工具调用对象
-
-        Args:
-            content: 消息
-
-        Returns:
-            List[ToolCall]: 工具调用对象
-        """
-        ...
-
     def _preprocess_messages(
-        self, messages: List[Message]
+            self, messages: List[Message]
     ) -> List[Message]:
         """预处理消息列表，添加系统提示词和角色信息
 
@@ -238,38 +362,39 @@ class Agent:
                 })
             else:
                 new_messages.append(message)
-        if messages[0]["role"]!= "system":
+        if messages[0]["role"] != "system":
             messages.insert(0, {"role": "system", "content": self.system_prompt()})
         return new_messages
 
     def _run_no_stream(
-        self,
-        messages: List[Message], stream: Literal[False]
+            self,
+            messages: List[Message], stream: Literal[False]
     ) -> AgentResponse:
         response = self.llm_engine.generate(messages=messages, stream=stream)
         return AgentResponse(
-            content=response["choices"][0]["message"]["content"],
+            content=response["choices"][0]["message"].get("content", None),
             finish_reason=response["choices"][0]["finish_reason"],
             tool_calls=response["choices"][0]["message"].get("tool_calls", None),
             usage=response["usage"],
             metadata=None,
         )
 
-
     def _run_stream(
-        self,
-        messages: List[Message], stream: Literal[True]
+            self,
+            messages: List[Message], stream: Literal[True]
     ) -> AgentResponse:
-       response = self.llm_engine.generate(messages=messages, stream=stream)
-       def stream_generator(generator: Generator[ChatCompletionChunk, None, None]):
+        response = self.llm_engine.generate(messages=messages, stream=stream)
+
+        def stream_generator(generator: Generator[ChatCompletionChunk, None, None]):
             for chunk in generator:
                 yield AgentResponseChunk(
-                    content=chunk["choices"][0]["delta"]["content"],
+                    content=chunk["choices"][0]["delta"].get("content", None),
                     finish_reason=chunk["choices"][0]["finish_reason"],
                     tool_calls=chunk["choices"][0]["delta"].get("tool_calls", None),
-                    usage=chunk["usage"],
+                    usage=chunk.get("usage", None),
                 )
-       return AgentResponse(
+
+        return AgentResponse(
             content=None,
             finish_reason=None,
             tool_calls=None,
@@ -278,7 +403,7 @@ class Agent:
         ).set_stream_generator(stream_generator(response))
 
     def run(
-        self, content: str, stream: bool = False
+            self, content: str, stream: bool = False
     ) -> AgentResponse:
         """运行智能体，处理用户输入并生成响应
 
@@ -298,68 +423,17 @@ class Agent:
         else:
             response = self._run_no_stream(messages, False)
         return response
-        # response.metadata = 
-        # try:
-        #     # 调用LLM引擎生成响应
-        #     response = self.llm_engine.generate(messages=messages, stream=stream)
 
-        #     # 构建响应结果
-        #     agent_response = AgentResponse(
-        #         content="",
-        #         finish_reason=None,
-        #         tool_calls=None,
-        #         usage=Usage(prompt_tokens=0, completion_tokens=0, total_tokens=0),
-        #         metadata=AgentResponseMetadata(request_context={"message": content}),
-                
-        #     )
 
-        #     # 处理同步响应
-        #     if not stream:
-        #         messages.append(
-        #             {
-        #                 "role": "assistant",
-        #                 "content": response["choices"][0].message.content,
-        #                 "tool_calls": response.choices[0].message.tool_calls,
-        #             }
-        #         )
-        #         if response.choices[0].message.content:
-        #             response_content, tool_calls = self._parse_content(
-        #                 response.choices[0].message.content
-        #             )
-        #         else:
-        #             response_content = None
-        #             tool_calls = response.choices[0].message.tool_calls
+if __name__ == "__main__":
+    def stream_generator():
+        message = "接下来我将读取文件file_path的内容。<read_file><path>file_path</path></read_file>接下来我将继续读取文件file_path的内容。<read_file><path>file_path</path></read_file>"
+        for char in message:
+            yield char
 
-        #         # 更新响应内容
-        #         agent_response.content = response_content
-        #         agent_response.tool_calls = tool_calls
-        #         agent_response.finish_reason = response.choices[0].finish_reason
-        #         agent_response.usage = response.usage
 
-        #     # 处理流式响应
-        #     else:
+    from echo.tools.file_tool import ReadFileTool
 
-        #         def stream_generator():
-        #             content = ""
-        #             for chunk in response:
-        #                 if chunk.choices[0].delta.content:
-        #                     content += chunk.choices[0].delta.content
-        #                     yield chunk.choices[0].delta.content
-        #             # 更新消息历史
-        #             self.messages.append({"role": "assistant", "content": content})
-
-        #         agent_response.set_stream_generator(stream_generator())
-
-        #     yield agent_response
-
-        # except Exception as e:
-        #     # 处理异常情况
-        #     error_response = AgentResponse(
-        #         content=str(e),
-        #         finish_reason="error",
-        #         usage=Usage(prompt_tokens=0, completion_tokens=0, total_tokens=0),
-        #         metadata=AgentResponseMetadata(
-        #             request_context={"message": message}, raw_response=None
-        #         ),
-        #     )
-        #     yield error_response
+    tools = [ReadFileTool()]
+    for result in agent_message_stream_parser(tools, stream_generator()):
+        print(result)

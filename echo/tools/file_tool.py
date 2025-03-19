@@ -1,5 +1,6 @@
 from echo.tools.base_tool import BaseTool
 
+
 class ReadFileTool(BaseTool):
     """读取文件工具类"""
     NAME = "read_file"
@@ -18,9 +19,9 @@ class ReadFileTool(BaseTool):
         },
         "required": ["path"],
     }
-    
+
     def run(self, path: str, **kwargs) -> str:
         """执行读取文件的操作"""
         with open(path, "r") as f:
             lines = f.readlines()
-        return "\n".join([f"{i+1} | {line}" for i, line in enumerate(lines)])
+        return "\n".join([f"{i + 1} | {line}" for i, line in enumerate(lines)])

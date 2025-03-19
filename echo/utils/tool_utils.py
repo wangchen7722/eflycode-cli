@@ -1,5 +1,4 @@
 import json
-from json import JSONDecodeError
 from typing import List
 from echo.llms.schema import ToolCall
 

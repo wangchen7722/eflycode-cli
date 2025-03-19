@@ -76,8 +76,8 @@ class AgentResponse(BaseModel):
     usage: Optional[Usage]
     metadata: Optional[AgentResponseMetadata]
 
-    is_streaming: Optional[bool] = Field(default=None)
-    _stream_generator: Optional[Generator[AgentResponseChunk, None, None]] = Field(default=None)
+    is_streaming: Optional[bool] = Field(default=None, alias="_is_streaming")
+    stream_generator: Optional[Generator[AgentResponseChunk, None, None]] = Field(default=None, alias="_stream_generator")
 
     def set_stream_generator(
         self, generator: Generator[AgentResponseChunk, None, None]
@@ -87,12 +87,12 @@ class AgentResponse(BaseModel):
             generator: 流式输出的生成器
         """
         self.is_streaming = True
-        self._stream_generator = generator
+        self.stream_generator = generator
         return self
 
     def stream(self) -> Generator[AgentResponseChunk, None, None]:
         """获取流式输出的生成器"""
-        if not self.is_streaming or not self._stream_generator:
+        if not self.is_streaming or not self.stream_generator:
             yield AgentResponseChunk(
                 content=self.content,
                 finish_reason=self.finish_reason,
@@ -101,7 +101,7 @@ class AgentResponse(BaseModel):
             )
             return
 
-        for chunk in self._stream_generator:
+        for chunk in self.stream_generator:
             yield chunk
             if chunk.finish_reason:
                 self.finish_reason = chunk.finish_reason
@@ -278,7 +278,7 @@ class Agent:
         ).set_stream_generator(stream_generator(response))
 
     def run(
-        self, content: str, stream: bool = True
+        self, content: str, stream: bool = False
     ) -> AgentResponse:
         """运行智能体，处理用户输入并生成响应
 
@@ -294,9 +294,9 @@ class Agent:
         messages = self._history_messages + [{"role": "user", "content": content}]
         messages = self._preprocess_messages(messages)
         if stream:
-            response = self._run_stream(messages, stream)
+            response = self._run_stream(messages, True)
         else:
-            response = self._run_no_stream(messages, stream)
+            response = self._run_no_stream(messages, False)
         return response
         # response.metadata = 
         # try:

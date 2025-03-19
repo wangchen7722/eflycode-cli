@@ -254,7 +254,9 @@ class AgentMemory:
         Returns:
             bool: 是否成功保存
         """
-
+        if self.vector_db_path == "::memory::":
+            # 如果是内存存储，不保存
+            return True
         try:
             # 确保目录存在
             os.makedirs(os.path.dirname(self.vector_db_path), exist_ok=True)

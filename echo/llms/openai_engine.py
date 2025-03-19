@@ -85,24 +85,6 @@ class OpenAIEngine(LLMEngine):
                     chunk_data = json.loads(data)
                     yield ChatCompletionChunk(**chunk_data)
 
-    @overload
-    def generate(
-        self,
-        messages: List[Message],
-        stream: Literal[False] = False,
-        **kwargs
-    ) -> ChatCompletion:
-        ...
-
-    @overload
-    def generate(
-        self,
-        messages: List[Message],
-        stream: Literal[True],
-        **kwargs
-    ) -> Generator[ChatCompletionChunk, None, None]:
-        ...
-
     def generate(
             self,
             messages: List[Message],
@@ -123,6 +105,7 @@ class OpenAIEngine(LLMEngine):
         request_data = {
             "model": self.model,
             "messages": messages,
+            "stream": stream,
             **generate_config
         }
 

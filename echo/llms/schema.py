@@ -1,4 +1,5 @@
-from typing import Any, Dict, List, Optional, Literal, TypedDict, Required, NotRequired
+from typing import Any, Dict, List, Optional, Literal, Required, NotRequired
+from typing_extensions import TypedDict
 
 
 class ToolFunction(TypedDict, total=False):

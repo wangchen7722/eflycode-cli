@@ -1,4 +1,3 @@
-{% if system_info %}
 # SYSTEM INFORMATION
 
 Operating System: {{ system_info.os_type }}-{{ system_info.os_release }}
@@ -6,4 +5,3 @@ Default Shell: {{ system_info.default_shell }}
 Home Directory: {{ system_info.home_dir }}
 Timezone: {{ system_info.timezone }}
 Current Time: {{ system_info.current_time }}
-{% endif %}

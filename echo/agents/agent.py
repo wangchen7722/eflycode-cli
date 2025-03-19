@@ -1,4 +1,7 @@
-from typing import Dict, Iterable, List, Literal, Optional, Generator, Type, TypedDict, Any, Required, Sequence
+import json
+import uuid
+from typing import Dict, List, Literal, Optional, Generator, Any, Required, Sequence
+from typing_extensions import TypedDict
 from enum import Enum
 
 from pydantic import BaseModel, Field
@@ -140,17 +143,17 @@ class AgentMessageParserResult(TypedDict, total=False):
 
 def agent_message_stream_parser(
         tools: Sequence[BaseTool],
-        stream_generator: Iterable[str]
-) -> Generator[AgentMessageParserResult, None, None]:
+        chat_completion_chunk_stream_generator: Generator[ChatCompletionChunk, None, None]
+) -> Generator[AgentResponseChunk, None, None]:
     """解析工具调用消息
 
     Args:
         tools (List[BaseTool]): 工具列表
-        stream_generator (str): 消息生成器
+        chat_completion_chunk_stream_generator (str): 消息生成器
     """
     # 计算最大工具名长度，防止在 content 中输出工具调用标签
     possible_tool_call_tag = [f"<{tool.name}>" for tool in tools]
-    max_possible_tool_call_tag_length = max([len(tag) for tag in possible_tool_call_tag])
+    max_possible_tool_call_tag_length = max([len(tag) for tag in possible_tool_call_tag]) if possible_tool_call_tag else 0
     # 累计接收到的字符
     accumulator = ""
     # 工具调用相关信息
@@ -161,94 +164,105 @@ def agent_message_stream_parser(
     # 解析进度以及返回结果
     should_look_ahead = True
     look_ahead_char_count = max_possible_tool_call_tag_length
+    pos = 0
     result_pos = 0
-    result: Optional[AgentMessageParserResult] = None  # type: Optional[Dict[str, Any]]
+    result: Optional[AgentMessageParserResult] = None
+    last_chunk: Optional[ChatCompletionChunk] = None
 
-    for pos, char in enumerate(stream_generator, start=1):
-        accumulator += char
-
-        if should_look_ahead and look_ahead_char_count > 0:
-            look_ahead_char_count -= 1
+    for chunk in chat_completion_chunk_stream_generator:
+        last_chunk = chunk
+        if chunk is None:
             continue
+        chunk_content = chunk["choices"][0]["delta"].get("content", "")
+        for char in chunk_content:
+            accumulator += char
+            pos += 1
 
-        # 如果正在解析工具调用中的参数，则先处理参数内容
-        if result is not None and result["type"] == "tool_call" and tool_call_param_name is not None:
-            tool_call_param_string = accumulator[tool_call_param_start_index:]
-            # 构造参数的闭合标签
-            param_closing_tag = f"</{tool_call_param_name}>"
-            if tool_call_param_string.endswith(param_closing_tag):
-                # 检测到参数的结束标签，结束参数解析
-                result["tool_call_arguments"][tool_call_param_name] = tool_call_param_string[:-len(param_closing_tag)].strip()
-                tool_call_param_name = None
-            continue
-
-        # 若当前正在工具调用中，但不在解析参数，则继续检查工具调用是否结束
-        if result is not None and result["type"] == "tool_call":
-            # 从工具调用的起始位置到目前位置的字符串
-            tool_call_string = accumulator[tool_call_start_index:]
-            # 构造工具调用的闭合标签
-            tool_call_closing_tag = f"</{result['tool_call_name']}>"
-            if tool_call_string.endswith(tool_call_closing_tag):
-                # 检测到工具调用的结束标签，结束工具调用块的解析
-                result["partial"] = False
-                yield result
-                result = None
-                result_pos = pos
-                look_ahead_char_count = max_possible_tool_call_tag_length
-                continue
-            else:
-                # 检查是否有新的参数开始
-                for param_name in tool_map[result["tool_call_name"]].parameters["properties"]:
-                    param_opening_tag = f"<{param_name}>"
-                    if tool_call_string.endswith(param_opening_tag):
-                        # 检测到参数的起始标签，开始解析参数
-                        tool_call_param_name = param_name
-                        tool_call_param_start_index = len(accumulator)
-                        break
-                # TODO: 特殊处理工具中同样出现闭合标签的情况
-
-                # 工具调用内容仍在累积中，继续处理下一个字符
+            if should_look_ahead and look_ahead_char_count > 1:
+                look_ahead_char_count -= 1
                 continue
 
-        # 检查是否有工具调用标签
-        for tool_use_opening_tag in possible_tool_call_tag:
-            if accumulator.endswith(tool_use_opening_tag):
-                # 类型转变，若 result 不为空且为 message，先将之前的 result 返回
-                if result is not None and result["type"] == "message":
-                    result["content"] = ""
+            # 如果正在解析工具调用中的参数，则先处理参数内容
+            if result is not None and result["type"] == "tool_call" and tool_call_param_name is not None:
+                tool_call_param_string = accumulator[tool_call_param_start_index:]
+                # 构造参数的闭合标签
+                param_closing_tag = f"</{tool_call_param_name}>"
+                if tool_call_param_string.endswith(param_closing_tag):
+                    # 检测到参数的结束标签，结束参数解析
+                    result["tool_call_arguments"][tool_call_param_name] = tool_call_param_string[
+                                                                          :-len(param_closing_tag)].strip()
+                    tool_call_param_name = None
+                continue
+
+            # 若当前正在工具调用中，但不在解析参数，则继续检查工具调用是否结束
+            if result is not None and result["type"] == "tool_call":
+                # 从工具调用的起始位置到目前位置的字符串
+                tool_call_string = accumulator[tool_call_start_index:]
+                # 构造工具调用的闭合标签
+                tool_call_closing_tag = f"</{result['tool_call_name']}>"
+                if tool_call_string.endswith(tool_call_closing_tag):
+                    # 检测到工具调用的结束标签，结束工具调用块的解析
                     result["partial"] = False
-                    yield result
+                    yield AgentResponseChunk(
+                        content=None,
+                        finish_reason="tool_calls",
+                        tool_calls=[ToolCall(id=uuid.uuid4().hex, type="function", function={
+                            "name": result["tool_call_name"],
+                            "arguments": json.dumps(result["tool_call_arguments"])
+                        })],
+                        usage=chunk.get("usage", None),
+                    )
+                    result = None
                     result_pos = pos
-                # 如果有工具调用标签，则开始解析工具调用
-                result = {
-                    "partial": True,
-                    "type": "tool_call",
-                    "content": None,
-                    "tool_call_name": tool_use_opening_tag[1:-1],
-                    "tool_call_arguments": {},
-                }
-                tool_call_start_index = len(accumulator)
-                break  # 跳出循环，不再检查其他标签
+                    look_ahead_char_count = max_possible_tool_call_tag_length
+                    continue
+                else:
+                    # 检查是否有新的参数开始
+                    for param_name in tool_map[result["tool_call_name"]].parameters:
+                        param_opening_tag = f"<{param_name}>"
+                        if tool_call_string.endswith(param_opening_tag):
+                            # 检测到参数的起始标签，开始解析参数
+                            tool_call_param_name = param_name
+                            tool_call_param_start_index = len(accumulator)
+                            break
+                    # TODO: 特殊处理工具中同样出现闭合标签的情况
 
-        # 当前没有检查到工具调用，则说明当前字符是文本内容
-        if result is None or result["type"] == "message":
-            char_index = pos - max_possible_tool_call_tag_length - 1
-            content_char = accumulator[char_index]
-            if result is None:
-                result = {"partial": True, "type": "message", "content": content_char, "tool_call_name": None, "tool_call_arguments": None}
-            else:
-                result["content"] = content_char
-            yield result
-            result_pos = pos - max_possible_tool_call_tag_length
+                    # 工具调用内容仍在累积中，继续处理下一个字符
+                    continue
 
+            # 检查是否有工具调用标签
+            for tool_use_opening_tag in possible_tool_call_tag:
+                if accumulator.endswith(tool_use_opening_tag):
+                    # 如果有工具调用标签，则开始解析工具调用
+                    result = {
+                        "partial": True,
+                        "type": "tool_call",
+                        "content": None,
+                        "tool_call_name": tool_use_opening_tag[1:-1],
+                        "tool_call_arguments": {},
+                    }
+                    tool_call_start_index = len(accumulator)
+                    break  # 跳出循环，不再检查其他标签
+
+            # 当前没有检查到工具调用，则说明当前字符是文本内容
+            if result is None or result["type"] == "message":
+                char_index = pos - max_possible_tool_call_tag_length
+                content_char = accumulator[char_index]
+                if result is None:
+                    result = {"partial": True, "type": "message", "content": content_char, "tool_call_name": None,
+                              "tool_call_arguments": None}
+                else:
+                    result["content"] = content_char
+                yield AgentResponseChunk(content=content_char, finish_reason=chunk["choices"][0]["finish_reason"],
+                                         tool_calls=None, usage=chunk.get("usage", None))
+                result_pos = pos - max_possible_tool_call_tag_length
     # 遍历结束后，检查是否还有未完成的工具调用（流未结束），若有则添加到内容块中
-    yield {
-        "partial": False,
-        "type": "message",
-        "content": accumulator[result_pos:],
-        "tool_call_name": None,
-        "tool_call_arguments": None
-    }
+    yield AgentResponseChunk(
+        content=accumulator[result_pos:],
+        finish_reason=last_chunk["choices"][0]["finish_reason"] if last_chunk else "stop",
+        tool_calls=None,
+        usage=last_chunk["usage"] if last_chunk and "usage" in last_chunk else None
+    )
 
 
 class VectorDBConfig(TypedDict):
@@ -272,7 +286,7 @@ class Agent:
             vector_db_config: Optional[VectorDBConfig] = None,
             capabilities: Optional[List[AgentCapability]] = None,
             description: Optional[str] = None,
-            tools: Optional[List[Type[BaseTool]]] = None,
+            tools: Optional[Sequence[BaseTool]] = None,
             **kwargs,
     ):
         """初始化智能体
@@ -304,7 +318,7 @@ class Agent:
         )
 
     @property
-    def tools(self) -> List[Type[BaseTool]]:
+    def tools(self) -> Sequence[BaseTool]:
         """获取工具字典"""
         return self._tools
 
@@ -319,6 +333,7 @@ class Agent:
             name=self.name,
             role=self.role,
             capabilities=self.capabilities,
+            tools=self.tools,
             system_info=system_info(),
         )
 
@@ -362,8 +377,8 @@ class Agent:
                 })
             else:
                 new_messages.append(message)
-        if messages[0]["role"] != "system":
-            messages.insert(0, {"role": "system", "content": self.system_prompt()})
+        if new_messages[0]["role"] != "system":
+            new_messages.insert(0, {"role": "system", "content": self.system_prompt()})
         return new_messages
 
     def _run_no_stream(
@@ -400,7 +415,7 @@ class Agent:
             tool_calls=None,
             usage=Usage(prompt_tokens=0, completion_tokens=0, total_tokens=0),
             metadata=None,
-        ).set_stream_generator(stream_generator(response))
+        ).set_stream_generator(agent_message_stream_parser(self.tools, response))
 
     def run(
             self, content: str, stream: bool = False
@@ -418,6 +433,7 @@ class Agent:
 
         messages = self._history_messages + [{"role": "user", "content": content}]
         messages = self._preprocess_messages(messages)
+
         if stream:
             response = self._run_stream(messages, True)
         else:
@@ -427,9 +443,21 @@ class Agent:
 
 if __name__ == "__main__":
     def stream_generator():
-        message = "接下来我将读取文件file_path的内容。<read_file><path>file_path</path></read_file>接下来我将继续读取文件file_path的内容。<read_file><path>file_path</path></read_file>"
-        for char in message:
-            yield char
+        message = "<read_file><path>file_path</path></read_file>接下来我将继续读取文件file_path的内容。<read_file><path>file_path</path></read_file>你好好你好你好你好你好你好你好"
+        for i in range(0, len(message), 3):
+            char = message[i:i+3]
+            yield ChatCompletionChunk(**{
+                "id": "123",
+                "choices": [
+                    {
+                        "delta": {
+                            "content": char
+                        },
+                        "finish_reason": None,
+                        "tool_calls": None
+                    }
+                ]
+            })
 
 
     from echo.tools.file_tool import ReadFileTool

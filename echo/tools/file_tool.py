@@ -19,6 +19,14 @@ class ReadFileTool(BaseTool):
         },
         "required": ["path"],
     }
+    EXAMPLES = {
+        "Read the contents of /path/to/file": {
+            "name": "read_file",
+            "parameters": {
+                "path": "/path/to/file"
+            }
+        }
+    }
 
     def run(self, path: str, **kwargs) -> str:
         """执行读取文件的操作"""

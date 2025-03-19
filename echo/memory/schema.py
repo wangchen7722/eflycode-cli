@@ -1,7 +1,8 @@
-from typing import Dict, Optional, Any, Sequence, TypedDict, Union, Literal, List
+from typing import Dict, Optional, Any, Sequence, Union
 from enum import Enum
 import time
 from pydantic import BaseModel, Field
+
 
 class MemoryType(Enum):
     """记忆类型枚举"""
@@ -43,13 +44,13 @@ class MemoryItem(BaseModel):
         """
         # 根据记忆类型设置角色
         role = self.metadata.get("role", "assistant")
-        
+
         # 构建消息内容
         message = {
             "role": role,
             "content": self.content
         }
-        
+
         # 如果有工具调用相关的元数据，添加到消息中
         if "tool_call_id" in self.metadata:
             message["tool_call_id"] = self.metadata["tool_call_id"]
@@ -57,5 +58,5 @@ class MemoryItem(BaseModel):
             message["name"] = self.metadata["name"]
         if "tool_calls" in self.metadata:
             message["tool_calls"] = self.metadata["tool_calls"]
-            
+
         return message

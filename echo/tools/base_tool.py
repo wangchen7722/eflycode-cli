@@ -1,4 +1,5 @@
-from typing import Any, Dict, Optional, TypedDict, Literal, List
+from typing import Any, Dict, Optional, Literal, List
+from typing_extensions import TypedDict
 
 
 class ToolFunctionParametersSchema(TypedDict):
@@ -20,6 +21,12 @@ class ToolSchema(TypedDict):
     type: Literal["function"]
     function: ToolFunctionSchema
 
+class ToolCallSchema(TypedDict):
+    """工具的schema定义"""
+    type: Literal["function"]
+    name: str
+    parameters: Dict[str, Any]
+
 
 class BaseTool:
     """工具基类，定义了所有工具的基本属性和执行接口"""
@@ -30,23 +37,43 @@ class BaseTool:
     """工具描述"""
     PARAMETERS: ToolFunctionParametersSchema
     """工具参数"""
-    EXAMPLES: Optional[List[Dict[str, ToolSchema]]]
+    EXAMPLES: Optional[Dict[str, ToolCallSchema]]
     """工具示例"""
 
     @property
     def name(self) -> str:
         """获取工具名称"""
-        return self.NAME
+        return self.NAME.strip()
 
     @property
     def description(self) -> str:
         """获取工具描述"""
-        return self.DESCRIPTION
+        return self.DESCRIPTION.strip()
 
     @property
-    def parameters(self) -> ToolFunctionParametersSchema:
+    def raw_parameters(self) -> ToolFunctionParametersSchema:
         """获取工具参数"""
         return self.PARAMETERS
+
+    @property
+    def parameters(self) -> Dict[str, Any]:
+        """获取工具参数"""
+        required = self.PARAMETERS.get("required", [])
+        return {
+            param_name: {
+                "type": param_schema["type"],
+                "description": param_schema.get("description", "").strip(),
+                "required": param_name in required
+            }
+            for param_name, param_schema in self.PARAMETERS["properties"].items()
+        }
+
+    @property
+    def examples(self) -> Dict[str, ToolCallSchema]:
+        return {
+            example_name.strip(): example_tool_call
+            for example_name, example_tool_call in self.EXAMPLES.items()
+        } if self.EXAMPLES else {}
 
     @property
     def schema(self) -> ToolSchema:

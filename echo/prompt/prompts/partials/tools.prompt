@@ -1,0 +1,39 @@
+# Tool Call Formatting
+
+Tool use is formatted using XML-style tags. The tool name is enclosed in opening and closing tags, and each parameter is similarly enclosed within its own set of tags. Here's the structure:
+
+<tool_name>
+<parameter1_name>value1</parameter1_name>
+<parameter2_name>value2</parameter2_name>
+...
+</tool_name>
+
+For example:
+
+<read_file>
+<path>src/main.js</path>
+</read_file>
+
+Always adhere to this format for the tool use to ensure proper parsing and execution.
+
+# Tools
+
+{% for tool in tools %}
+## {{ tool.name }}
+
+Description: {{ tool.description }}
+
+Parameters:
+{% for param_name, param_schema in tool.parameters.items() %}
+- {{ param_name }}: {% if param_schema.required %}(required){% endif %} {{ param_schema.description }}
+{% endfor %}
+
+{% for example_name, example_tool_call in tool.examples.items() %}
+Example #1: {{ example_name }}
+<{{ example_tool_call.name }}>
+{% for param_name, param_value in example_tool_call.parameters.items() %}
+<{{ param_name }}>{{ param_value }}</{{ param_name }}>
+{% endfor %}
+</{{ example_tool_call.name }}>
+{% endfor %}
+{% endfor %}

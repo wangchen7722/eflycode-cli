@@ -1,31 +1,31 @@
-from typing import Any, Dict, Optional, Literal, List
+from typing import Any, Dict, Optional, Literal, List, Required
 from typing_extensions import TypedDict
 
 
-class ToolFunctionParametersSchema(TypedDict):
+class ToolFunctionParametersSchema(TypedDict, total=False):
     """工具函数参数的schema定义"""
-    type: str
-    properties: Dict[str, Dict[str, Any]]
-    required: Optional[List[str]]
+    type: Required[str]
+    properties: Required[Dict[str, Dict[str, Any]]]
+    required: Required[Optional[List[str]]]
 
 
-class ToolFunctionSchema(TypedDict):
+class ToolFunctionSchema(TypedDict, total=False):
     """工具函数的schema定义"""
-    name: str
-    description: str
-    parameters: ToolFunctionParametersSchema
+    name: Required[str]
+    description: Required[str]
+    parameters: Required[ToolFunctionParametersSchema]
 
 
-class ToolSchema(TypedDict):
+class ToolSchema(TypedDict, total=False):
     """工具的schema定义"""
-    type: Literal["function"]
-    function: ToolFunctionSchema
+    type: Required[Literal["function"]]
+    function: Required[ToolFunctionSchema]
 
-class ToolCallSchema(TypedDict):
+class ToolCallSchema(TypedDict, total=False):
     """工具的schema定义"""
-    type: Literal["function"]
-    name: str
-    parameters: Dict[str, Any]
+    type: Required[Literal["function"]]
+    name: Required[str]
+    parameters: Required[Dict[str, Any]]
 
 
 class BaseTool:
@@ -83,7 +83,7 @@ class BaseTool:
             "function": {
                 "name": self.name,
                 "description": self.description,
-                "parameters": self.parameters
+                "parameters": self.raw_parameters
             }
         }
 

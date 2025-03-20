@@ -15,15 +15,13 @@ from echo.utils.system_utils import system_info
 from echo.utils.tool_utils import apply_tool_calls_template
 from echo.memory import AgentMemory
 from echo.tools import BaseTool
-from utils.logger import get_logger
+from echo.utils.logger import get_logger
 
 
 class AgentCapability(Enum):
     """Agent能力枚举类"""
 
-    USE_MEMORY = "use_memory"
     USE_TOOL = "use_tool"
-    USE_SHELL = "use_shell"
     USE_MCP = "use_mcp"
 
     def __str__(self):
@@ -329,7 +327,7 @@ class Agent:
         self.kwargs = kwargs
         self._history_messages: List[Message] = []
         self._history_messages_limit = 10
-        if len(tools) > 0 and AgentCapability.USE_TOOL not in self.capabilities:
+        if tools and AgentCapability.USE_TOOL not in self.capabilities:
             logger.warning("AgentCapability.USE_TOOL not in capabilities, tools will not be used.")
         self._tools = tools or []
         self._tool_map = {tool.NAME: tool for tool in self._tools}
@@ -481,12 +479,13 @@ class Agent:
             tool_call: 工具调用
         """
         if AgentCapability.USE_TOOL not in self.capabilities:
-            return "不支持工具调用，请在 capabilities 中添加 AgentCapability.USE_TOOL"
+            return "不支持工具调用，请在提示用户 capabilities 中添加 AgentCapability.USE_TOOL"
         tool_name = tool_call["function"]["name"]
         tool = self._tool_map.get(tool_name, None)
         if tool:
             try:
-                return tool.run(**json.loads(tool_call["function"]["arguments"]))
+                tool_response = tool.run(**json.loads(tool_call["function"]["arguments"]))
+                return f"This is auto-generated response from tool call ({tool_name}):\n{tool_response}"
             except Exception as e:
                 return f"工具调用失败：{e}"
         else:
@@ -495,7 +494,7 @@ class Agent:
 
 if __name__ == "__main__":
     def stream_generator():
-        message = "<read_file><path>file_path</path></read_file>接下来我将继续读取文件file_path的内容。<read_file><path>file_path</path></read_file>你好，请问有什么可以帮你吗"
+        message = "'<read_file>\n<path>D:/Codes/Python/echo/temp/requirements.txt</path>\n</read_file>'"
         for i in range(0, len(message), 3):
             char = message[i:i + 3]
             yield ChatCompletionChunk(**{

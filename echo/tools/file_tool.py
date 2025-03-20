@@ -23,6 +23,7 @@ class ReadFileTool(BaseTool):
     }
     EXAMPLES = {
         "Read the contents of /path/to/file": {
+            "type": "function",
             "name": "read_file",
             "parameters": {
                 "path": "/path/to/file"
@@ -89,6 +90,7 @@ class EditFileWithReplace(BaseTool):
     }
     EXAMPLES = {
         "Replace 'foo' with 'bar' in /path/to/file": {
+            "type": "function",
             "name": "edit_file_with_replace",
             "parameters": {
                 "path": "/path/to/file",
@@ -100,6 +102,23 @@ class EditFileWithReplace(BaseTool):
 
     def run(self, path: str, old_string: str, new_string: str, **kwargs) -> str:
         """执行搜索替换的操作"""
+        if old_string == "":
+            # 说明是要创建文件
+            if os.path.exists(path):
+                with open(path, "r", encoding="utf-8") as f:
+                    file_content = f.read()
+                if file_content.strip() == "":
+                    # 插入内容
+                    with open(path, "w", encoding="utf-8") as f:
+                        f.write(new_string)
+                    return f"Successfully created new file at {path}"
+                return f"ERROR: File already exists at {path}. Please view the file's content and edit it."
+            # 创建文件
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(new_string)
+            return f"Successfully created new file at {path}"
+        # old_string != ""
         if not os.path.exists(path):
             return f"ERROR: File not found at {path}. Please ensure the file exists."
         if not os.path.isfile(path):

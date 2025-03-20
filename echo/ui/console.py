@@ -37,7 +37,7 @@ class ConsoleUI:
         Returns:
             str: 用户输入的内容
         """
-        return Prompt.ask("User")
+        return Prompt.ask("user")
 
     def exit(self) -> None:
         """退出控制台程序"""
@@ -56,7 +56,7 @@ class ConsoleUI:
         """
         progress = Progress(
             SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
+            TextColumn("[cyan]{task.description}", style="bold green"),
             console=self.console
         )
         task = progress.add_task(description, total=100)
@@ -64,7 +64,7 @@ class ConsoleUI:
             progress.start()
             yield progress
         finally:
-            progress.update(task, description=description, completed=100, visible=False)
+            progress.update(task, description=f"✅ {description}", completed=100)
             progress.stop()
         # self.show_panel([], f"✅ {description}")
 

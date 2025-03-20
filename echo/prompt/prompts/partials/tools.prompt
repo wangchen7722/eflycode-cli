@@ -4,6 +4,8 @@ Tool call is formatted using XML-style tags. The tool name is enclosed in openin
 
 You have access to a set of tools that are executed upon the user's approval. You ONLY can use ONE tool per message, and will receive the result of that tool call in the user's response. You use tools step-by-step to accomplish a given task, with each tool call informed by the result of the previous tool call.
 
+You are ONYL allowed to use [{% for tool in tools %}{{tool.name}}{% if not loop.last %}, {% endif %}{% endfor %}].
+
 <tool_name>
 <parameter1_name>value1</parameter1_name>
 <parameter2_name>value2</parameter2_name>
@@ -27,7 +29,7 @@ Description: {{ tool.description }}
 
 Parameters:
 {% for param_name, param_schema in tool.parameters.items() %}
-- {{ param_name }}: {% if param_schema.required %}(required){% endif %} {{ param_schema.description }}
+- {{ param_name }}: {% if param_schema.required %}(required){% else %}(optional){% endif %} {{ param_schema.description }}
 {% endfor %}
 
 {% for example_name, example_tool_call in tool.examples.items() %}

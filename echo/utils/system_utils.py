@@ -20,7 +20,7 @@ def system_info():
         "os_type": platform.system(),
         "os_release": platform.release(),
         "default_shell": default_shell,
-        "home_dir": Path.cwd().as_posix(),
+        "work_dir": Path.cwd().as_posix(),
         "current_time": current_time.strftime("%Y-%m-%d %H:%M:%S"),
         "timezone": f"UTC{timezone_offset:+d}",
     }

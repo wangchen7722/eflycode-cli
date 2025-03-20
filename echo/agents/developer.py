@@ -37,7 +37,7 @@ class Developer(Agent):
         console = ConsoleUI.get_instance()
         enable_stream = True
         user_input = None
-        console.show_text("Hello, developer!")
+        console.show_text(f"Hello, {self.name}!")
         while True:
             if user_input is None:
                 user_input = console.acquire_user_input()
@@ -67,24 +67,3 @@ class Developer(Agent):
                         console.show_text(chunk.content, end="")
             # 换行
             console.show_text("")
-
-
-if __name__ == "__main__":
-    import os
-    from echo.llms.llm_engine import LLMConfig
-    from echo.llms.openai_engine import OpenAIEngine
-    from echo.tools import ReadFileTool, EditFileWithReplace
-
-    llm_config = LLMConfig(
-        model=os.environ["ECHO_MODEL"],
-        base_url=os.environ["ECHO_BASE_URL"],
-        api_key=os.environ["ECHO_API_KEY"],
-        temperature=0.7
-    )
-    developer = Developer(
-        name="developer",
-        llm_engine=OpenAIEngine(llm_config),
-        capabilities=[AgentCapability.USE_TOOL],
-        tools=[ReadFileTool(), EditFileWithReplace()]
-    )
-    developer.run_loop()

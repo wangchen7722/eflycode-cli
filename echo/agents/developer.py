@@ -37,7 +37,6 @@ class Developer(Agent):
         console = ConsoleUI.get_instance()
         enable_stream = True
         user_input = None
-        console.show_text(f"Hello, {self.name}!")
         while True:
             if user_input is None:
                 user_input = console.acquire_user_input()
@@ -47,7 +46,7 @@ class Developer(Agent):
             user_input = None
             console.show_text(f"{self.name}: ", end="")
             if enable_stream:
-                for chunk in agent_response:
+                for chunk in agent_response.stream():
                     if chunk.tool_calls:
                         user_input = ""
                         for tool_call in chunk.tool_calls:

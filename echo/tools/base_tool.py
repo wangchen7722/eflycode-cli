@@ -21,11 +21,12 @@ class ToolSchema(TypedDict, total=False):
     type: Required[Literal["function"]]
     function: Required[ToolFunctionSchema]
 
+
 class ToolCallSchema(TypedDict, total=False):
     """工具的schema定义"""
     type: Required[Literal["function"]]
     name: Required[str]
-    parameters: Required[Dict[str, Any]]
+    arguments: Required[Dict[str, Any]]
 
 
 class BaseTool:
@@ -62,7 +63,8 @@ class BaseTool:
         return {
             param_name: {
                 "type": param_schema["type"],
-                "description": "\n".join([line.strip() for line in param_schema.get("description", "").strip().split("\n")]),
+                "description": "\n".join(
+                    [line.strip() for line in param_schema.get("description", "").strip().split("\n")]),
                 "required": param_name in required
             }
             for param_name, param_schema in self.PARAMETERS["properties"].items()

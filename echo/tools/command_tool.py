@@ -1,10 +1,15 @@
 import os
+import subprocess
+import traceback
+from typing import Optional
+
 from echo.tools.base_tool import BaseTool
+
 
 class ExecuteCommandTool(BaseTool):
     """执行命令的工具"""
 
-    NAME = "exec_command"
+    NAME = "execute_command"
     DESCRIPTION = """
     Request to execute a CLI command on the system. Use this when you need to perform system operations or run specific commands to accomplish any step in the user's task. 
     You must tailor your command to the user's system and provide a clear explanation of what the command does. 
@@ -30,17 +35,78 @@ class ExecuteCommandTool(BaseTool):
     EXAMPLES = {
         "Requesting to execute ls in a specific directory if directed": {
             "type": "function",
-            "name": "exec_command",
-            "parameters": {
+            "name": "execute_command",
+            "arguments": {
                 "command": "ls",
                 "cwd": "/path/to/directory",
             }
         },
         "Requesting to execute pip install -r requirements.txt": {
             "type": "function",
-            "name": "exec_command",
-            "parameters": {
+            "name": "execute_command",
+            "arguments": {
                 "command": "pip install -r requirements.txt",
             }
         }
     }
+
+    def run(self, command: str, cwd: Optional[str] = None) -> str:
+        """执行命令"""
+        if cwd:
+            work_dir = os.path.abspath(cwd)
+            if not os.path.exists(work_dir):
+                return f"Error: The specified directory ({cwd}) does not exist, current directory is {os.getcwd()}"
+            if not os.path.isdir(work_dir):
+                return f"Error: The specified path ({cwd}) is not a directory"
+        else:
+            work_dir = os.getcwd()
+        timeout = 10
+        try:
+            process = subprocess.run(
+                command,
+                cwd=work_dir,  # 设置工作目录
+                capture_output=True,  # 捕获标准输出和标准错误
+                text=True,  # 以文本模式处理输出
+                timeout=timeout,  # 设置超时时间
+                check=True,  # 若命令返回非零退出码，则引发 CalledProcessError 异常
+                shell=True  # 使用 shell 执行命令
+            )
+            output = ""
+            code = process.returncode
+            output += f"code: {code}\n"
+            stdout = process.stdout
+            if stdout.strip() == "":
+                output += "stdout: No output\n"
+            else:
+                output += f"stdout:\n{stdout}\n"
+            stderr = process.stderr
+            if stderr.strip() == "":
+                output += "stderr: No output"
+            else:
+                output += f"stderr:\n{stderr}"
+            return f"Command executed successfully in {work_dir}\n" + output
+        except subprocess.TimeoutExpired:
+            return f"Error: Command execution timed out after {timeout} seconds"
+        except subprocess.CalledProcessError as e:
+            output = ""
+            code = e.returncode
+            output += f"code: {code}\n"
+            stdout = e.stdout
+            if stdout.strip() == "":
+                output += "stdout: No output\n"
+            else:
+                output += f"stdout:\n{stdout}\n"
+            stderr = e.stderr
+            if stderr.strip() == "":
+                output += "stderr: No output"
+            else:
+                output += f"stderr:\n{stderr}"
+            return f"Error: Command execution failed in {work_dir}\n" + output
+        except Exception as e:
+            details = traceback.format_exc()
+            return f"Error: execute command failed: {e}\ndetails:\n{details}"
+
+
+if __name__ == "__main__":
+    tool = ExecuteCommandTool()
+    print(tool.run("dir", cwd="D:/Project/echo/echo"))

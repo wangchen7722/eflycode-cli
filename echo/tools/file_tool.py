@@ -25,7 +25,7 @@ class ReadFileTool(BaseTool):
         "Read the contents of /path/to/file": {
             "type": "function",
             "name": "read_file",
-            "parameters": {
+            "arguments": {
                 "path": "/path/to/file"
             }
         }
@@ -92,7 +92,7 @@ class EditFileWithReplace(BaseTool):
         "Replace 'foo' with 'bar' in /path/to/file": {
             "type": "function",
             "name": "edit_file_with_replace",
-            "parameters": {
+            "arguments": {
                 "path": "/path/to/file",
                 "old_string": "foo",
                 "new_string": "bar"

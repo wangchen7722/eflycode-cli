@@ -2,7 +2,7 @@ import json
 import logging
 import os.path
 import uuid
-from typing import Dict, List, Literal, Optional, Generator, Any, Required, Sequence, overload
+from typing import Dict, List, Literal, Optional, Generator, Any, Required, Sequence, overload, Callable
 from typing_extensions import TypedDict
 from enum import Enum
 
@@ -87,6 +87,7 @@ class AgentResponse(BaseModel):
     is_streaming: Optional[bool] = Field(default=False, alias="_is_streaming")
     stream_generator: Optional[Generator[AgentResponseChunk, None, None]] = Field(default=None,
                                                                                   alias="_stream_generator")
+    on_stream_complete: Optional[Callable[["AgentResponse"], None]] = Field(default=None, alias="_on_stream_complete")
 
     def set_stream_generator(
             self, generator: Generator[AgentResponseChunk, None, None]
@@ -97,6 +98,17 @@ class AgentResponse(BaseModel):
         """
         self.is_streaming = True
         self.stream_generator = generator
+        return self
+
+    def set_on_stream_complete(self, on_stream_complete: Callable):
+        """设置流式输出完成时的回调函数
+        Args:
+            on_stream_complete: 流式输出完成时的回调函数
+        """
+        if self.is_streaming:
+            self.on_stream_complete = on_stream_complete
+        else:
+            raise ValueError("Cannot set on_stream_complete for non-streaming response")
         return self
 
     def stream(self) -> Generator[AgentResponseChunk, None, None]:
@@ -126,6 +138,8 @@ class AgentResponse(BaseModel):
                 self.tool_calls.extend(chunk.tool_calls)
         self.is_streaming = False
         self.stream_generator = None
+        if self.on_stream_complete:
+            self.on_stream_complete(self)
 
 
 class AgentMessageParserResult(TypedDict, total=False):
@@ -166,7 +180,7 @@ def agent_message_stream_parser(
         return
     # 计算最大工具名长度，防止在 content 中输出工具调用标签
     possible_tool_call_tag = [f"<{tool.name}>" for tool in tools]
-    max_possible_tool_call_tag_length = max(
+    max_possible_tool_call_tag_length = min(
         [len(tag) for tag in possible_tool_call_tag]) if possible_tool_call_tag else 0
     # 累计接收到的字符
     accumulator = ""
@@ -437,17 +451,9 @@ class Agent:
             metadata=None,
         ).set_stream_generator(agent_message_stream_parser(self.tools, response))
 
-    @overload
-    def run(self, content: str, stream: Literal[False]) -> AgentResponse:
-        ...
-
-    @overload
-    def run(self, content: str, stream: Literal[True]) -> Generator[AgentResponseChunk, None, AgentResponse]:
-        ...
-
     def run(
             self, content: str, stream: bool = False
-    ) -> AgentResponse | Generator[AgentResponseChunk, None, AgentResponse]:
+    ) -> AgentResponse:
         """运行智能体，处理用户输入并生成响应
 
         Args:
@@ -464,12 +470,14 @@ class Agent:
         self._history_messages.append({"role": "user", "content": content})
 
         if stream:
+            def on_stream_complete(res: AgentResponse):
+                self._history_messages.append({"role": "assistant", "content": res.content})
             response = self._run_stream(messages, True)
-            for chunk in response.stream():
-                yield chunk
+            # NOTE: 流式输出时会自动记录历史消息，无需再次记录
+            response.set_on_stream_complete(on_stream_complete)
         else:
             response = self._run_no_stream(messages, False)
-        self._history_messages.append({"role": "assistant", "content": response.content})
+            self._history_messages.append({"role": "assistant", "content": response.content})
         return response
 
     def execute_tool(self, tool_call: ToolCall) -> str:
@@ -494,7 +502,7 @@ class Agent:
 
 if __name__ == "__main__":
     def stream_generator():
-        message = "'<read_file>\n<path>D:/Codes/Python/echo/temp/requirements.txt</path>\n</read_file>'"
+        message = "你好你好你好<read_file>\n<path>D:/Codes/Python/echo/temp/requirements.txt</path>\n</read_file>你好你好你好"
         for i in range(0, len(message), 3):
             char = message[i:i + 3]
             yield ChatCompletionChunk(**{

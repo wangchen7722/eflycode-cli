@@ -35,8 +35,8 @@ Parameters:
 {% for example_name, example_tool_call in tool.examples.items() %}
 Example #1: {{ example_name }}
 <{{ example_tool_call.name }}>
-{% for param_name, param_value in example_tool_call.parameters.items() %}
-<{{ param_name }}>{{ param_value }}</{{ param_name }}>
+{% for arg_name, arg_value in example_tool_call.arguments.items() %}
+<{{ arg_name }}>{{ arg_value }}</{{ arg_name }}>
 {% endfor %}
 </{{ example_tool_call.name }}>
 {% endfor %}

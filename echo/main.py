@@ -6,10 +6,11 @@ from echo.ui.console import ConsoleUI
 
 def main():
     """主程序入口"""
-    console = ConsoleUI()
+    console = ConsoleUI.get_instance()
     console.show_panel([], "欢迎使用 Echo，一款基于控制台的编码助手", "blue", "center")
 
-    for user_input in console.run():
+    while True:
+        user_input = console.acquire_user_input()
         # TODO：调用智能体等信息
 
         output_type = user_input
@@ -34,6 +35,7 @@ def main():
             console.show_error("错误")
         else:
             console.show_error(f"不支持的输出类型: {output_type}")
+            break
 
 
 if __name__ == "__main__":

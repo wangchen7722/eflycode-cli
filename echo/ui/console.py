@@ -1,5 +1,5 @@
 import sys
-from typing import List, Literal
+from typing import List, Literal, Sequence
 from contextlib import contextmanager
 from rich.console import Console
 from rich.prompt import Prompt
@@ -12,9 +12,24 @@ from rich.text import Text
 class ConsoleUI:
     """终端用户界面类，处理用户输入输出和UI展示"""
 
+    _instance = None
+    _initialized = False
+
+    def __new__(cls, *args, **kwargs):
+        """实现单例模式"""
+        if cls._instance is None:
+            cls._instance = super(ConsoleUI, cls).__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+
     def __init__(self):
         """初始化控制台UI"""
+        # 避免重复初始化
+        if getattr(self, "_initialized", False):
+            return
         self.console = Console()
+
+        self._initialized = True
 
     def acquire_user_input(self) -> str:
         """获取用户输入
@@ -51,7 +66,7 @@ class ConsoleUI:
         finally:
             progress.update(task, description=description, completed=100, visible=False)
             progress.stop()
-        self.show_panel([], f"✅ {description}")
+        # self.show_panel([], f"✅ {description}")
 
     def show_help(self) -> None:
         """显示帮助信息"""
@@ -64,13 +79,13 @@ class ConsoleUI:
             ]
         )
 
-    def show_text(self, text: str) -> None:
+    def show_text(self, text: str, **kwargs) -> None:
         """显示文本内容
 
         Args:
             text: 要显示的文本内容
         """
-        self.console.print(text)
+        self.console.print(text, **kwargs)
 
     def show_error(self, message: str) -> None:
         """显示错误信息
@@ -88,7 +103,7 @@ class ConsoleUI:
         """
         self.console.print(f"[green]✅: {message}[/green]")
 
-    def show_panel(self, titles: List[str], content: str, color: str = "green",
+    def show_panel(self, titles: Sequence[str], content: str, color: str = "green",
                    align: Literal["default", "left", "center", "right", "full"] = "default") -> None:
         """显示面板
         
@@ -131,24 +146,39 @@ class ConsoleUI:
 
         self.console.print(table)
 
-    def run(self):
-        """运行控制台界面，返回用户输入内容
+    # def run(self):
+    #     """运行控制台界面，返回用户输入内容
         
-        Yields:
-            str: 用户输入的内容
-        """
-        self.show_help()
+    #     Yields:
+    #         str: 用户输入的内容
+    #     """
+    #     self.show_help()
 
-        while True:
-            try:
-                user_input = self.acquire_user_input()
-                if not user_input:
-                    continue
-                if user_input == "quit":
-                    self.exit()
-                yield user_input
-            except KeyboardInterrupt:
-                self.show_error("用户中断程序")
-                self.exit()
-            except Exception as e:
-                self.show_error(str(e))
+    #     while True:
+    #         try:
+    #             user_input = self.acquire_user_input()
+    #             if not user_input:
+    #                 continue
+    #             if user_input == "quit":
+    #                 self.exit()
+    #             yield user_input
+    #         except KeyboardInterrupt:
+    #             self.show_error("用户中断程序")
+    #             self.exit()
+    #         except Exception as e:
+    #             self.show_error(str(e))
+
+    @classmethod
+    def get_instance(cls) -> "ConsoleUI":
+        """获取控制台UI实例
+        
+        如果实例尚未初始化，将抛出异常
+        
+        Returns:
+            ConsoleUI: 控制台UI实例
+        """
+        if cls._instance is None or not getattr(cls._instance, "_initialized", False):
+            raise RuntimeError("ConsoleUI尚未初始化，请先调用构造函数")
+        return cls._instance
+
+console_ui = ConsoleUI()

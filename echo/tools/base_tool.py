@@ -48,7 +48,7 @@ class BaseTool:
     @property
     def description(self) -> str:
         """获取工具描述"""
-        return self.DESCRIPTION.strip()
+        return "\n".join([line.strip() for line in self.DESCRIPTION.strip().split("\n")])
 
     @property
     def raw_parameters(self) -> ToolFunctionParametersSchema:
@@ -62,7 +62,7 @@ class BaseTool:
         return {
             param_name: {
                 "type": param_schema["type"],
-                "description": param_schema.get("description", "").strip(),
+                "description": "\n".join([line.strip() for line in param_schema.get("description", "").strip().split("\n")]),
                 "required": param_name in required
             }
             for param_name, param_schema in self.PARAMETERS["properties"].items()

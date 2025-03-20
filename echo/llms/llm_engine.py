@@ -1,5 +1,6 @@
 import logging
-from typing import Dict, Any, List, Optional, Generator, Literal, overload
+import os
+from typing import Dict, Any, List, NotRequired, Optional, Generator, Literal, overload
 from typing_extensions import TypedDict
 
 from echo.llms.schema import Message, ChatCompletion, ChatCompletionChunk
@@ -11,11 +12,11 @@ class LLMConfig(TypedDict):
     model: str
     base_url: str
     api_key: str
-    temperature: Optional[float]
-    max_tokens: Optional[int]
+    temperature: NotRequired[Optional[float]]
+    max_tokens: NotRequired[Optional[int]]
 
 
-logger: logging.Logger = get_logger("llm_engine")
+logger: logging.Logger = get_logger(os.path.splitext(os.path.basename(__file__))[0])
 
 ALLOWED_GENERATE_CONFIG_KEYS = [
     "max_tokens",

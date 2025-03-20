@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 from typing import Dict, Any, List, Optional, Generator, Literal, Union, overload
 
 import httpx
@@ -8,17 +9,17 @@ from echo.llms.llm_engine import LLMEngine, LLMConfig, build_generate_config
 from echo.llms.schema import ChatCompletion, ChatCompletionChunk, Message
 from echo.utils.logger import get_logger
 
-logger: logging.Logger = get_logger("openai_engine")
+logger: logging.Logger = get_logger(os.path.splitext(os.path.basename(__file__))[0])
 
 
 class OpenAIEngine(LLMEngine):
     """OpenAI Compatible API引擎"""
 
     def __init__(
-            self,
-            llm_config: LLMConfig,
-            headers: Optional[Dict[str, str]] = None,
-            **kwargs
+        self,
+        llm_config: LLMConfig,
+        headers: Optional[Dict[str, str]] = None,
+        **kwargs
     ):
         """初始化OpenAI Compatible API引擎
         
@@ -96,10 +97,10 @@ class OpenAIEngine(LLMEngine):
 
     @overload
     def generate(
-            self,
-            messages: List[Message],
-            stream: Literal[True],
-            **kwargs
+        self,
+        messages: List[Message],
+        stream: Literal[True] = True,
+        **kwargs
     ) -> Generator[ChatCompletionChunk, None, None]:
         ...
 

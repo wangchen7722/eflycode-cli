@@ -1,6 +1,8 @@
 import json
+import logging
+import os.path
 import uuid
-from typing import Dict, List, Literal, Optional, Generator, Any, Required, Sequence
+from typing import Dict, List, Literal, Optional, Generator, Any, Required, Sequence, overload
 from typing_extensions import TypedDict
 from enum import Enum
 
@@ -13,6 +15,7 @@ from echo.utils.system_utils import system_info
 from echo.utils.tool_utils import apply_tool_calls_template
 from echo.memory import AgentMemory
 from echo.tools import BaseTool
+from utils.logger import get_logger
 
 
 class AgentCapability(Enum):
@@ -22,6 +25,9 @@ class AgentCapability(Enum):
     USE_TOOL = "use_tool"
     USE_SHELL = "use_shell"
     USE_MCP = "use_mcp"
+
+    def __str__(self):
+        return self.value
 
 
 class AgentResponseMetadata(TypedDict, total=False):
@@ -50,7 +56,7 @@ class AgentResponseChunk(BaseModel):
 
     content: Optional[str]
     finish_reason: Optional[str]
-    tool_calls: Optional[List[ToolCall]]
+    tool_calls: Optional[Sequence[ToolCall]]
     usage: Optional[Usage]
 
 
@@ -151,9 +157,19 @@ def agent_message_stream_parser(
         tools (List[BaseTool]): 工具列表
         chat_completion_chunk_stream_generator (str): 消息生成器
     """
+    if not tools:
+        for chunk in chat_completion_chunk_stream_generator:
+            yield AgentResponseChunk(
+                content=chunk["choices"][0]["delta"].get("content", None),
+                finish_reason=chunk["choices"][0]["finish_reason"],
+                tool_calls=None,
+                usage=chunk.get("usage", None),
+            )
+        return
     # 计算最大工具名长度，防止在 content 中输出工具调用标签
     possible_tool_call_tag = [f"<{tool.name}>" for tool in tools]
-    max_possible_tool_call_tag_length = max([len(tag) for tag in possible_tool_call_tag]) if possible_tool_call_tag else 0
+    max_possible_tool_call_tag_length = max(
+        [len(tag) for tag in possible_tool_call_tag]) if possible_tool_call_tag else 0
     # 累计接收到的字符
     accumulator = ""
     # 工具调用相关信息
@@ -164,8 +180,8 @@ def agent_message_stream_parser(
     # 解析进度以及返回结果
     should_look_ahead = True
     look_ahead_char_count = max_possible_tool_call_tag_length
-    pos = 0
-    result_pos = 0
+    index = -1
+    result_index = 0
     result: Optional[AgentMessageParserResult] = None
     last_chunk: Optional[ChatCompletionChunk] = None
 
@@ -176,11 +192,14 @@ def agent_message_stream_parser(
         chunk_content = chunk["choices"][0]["delta"].get("content", "")
         for char in chunk_content:
             accumulator += char
-            pos += 1
+            index += 1
 
             if should_look_ahead and look_ahead_char_count > 1:
                 look_ahead_char_count -= 1
                 continue
+
+            if result is not None and result["type"] == "tool_call":
+                result["content"] += char
 
             # 如果正在解析工具调用中的参数，则先处理参数内容
             if result is not None and result["type"] == "tool_call" and tool_call_param_name is not None:
@@ -204,7 +223,7 @@ def agent_message_stream_parser(
                     # 检测到工具调用的结束标签，结束工具调用块的解析
                     result["partial"] = False
                     yield AgentResponseChunk(
-                        content=None,
+                        content=result["content"],
                         finish_reason="tool_calls",
                         tool_calls=[ToolCall(id=uuid.uuid4().hex, type="function", function={
                             "name": result["tool_call_name"],
@@ -213,7 +232,7 @@ def agent_message_stream_parser(
                         usage=chunk.get("usage", None),
                     )
                     result = None
-                    result_pos = pos
+                    result_index = index
                     look_ahead_char_count = max_possible_tool_call_tag_length
                     continue
                 else:
@@ -237,7 +256,7 @@ def agent_message_stream_parser(
                     result = {
                         "partial": True,
                         "type": "tool_call",
-                        "content": None,
+                        "content": tool_use_opening_tag,
                         "tool_call_name": tool_use_opening_tag[1:-1],
                         "tool_call_arguments": {},
                     }
@@ -246,7 +265,7 @@ def agent_message_stream_parser(
 
             # 当前没有检查到工具调用，则说明当前字符是文本内容
             if result is None or result["type"] == "message":
-                char_index = pos - max_possible_tool_call_tag_length
+                char_index = index - max_possible_tool_call_tag_length + 1
                 content_char = accumulator[char_index]
                 if result is None:
                     result = {"partial": True, "type": "message", "content": content_char, "tool_call_name": None,
@@ -255,10 +274,10 @@ def agent_message_stream_parser(
                     result["content"] = content_char
                 yield AgentResponseChunk(content=content_char, finish_reason=chunk["choices"][0]["finish_reason"],
                                          tool_calls=None, usage=chunk.get("usage", None))
-                result_pos = pos - max_possible_tool_call_tag_length
+                result_index = index - max_possible_tool_call_tag_length + 1
     # 遍历结束后，检查是否还有未完成的工具调用（流未结束），若有则添加到内容块中
     yield AgentResponseChunk(
-        content=accumulator[result_pos:],
+        content=accumulator[result_index + 1:],
         finish_reason=last_chunk["choices"][0]["finish_reason"] if last_chunk else "stop",
         tool_calls=None,
         usage=last_chunk["usage"] if last_chunk and "usage" in last_chunk else None
@@ -273,6 +292,9 @@ class VectorDBConfig(TypedDict):
     short_term_capacity: int
 
 
+logger: logging.Logger = get_logger(os.path.splitext(os.path.basename(__file__))[0])
+
+
 class Agent:
     """基础智能体类"""
 
@@ -281,10 +303,10 @@ class Agent:
 
     def __init__(
             self,
-            name: str,
             llm_engine: LLMEngine,
             vector_db_config: Optional[VectorDBConfig] = None,
-            capabilities: Optional[List[AgentCapability]] = None,
+            capabilities: Optional[Sequence[AgentCapability]] = None,
+            name: Optional[str] = None,
             description: Optional[str] = None,
             tools: Optional[Sequence[BaseTool]] = None,
             **kwargs,
@@ -299,14 +321,16 @@ class Agent:
             tools: 初始工具字典
             **kwargs: 其他参数
         """
-        self.name = name
+        self._name = name or self.ROLE
+        self._description = description or self.DESCRIPTION
         self.llm_engine = llm_engine
         self.capabilities = capabilities or []
-        self.description = description or self.DESCRIPTION
         self.vector_db_config = vector_db_config or {}
         self.kwargs = kwargs
         self._history_messages: List[Message] = []
         self._history_messages_limit = 10
+        if len(tools) > 0 and AgentCapability.USE_TOOL not in self.capabilities:
+            logger.warning("AgentCapability.USE_TOOL not in capabilities, tools will not be used.")
         self._tools = tools or []
         self._tool_map = {tool.NAME: tool for tool in self._tools}
 
@@ -324,7 +348,15 @@ class Agent:
 
     @property
     def role(self):
-        return self.ROLE
+        return self.ROLE.strip()
+
+    @property
+    def name(self):
+        return self._name.strip()
+
+    @property
+    def description(self):
+        return self.DESCRIPTION.strip()
 
     def system_prompt(self) -> str:
         """渲染系统提示词"""
@@ -332,7 +364,7 @@ class Agent:
             f"{self.role}/system.prompt",
             name=self.name,
             role=self.role,
-            capabilities=self.capabilities,
+            capabilities=[str(capability) for capability in self.capabilities],
             tools=self.tools,
             system_info=system_info(),
         )
@@ -399,16 +431,6 @@ class Agent:
             messages: List[Message], stream: Literal[True]
     ) -> AgentResponse:
         response = self.llm_engine.generate(messages=messages, stream=stream)
-
-        def stream_generator(generator: Generator[ChatCompletionChunk, None, None]):
-            for chunk in generator:
-                yield AgentResponseChunk(
-                    content=chunk["choices"][0]["delta"].get("content", None),
-                    finish_reason=chunk["choices"][0]["finish_reason"],
-                    tool_calls=chunk["choices"][0]["delta"].get("tool_calls", None),
-                    usage=chunk.get("usage", None),
-                )
-
         return AgentResponse(
             content=None,
             finish_reason=None,
@@ -417,9 +439,17 @@ class Agent:
             metadata=None,
         ).set_stream_generator(agent_message_stream_parser(self.tools, response))
 
+    @overload
+    def run(self, content: str, stream: Literal[False]) -> AgentResponse:
+        ...
+
+    @overload
+    def run(self, content: str, stream: Literal[True]) -> Generator[AgentResponseChunk, None, AgentResponse]:
+        ...
+
     def run(
             self, content: str, stream: bool = False
-    ) -> AgentResponse:
+    ) -> AgentResponse | Generator[AgentResponseChunk, None, AgentResponse]:
         """运行智能体，处理用户输入并生成响应
 
         Args:
@@ -433,19 +463,41 @@ class Agent:
 
         messages = self._history_messages + [{"role": "user", "content": content}]
         messages = self._preprocess_messages(messages)
+        self._history_messages.append({"role": "user", "content": content})
 
         if stream:
             response = self._run_stream(messages, True)
+            for chunk in response.stream():
+                yield chunk
         else:
             response = self._run_no_stream(messages, False)
+        self._history_messages.append({"role": "assistant", "content": response.content})
         return response
+
+    def execute_tool(self, tool_call: ToolCall) -> str:
+        """执行工具调用
+
+        Args:
+            tool_call: 工具调用
+        """
+        if AgentCapability.USE_TOOL not in self.capabilities:
+            return "不支持工具调用，请在 capabilities 中添加 AgentCapability.USE_TOOL"
+        tool_name = tool_call["function"]["name"]
+        tool = self._tool_map.get(tool_name, None)
+        if tool:
+            try:
+                return tool.run(**json.loads(tool_call["function"]["arguments"]))
+            except Exception as e:
+                return f"工具调用失败：{e}"
+        else:
+            return f"未找到工具：{tool_name}"
 
 
 if __name__ == "__main__":
     def stream_generator():
-        message = "<read_file><path>file_path</path></read_file>接下来我将继续读取文件file_path的内容。<read_file><path>file_path</path></read_file>你好好你好你好你好你好你好你好"
+        message = "<read_file><path>file_path</path></read_file>接下来我将继续读取文件file_path的内容。<read_file><path>file_path</path></read_file>你好，请问有什么可以帮你吗"
         for i in range(0, len(message), 3):
-            char = message[i:i+3]
+            char = message[i:i + 3]
             yield ChatCompletionChunk(**{
                 "id": "123",
                 "choices": [

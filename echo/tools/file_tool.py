@@ -11,6 +11,7 @@ class ReadFileTool(BaseTool):
     Use this when you need to examine the contents of an existing file you do not know the contents of, for example to analyze code, review text files, or extract information from configuration files. 
     The output includes line numbers prefixed to each line (e.g. "1 | const x = 1")
     """.replace("\n", "")
+    DISPLAY = "{agent_name} want to read this file"
     PARAMETERS = {
         "type": "object",
         "properties": {
@@ -70,6 +71,7 @@ class EditFileWithReplace(BaseTool):
     - An empty old_string
     - The new content you want to write to the file as new_string
     """
+    DISPLAY = "{agent_name} want to edit this file"
     PARAMETERS = {
         "type": "object",
         "properties": {

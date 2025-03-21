@@ -17,6 +17,7 @@ class ExecuteCommandTool(BaseTool):
     Prefer relative commands and paths that avoid location sensitivity for terminal consistency, e.g: `touch ./testdata/example.file`, `dir ./examples/model1/data/yaml`, or `go test ./cmd/front --config ./cmd/front/config.yml`. 
     If directed by the user, you may open a terminal in a different directory by using the `cwd` parameter.
     """
+    DISPLAY = "{agent_name} want to execute this command"
     PARAMETERS = {
         ""
         "type": "object",

@@ -1,6 +1,7 @@
 import json
 import logging
 import os.path
+import time
 import uuid
 from typing import Dict, List, Literal, Optional, Generator, Any, Required, Sequence, overload, Callable
 from typing_extensions import TypedDict
@@ -16,6 +17,7 @@ from echo.utils.tool_utils import apply_tool_calls_template
 from echo.memory import AgentMemory
 from echo.tools import BaseTool
 from echo.utils.logger import get_logger
+from echo.ui.console import LoadingUI
 
 
 class AgentCapability(Enum):
@@ -38,6 +40,18 @@ class AgentResponseMetadata(TypedDict, total=False):
     request_context: Required[Dict[str, Any]]
 
 
+class AgentResponseChunkType(Enum):
+    TEXT = "text"
+    TOOL_CALL = "tool_call"
+    DONE = "done"
+
+    def __str__(self):
+        return self.value
+
+    def __repr__(self):
+        return self.value
+
+
 class AgentResponseChunk(BaseModel):
     """Agent返回结果的流式输出类，用于处理大语言模型的流式响应
 
@@ -51,7 +65,7 @@ class AgentResponseChunk(BaseModel):
         usage (Usage): 当前chunk的token使用统计
             示例: {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30}
     """
-
+    type: AgentResponseChunkType
     content: str
     finish_reason: Optional[str]
     tool_calls: Optional[Sequence[ToolCall]]
@@ -194,9 +208,8 @@ def agent_message_stream_parser(
     tool_call: Optional[dict] = None  # 正在解析的工具调用信息 {"name": ..., "arguments": {}, "content": ""}
     current_param: Optional[str] = None  # 当前解析的参数名
     param_buffer = ""  # 参数内容缓冲
-
+    last_finish_reason = None
     last_usage = None
-    last_finish_reason = "stop"
 
     # 辅助函数：判断 s 是否为候选标签中任意一个的前缀
     def is_prefix(s: str, candidates: list[str]) -> bool:
@@ -214,7 +227,7 @@ def agent_message_stream_parser(
         if chunk is None:
             continue
         last_usage = chunk.get("usage", None)
-        last_finish_reason = chunk["choices"][0]["finish_reason"]
+        last_finish_reason = chunk["choices"][0].get("finish_reason", None)
         chunk_content = chunk["choices"][0]["delta"].get("content", "")
         for char in chunk_content:
             if state == STATE_TEXT:
@@ -225,10 +238,11 @@ def agent_message_stream_parser(
                 else:
                     # 直接 yield 每个普通字符
                     yield AgentResponseChunk(
+                        type=AgentResponseChunkType.TEXT,
                         content=char,
-                        finish_reason=last_finish_reason,
+                        finish_reason=None,
                         tool_calls=None,
-                        usage=last_usage,
+                        usage=None,
                     )
             elif state == STATE_POTENTIAL_TAG:
                 tag_buffer += char
@@ -256,10 +270,11 @@ def agent_message_stream_parser(
                 if not candidates or not is_prefix(tag_buffer, candidates):
                     # 将 tag_buffer 逐字符 yield 作为普通文本输出
                     yield AgentResponseChunk(
+                        type=AgentResponseChunkType.TEXT,
                         content=tag_buffer,
-                        finish_reason=last_finish_reason,
+                        finish_reason=None,
                         tool_calls=None,
-                        usage=last_usage,
+                        usage=None,
                     )
                     tag_buffer = ""
                     state = STATE_TEXT
@@ -276,10 +291,18 @@ def agent_message_stream_parser(
                         state = STATE_TOOL
                         tag_buffer = ""
                         tag_context = None
+                        yield AgentResponseChunk(
+                            type=AgentResponseChunkType.TOOL_CALL,
+                            content=matched_candidate,
+                            finish_reason=None,
+                            tool_calls=None,
+                            usage=None,
+                        )
                     elif tag_context == "TOOL":
                         if tool_call is not None and matched_candidate == f"</{tool_call['name']}>":
                             # 匹配到工具调用结束标签，结束工具调用，yield 工具调用 chunk
                             yield AgentResponseChunk(
+                                type=AgentResponseChunkType.TOOL_CALL,
                                 content=tool_call["content"] + matched_candidate,
                                 finish_reason="tool_calls",
                                 tool_calls=[ToolCall(
@@ -290,7 +313,7 @@ def agent_message_stream_parser(
                                         "arguments": json.dumps(tool_call["arguments"])
                                     }
                                 )],
-                                usage=last_usage,
+                                usage=None,
                             )
                             tool_call = None
                             state = STATE_TEXT
@@ -319,10 +342,11 @@ def agent_message_stream_parser(
                             # 理论上不应进入此分支；如果发生，则按普通文本处理
                             for ch in tag_buffer:
                                 yield AgentResponseChunk(
+                                    type=AgentResponseChunkType.TEXT,
                                     content=ch,
-                                    finish_reason=last_finish_reason,
+                                    finish_reason=None,
                                     tool_calls=None,
-                                    usage=last_usage,
+                                    usage=None,
                                 )
                             tag_buffer = ""
                             state = STATE_PARAM
@@ -335,6 +359,13 @@ def agent_message_stream_parser(
                 else:
                     # 在工具调用块内，既累积内容又逐字符输出
                     tool_call["content"] += char
+                    yield AgentResponseChunk(
+                        type=AgentResponseChunkType.TOOL_CALL,
+                        content=char,
+                        finish_reason=None,
+                        tool_calls=None,
+                        usage=None,
+                    )
             elif state == STATE_PARAM:
                 if char == '<':
                     state = STATE_POTENTIAL_TAG
@@ -343,15 +374,22 @@ def agent_message_stream_parser(
                 else:
                     tool_call["content"] += char
                     param_buffer += char
+                    yield AgentResponseChunk(
+                        type=AgentResponseChunkType.TOOL_CALL,
+                        content=char,
+                        finish_reason=None,
+                        tool_calls=None,
+                        usage=None,
+                    )
 
     # 流结束后处理残留数据
     if state == STATE_POTENTIAL_TAG:
         for ch in tag_buffer:
             yield AgentResponseChunk(
                 content=ch,
-                finish_reason=last_finish_reason,
+                finish_reason=None,
                 tool_calls=None,
-                usage=last_usage,
+                usage=None,
             )
     elif state == STATE_TOOL and tool_call:
         # 工具调用未正常结束，按文本输出
@@ -359,7 +397,7 @@ def agent_message_stream_parser(
         for ch in remaining:
             yield AgentResponseChunk(
                 content=ch,
-                finish_reason=last_finish_reason,
+                finish_reason=None,
                 tool_calls=None,
                 usage=last_usage,
             )
@@ -373,6 +411,13 @@ def agent_message_stream_parser(
                 tool_calls=None,
                 usage=last_usage,
             )
+    yield AgentResponseChunk(
+        type=AgentResponseChunkType.DONE,
+        content="",
+        finish_reason=last_finish_reason,
+        tool_calls=None,
+        usage=last_usage,
+    )
 
 
 class VectorDBConfig(TypedDict):
@@ -420,6 +465,8 @@ class Agent:
         self.kwargs = kwargs
         self._history_messages: List[Message] = []
         self._history_messages_limit = 10
+        # 初始化工具
+        self.auto_approve = kwargs.get("auto_approve", False)
         if tools and AgentCapability.USE_TOOL not in self.capabilities:
             logger.warning("AgentCapability.USE_TOOL not in capabilities, tools will not be used.")
         self._tools = tools or []
@@ -569,22 +616,84 @@ class Agent:
         if AgentCapability.USE_TOOL not in self.capabilities:
             return "不支持工具调用，请在提示用户 capabilities 中添加 AgentCapability.USE_TOOL"
         tool_name = tool_call["function"]["name"]
+        tool_call_arguments = json.loads(tool_call["function"]["arguments"])
         tool = self._tool_map.get(tool_name, None)
-        if tool:
-            try:
-                tool_response = tool.run(**json.loads(tool_call["function"]["arguments"]))
-                return f"This is auto-generated response from tool call ({tool_name}):\n{tool_response}"
-            except Exception as e:
-                return f"工具调用失败：{e}"
-        else:
+        if not tool:
             return f"未找到工具：{tool_name}"
+        try:
+            tool_response = tool.run(**tool_call_arguments)
+            return f"This is auto-generated response from tool call ({tool_name}):\n{tool_response}"
+        except Exception as e:
+            return f"工具调用失败：{e}"
+
+    def run_loop(self):
+        from echo.ui.console import ConsoleUI
+        ui = ConsoleUI.get_instance()
+        enable_stream = True
+        user_input = None
+        tool_call_progress: Optional[LoadingUI] = None
+        while True:
+            if user_input is None:
+                user_input = ui.acquire_user_input()
+            if user_input.strip() == "exit" or user_input.strip() == "quit":
+                break
+            agent_response = self.run(user_input, stream=enable_stream)
+            user_input = None
+            if enable_stream:
+                for chunk in agent_response.stream():
+                    if chunk.type == AgentResponseChunkType.TEXT:
+                        # 文本输出
+                        if not chunk.content:
+                            continue
+                        ui.show_text(chunk.content, end="")
+                    elif chunk.type == AgentResponseChunkType.TOOL_CALL:
+                        # 工具调用
+                        if tool_call_progress is None:
+                            tool_call_progress = ui.create_loading("loading " + chunk.content[1:-1] + " ...")
+                            tool_call_progress.start()
+                        if chunk.finish_reason != "tool_calls":
+                            # 说明工具调用正在生成，跳过
+                            continue
+                        tool_call_progress.stop()
+                        tool_call_progress = None
+                        # 这里有且仅会有一个工具调用
+                        tool_call = chunk.tool_calls[0]
+                        tool_call_name = tool_call["function"]["name"]
+                        tool_call_arguments = json.loads(tool_call["function"]["arguments"])
+                        tool_call_arguments_str = "\n".join([f"{k}={v}" for k, v in tool_call_arguments.items()])
+                        ui.show_panel([self.name, tool_call_name], f"Arguments:\n{tool_call_arguments_str}")
+                        if not self.auto_approve:
+                            # 征求用户同意
+                            tool = self._tool_map.get(tool_call_name)
+                            tool_display = tool.display(self.name)
+                            ui.show_text(tool_display)
+                            user_approval = ui.acquire_user_input(choices=["yes", "no"])
+                            if user_approval.strip().lower() not in ["yes", "y"]:
+                                user_input = f"用户拒绝执行本次工具调用：{tool_call_name}"
+                                break
+                        with ui.create_loading(tool_call_name):
+                            tool_call_result = self.execute_tool(tool_call)
+                            time.sleep(0.1)  # 等待一段时间，保证控制台能够输出 loading
+                        ui.show_panel([self.name, tool_call_name], f"Result:\n{tool_call_result}")
+                        user_input = tool_call_result
+                    elif chunk.type == AgentResponseChunkType.DONE:
+                        # 流式输出结束
+                        ui.show_text("")  # 换行
+                        ui.show_text(f"{self.name}: ")
+                    else:
+                        raise ValueError(f"Unknown agent response chunk type: {chunk.type}")
+
 
 
 if __name__ == "__main__":
     def stream_generator():
-        message = "你好你好你好<read_file>\n<path>D:/Codes/Python/echo/temp/requirements.txt</path>\n</read_file>你好你好你好"
+        message = "文件内容已经存在且与我们想要的内容一样。接下来，我们可以确认 `bing_crawler.py` 的内容。\n\n<read_file>\n<path>temp/bing_crawler.py</path>\n</read_file>"
         for i in range(0, len(message), 3):
             char = message[i:i + 3]
+            if i == len(message) - 2:
+                finish_reason = "stop"
+            else:
+                finish_reason = None
             yield ChatCompletionChunk(**{
                 "id": "123",
                 "choices": [
@@ -592,7 +701,7 @@ if __name__ == "__main__":
                         "delta": {
                             "content": char
                         },
-                        "finish_reason": None,
+                        "finish_reason": finish_reason,
                         "tool_calls": None
                     }
                 ]
@@ -601,6 +710,6 @@ if __name__ == "__main__":
 
     from echo.tools import ReadFileTool, EditFileWithReplace, ExecuteCommandTool
 
-    tools = [ReadFileTool(), EditFileWithReplace(), ExecuteCommandTool()]
+    tools = [ReadFileTool(), EditFileWithReplace()]
     for result in agent_message_stream_parser(tools, stream_generator()):
         print(result)

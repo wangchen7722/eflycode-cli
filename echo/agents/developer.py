@@ -1,4 +1,3 @@
-import json
 from typing import Optional, Sequence
 
 from echo.agents.agent import Agent, AgentCapability, VectorDBConfig
@@ -31,38 +30,3 @@ class Developer(Agent):
             tools=tools,
             **kwargs,
         )
-
-    def run_loop(self):
-        from echo.ui.console import ConsoleUI
-        console = ConsoleUI.get_instance()
-        enable_stream = True
-        user_input = None
-        while True:
-            if user_input is None:
-                user_input = console.acquire_user_input()
-            if user_input.strip() == "exit" or user_input.strip() == "quit":
-                break
-            agent_response = self.run(user_input, stream=enable_stream)
-            user_input = None
-            console.show_text(f"{self.name}: ", end="")
-            if enable_stream:
-                for chunk in agent_response.stream():
-                    if chunk.tool_calls:
-                        user_input = ""
-                        for tool_call in chunk.tool_calls:
-                            # 换行
-                            console.show_text("")
-                            tool_call_name = tool_call["function"]["name"]
-                            tool_call_arguments = json.loads(tool_call["function"]["arguments"])
-                            tool_call_arguments_str = "\n".join([f"{k}={v}" for k, v in tool_call_arguments.items()])
-                            with console.create_loading(tool_call_name):
-                                tool_call_result = self.execute_tool(tool_call)
-                            tool_call_panel_str = "Arguments:\n{}\nResult:\n{}".format(tool_call_arguments_str, tool_call_result)
-                            user_input += tool_call_result + "\n"
-                            console.show_panel([self.name, tool_call_name], tool_call_panel_str)
-                    else:
-                        if not chunk.content:
-                            continue
-                        console.show_text(chunk.content, end="")
-            # 换行
-            console.show_text("")

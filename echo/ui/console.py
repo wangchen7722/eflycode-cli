@@ -1,5 +1,5 @@
 import sys
-from typing import List, Literal, Sequence
+from typing import List, Literal, Optional, Sequence
 from contextlib import contextmanager
 from rich.console import Console
 from rich.prompt import Prompt
@@ -7,6 +7,37 @@ from rich.table import Table
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.panel import Panel
 from rich.text import Text
+
+
+class LoadingUI:
+
+    def __init__(self, console: Console, description: str):
+        self.console = console
+        self.description = description
+
+        self._progress = Progress(
+            SpinnerColumn(),
+            TextColumn("[cyan]{task.description}", style="bold green"),
+            console=self.console
+        )
+        self._task = self._progress.add_task(description, total=100)
+
+    def start(self):
+        self._progress.start()
+        return self
+
+    def stop(self, success: bool = True):
+        if success:
+            self._progress.update(self._task, description=f"✅ {self.description}", completed=100)
+        else:
+            self._progress.update(self._task, description=f"❌ {self.description}", completed=100)
+        self._progress.stop()
+
+    def __enter__(self):
+        return self.start()
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.stop()
 
 
 class ConsoleUI:
@@ -31,21 +62,24 @@ class ConsoleUI:
 
         self._initialized = True
 
-    def acquire_user_input(self) -> str:
+    def flush(self) -> None:
+        """刷新控制台输出"""
+        self.console.file.flush()
+
+    def acquire_user_input(self, choices: Optional[List[str]] = None) -> str:
         """获取用户输入
 
         Returns:
             str: 用户输入的内容
         """
-        return Prompt.ask("user")
+        return Prompt.ask("user", choices=choices)
 
     def exit(self) -> None:
         """退出控制台程序"""
         self.console.print("[green]Bye!!![/green]")
         sys.exit(0)
 
-    @contextmanager
-    def create_loading(self, description: str):
+    def create_loading(self, description: str) -> LoadingUI:
         """创建进度条
 
         Args:
@@ -54,18 +88,19 @@ class ConsoleUI:
         Yields:
             Progress: 进度条对象
         """
-        progress = Progress(
-            SpinnerColumn(),
-            TextColumn("[cyan]{task.description}", style="bold green"),
-            console=self.console
-        )
-        task = progress.add_task(description, total=100)
-        try:
-            progress.start()
-            yield progress
-        finally:
-            progress.update(task, description=f"✅ {description}", completed=100)
-            progress.stop()
+        return LoadingUI(self.console, description)
+        # progress = Progress(
+        #     SpinnerColumn(),
+        #     TextColumn("[cyan]{task.description}", style="bold green"),
+        #     console=self.console
+        # )
+        # task = progress.add_task(description, total=100)
+        # try:
+        #     progress.start()
+        #     yield progress
+        # finally:
+        #     progress.update(task, description=f"✅ {description}", completed=100)
+        #     progress.stop()
         # self.show_panel([], f"✅ {description}")
 
     def show_help(self) -> None:
@@ -148,7 +183,7 @@ class ConsoleUI:
 
     # def run(self):
     #     """运行控制台界面，返回用户输入内容
-        
+
     #     Yields:
     #         str: 用户输入的内容
     #     """
@@ -180,5 +215,6 @@ class ConsoleUI:
         if cls._instance is None or not getattr(cls._instance, "_initialized", False):
             raise RuntimeError("ConsoleUI尚未初始化，请先调用构造函数")
         return cls._instance
+
 
 console_ui = ConsoleUI()

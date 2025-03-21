@@ -36,6 +36,8 @@ class BaseTool:
     """工具名称"""
     DESCRIPTION: str
     """工具描述"""
+    DISPLAY: str = "{agent_name} want to use this tool"
+    """工具显示名称"""
     PARAMETERS: ToolFunctionParametersSchema
     """工具参数"""
     EXAMPLES: Optional[Dict[str, ToolCallSchema]]
@@ -50,6 +52,10 @@ class BaseTool:
     def description(self) -> str:
         """获取工具描述"""
         return "\n".join([line.strip() for line in self.DESCRIPTION.strip().split("\n")])
+
+    def display(self, agent_name) -> str:
+        """获取工具显示名称"""
+        return self.DISPLAY.format(agent_name=agent_name).strip()
 
     @property
     def raw_parameters(self) -> ToolFunctionParametersSchema:

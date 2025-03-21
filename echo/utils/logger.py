@@ -1,7 +1,7 @@
 import os
 import logging
 from logging.handlers import RotatingFileHandler
-from typing import Dict
+from typing import Dict, Optional
 from threading import Lock
 
 # 用于存储已创建的logger实例
@@ -19,7 +19,7 @@ class ThreadSafeRotatingFileHandler(RotatingFileHandler):
 
 def get_logger(
     name: str,
-    log_dir: str = "logs",
+    log_dir: Optional[str] = None,
     log_level: int = logging.INFO,
     max_bytes: int = 10 * 1024 * 1024,  # 10MB
     backup_count: int = 5,
@@ -60,7 +60,7 @@ def get_logger(
 
 def setup_logger(
     name: str,
-    log_dir: str = "logs",
+    log_dir: Optional[str] = None,
     log_level: int = logging.INFO,
     max_bytes: int = 10 * 1024 * 1024,  # 10MB
     backup_count: int = 5,
@@ -88,6 +88,15 @@ def setup_logger(
     if logger.handlers:
         logger.handlers.clear()
 
+    # 确定日志目录的绝对路径
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    if log_dir is None:
+        # 获取项目根目录（echo包所在的目录）
+        log_dir = os.path.join(project_root, "logs")
+    elif not os.path.isabs(log_dir):
+        # 如果提供的是相对路径，则转换为基于项目根目录的绝对路径
+        log_dir = os.path.join(project_root, log_dir)
+    
     # 创建日志目录
     os.makedirs(log_dir, exist_ok=True)
 

@@ -8,7 +8,7 @@ from echo.tools import BaseTool
 class Developer(Agent):
     ROLE = "developer"
     DESCRIPTION = """
-    a highly skilled software developer with extensive knowledge in many programming languages, frameworks, design patterns, and best practices.
+    一名技术精湛的软件开发者，精通多种编程语言、开发框架、设计模式以及最佳实践。
     """
 
     def __init__(

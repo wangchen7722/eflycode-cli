@@ -3,7 +3,17 @@ import logging
 import os.path
 import time
 import uuid
-from typing import Dict, List, Literal, Optional, Generator, Any, Required, Sequence, overload, Callable
+from typing import (
+    Dict,
+    List,
+    Literal,
+    Optional,
+    Generator,
+    Any,
+    Required,
+    Sequence,
+    Callable,
+)
 from typing_extensions import TypedDict
 from enum import Enum
 
@@ -29,6 +39,9 @@ class AgentCapability(Enum):
     def __str__(self):
         return self.value
 
+    def __repr__(self) -> str:
+        return self.value
+
 
 class AgentResponseMetadata(TypedDict, total=False):
     """Agent返回结果的元数据类，用于存储请求相关的上下文信息
@@ -37,6 +50,7 @@ class AgentResponseMetadata(TypedDict, total=False):
         request_context (Dict[str, Any]): 请求上下文信息，可以包含原始请求消息、时间戳等
             示例: {"message": "用户输入", "timestamp": "2024-01-01 12:00:00"}
     """
+
     request_context: Required[Dict[str, Any]]
 
 
@@ -65,6 +79,7 @@ class AgentResponseChunk(BaseModel):
         usage (Usage): 当前chunk的token使用统计
             示例: {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30}
     """
+
     type: AgentResponseChunkType
     content: str
     finish_reason: Optional[str]
@@ -99,12 +114,15 @@ class AgentResponse(BaseModel):
     metadata: Optional[AgentResponseMetadata]
 
     is_streaming: Optional[bool] = Field(default=False, alias="_is_streaming")
-    stream_generator: Optional[Generator[AgentResponseChunk, None, None]] = Field(default=None,
-                                                                                  alias="_stream_generator")
-    on_stream_complete: Optional[Callable[["AgentResponse"], None]] = Field(default=None, alias="_on_stream_complete")
+    stream_generator: Optional[Generator[AgentResponseChunk, None, None]] = Field(
+        default=None, alias="_stream_generator"
+    )
+    on_stream_complete: Optional[Callable[["AgentResponse"], None]] = Field(
+        default=None, alias="_on_stream_complete"
+    )
 
     def set_stream_generator(
-            self, generator: Generator[AgentResponseChunk, None, None]
+        self, generator: Generator[AgentResponseChunk, None, None]
     ):
         """设置流式输出生成器
         Args:
@@ -166,6 +184,7 @@ class AgentMessageParserResult(TypedDict, total=False):
         tool_call_arguments (Optional[Dict[str, Any]]): 工具参数
         partial (bool): 是否为部分解析结果
     """
+
     partial: Required[bool]
     type: Required[Literal["message", "tool_call"]]
     content: Required[Optional[str]]
@@ -174,8 +193,8 @@ class AgentMessageParserResult(TypedDict, total=False):
 
 
 def agent_message_stream_parser(
-        tools: Sequence[BaseTool],
-        chat_completion_chunk_stream_generator: Generator[ChatCompletionChunk, None, None]
+    tools: Sequence[BaseTool],
+    chat_completion_chunk_stream_generator: Generator[ChatCompletionChunk, None, None],
 ) -> Generator[AgentResponseChunk, None, None]:
     """状态机解析器，通过在遇到 '<' 时就进行工具名前缀检测，
     以便尽早判断是否为工具调用标签，减少HTML标签对连续性的影响，同时实现流式输出：
@@ -205,7 +224,9 @@ def agent_message_stream_parser(
     # TOOL: 在工具调用内部遇到 <，可能是参数的开始标签或工具调用的结束标签
     # PARAM: 在参数解析状态下遇到 <，可能是参数的结束标签
     tag_context = None  # POTENTIAL_TAG 的上下文，可能为 "TEXT", "TOOL", "PARAM"
-    tool_call: Optional[dict] = None  # 正在解析的工具调用信息 {"name": ..., "arguments": {}, "content": ""}
+    tool_call: Optional[dict] = (
+        None  # 正在解析的工具调用信息 {"name": ..., "arguments": {}, "content": ""}
+    )
     current_param: Optional[str] = None  # 当前解析的参数名
     param_buffer = ""  # 参数内容缓冲
     last_finish_reason = None
@@ -231,7 +252,7 @@ def agent_message_stream_parser(
         chunk_content = chunk["choices"][0]["delta"].get("content", "")
         for char in chunk_content:
             if state == STATE_TEXT:
-                if char == '<':
+                if char == "<":
                     state = STATE_POTENTIAL_TAG
                     tag_context = "TEXT"
                     tag_buffer = "<"
@@ -255,14 +276,19 @@ def agent_message_stream_parser(
                         # 当前工具调用的结束标签
                         candidates.append(f"</{tool_call['name']}>")
                         # 允许的参数起始标签
-                        allowed_params = tool_map.get(tool_call["name"]).parameters if tool_call and tool_call[
-                            "name"] in tool_map else []
+                        allowed_params = (
+                            tool_map.get(tool_call["name"]).parameters
+                            if tool_call and tool_call["name"] in tool_map
+                            else []
+                        )
                         for p in allowed_params:
                             candidates.append(f"<{p}>")
                     else:
                         candidates = []
                 elif tag_context == "PARAM":
-                    candidates = [f"</{current_param}>"] if current_param is not None else []
+                    candidates = (
+                        [f"</{current_param}>"] if current_param is not None else []
+                    )
                 else:
                     candidates = []
 
@@ -287,7 +313,11 @@ def agent_message_stream_parser(
                     if tag_context == "TEXT":
                         # 匹配到工具调用的起始标签，例如 "<read_file>"
                         tool_name = candidate_tags_text[matched_candidate].name
-                        tool_call = {"name": tool_name, "arguments": {}, "content": matched_candidate}
+                        tool_call = {
+                            "name": tool_name,
+                            "arguments": {},
+                            "content": matched_candidate,
+                        }
                         state = STATE_TOOL
                         tag_buffer = ""
                         tag_context = None
@@ -299,20 +329,27 @@ def agent_message_stream_parser(
                             usage=None,
                         )
                     elif tag_context == "TOOL":
-                        if tool_call is not None and matched_candidate == f"</{tool_call['name']}>":
+                        if (
+                            tool_call is not None
+                            and matched_candidate == f"</{tool_call['name']}>"
+                        ):
                             # 匹配到工具调用结束标签，结束工具调用，yield 工具调用 chunk
                             yield AgentResponseChunk(
                                 type=AgentResponseChunkType.TOOL_CALL,
                                 content=tool_call["content"] + matched_candidate,
                                 finish_reason="tool_calls",
-                                tool_calls=[ToolCall(
-                                    id=uuid.uuid4().hex,
-                                    type="function",
-                                    function={
-                                        "name": tool_call["name"],
-                                        "arguments": json.dumps(tool_call["arguments"])
-                                    }
-                                )],
+                                tool_calls=[
+                                    ToolCall(
+                                        id=uuid.uuid4().hex,
+                                        type="function",
+                                        function={
+                                            "name": tool_call["name"],
+                                            "arguments": json.dumps(
+                                                tool_call["arguments"]
+                                            ),
+                                        },
+                                    )
+                                ],
                                 usage=None,
                             )
                             tool_call = None
@@ -330,10 +367,15 @@ def agent_message_stream_parser(
                             param_buffer = ""
                     elif tag_context == "PARAM":
                         # 在参数状态中，只允许匹配参数结束标签
-                        if current_param is not None and matched_candidate == f"</{current_param}>":
+                        if (
+                            current_param is not None
+                            and matched_candidate == f"</{current_param}>"
+                        ):
                             if tool_call is not None:
                                 tool_call["content"] += matched_candidate
-                                tool_call["arguments"][current_param] = param_buffer.strip()
+                                tool_call["arguments"][current_param] = (
+                                    param_buffer.strip()
+                                )
                             current_param = None
                             state = STATE_TOOL
                             tag_buffer = ""
@@ -352,7 +394,7 @@ def agent_message_stream_parser(
                             state = STATE_PARAM
                             tag_context = "PARAM"
             elif state == STATE_TOOL:
-                if char == '<':
+                if char == "<":
                     state = STATE_POTENTIAL_TAG
                     tag_context = "TOOL"
                     tag_buffer = "<"
@@ -367,7 +409,7 @@ def agent_message_stream_parser(
                         usage=None,
                     )
             elif state == STATE_PARAM:
-                if char == '<':
+                if char == "<":
                     state = STATE_POTENTIAL_TAG
                     tag_context = "PARAM"
                     tag_buffer = "<"
@@ -438,14 +480,14 @@ class Agent:
     DESCRIPTION = "一个通用对话智能助手"
 
     def __init__(
-            self,
-            llm_engine: LLMEngine,
-            vector_db_config: Optional[VectorDBConfig] = None,
-            capabilities: Optional[Sequence[AgentCapability]] = None,
-            name: Optional[str] = None,
-            description: Optional[str] = None,
-            tools: Optional[Sequence[BaseTool]] = None,
-            **kwargs,
+        self,
+        llm_engine: LLMEngine,
+        vector_db_config: Optional[VectorDBConfig] = None,
+        capabilities: Optional[Sequence[AgentCapability]] = None,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        tools: Optional[Sequence[BaseTool]] = None,
+        **kwargs,
     ):
         """初始化智能体
         Args:
@@ -468,7 +510,9 @@ class Agent:
         # 初始化工具
         self.auto_approve = kwargs.get("auto_approve", False)
         if tools and AgentCapability.USE_TOOL not in self.capabilities:
-            logger.warning("AgentCapability.USE_TOOL not in capabilities, tools will not be used.")
+            logger.warning(
+                "AgentCapability.USE_TOOL not in capabilities, tools will not be used."
+            )
         self._tools = tools or []
         self._tool_map = {tool.NAME: tool for tool in self._tools}
 
@@ -525,9 +569,7 @@ class Agent:
 
         return [memory.to_message() for memory in agent_memories]
 
-    def _preprocess_messages(
-            self, messages: List[Message]
-    ) -> List[Message]:
+    def _preprocess_messages(self, messages: List[Message]) -> List[Message]:
         """预处理消息列表，添加系统提示词和角色信息
 
         Args:
@@ -541,10 +583,12 @@ class Agent:
         for message in messages:
             tool_calls = message.get("tool_calls", None)
             if tool_calls:
-                new_messages.append({
-                    "role": "assistant",
-                    "content": apply_tool_calls_template(tool_calls)
-                })
+                new_messages.append(
+                    {
+                        "role": "assistant",
+                        "content": apply_tool_calls_template(tool_calls),
+                    }
+                )
             else:
                 new_messages.append(message)
         if new_messages[0]["role"] != "system":
@@ -552,8 +596,7 @@ class Agent:
         return new_messages
 
     def _run_no_stream(
-            self,
-            messages: List[Message], stream: Literal[False]
+        self, messages: List[Message], stream: Literal[False]
     ) -> AgentResponse:
         response = self.llm_engine.generate(messages=messages, stream=stream)
         return AgentResponse(
@@ -565,8 +608,7 @@ class Agent:
         )
 
     def _run_stream(
-            self,
-            messages: List[Message], stream: Literal[True]
+        self, messages: List[Message], stream: Literal[True]
     ) -> AgentResponse:
         response = self.llm_engine.generate(messages=messages, stream=stream)
         return AgentResponse(
@@ -577,9 +619,7 @@ class Agent:
             metadata=None,
         ).set_stream_generator(agent_message_stream_parser(self.tools, response))
 
-    def run(
-            self, content: str, stream: bool = False
-    ) -> AgentResponse:
+    def run(self, content: str, stream: bool = False) -> AgentResponse:
         """运行智能体，处理用户输入并生成响应
 
         Args:
@@ -596,15 +636,20 @@ class Agent:
         self._history_messages.append({"role": "user", "content": content})
 
         if stream:
+
             def on_stream_complete(res: AgentResponse):
-                self._history_messages.append({"role": "assistant", "content": res.content})
+                self._history_messages.append(
+                    {"role": "assistant", "content": res.content}
+                )
 
             response = self._run_stream(messages, True)
             # NOTE: 流式输出时会自动记录历史消息，无需再次记录
             response.set_on_stream_complete(on_stream_complete)
         else:
             response = self._run_no_stream(messages, False)
-            self._history_messages.append({"role": "assistant", "content": response.content})
+            self._history_messages.append(
+                {"role": "assistant", "content": response.content}
+            )
         return response
 
     def execute_tool(self, tool_call: ToolCall) -> str:
@@ -628,6 +673,7 @@ class Agent:
 
     def run_loop(self):
         from echo.ui.console import ConsoleUI
+
         ui = ConsoleUI.get_instance()
         enable_stream = True
         user_input = None
@@ -649,7 +695,9 @@ class Agent:
                     elif chunk.type == AgentResponseChunkType.TOOL_CALL:
                         # 工具调用
                         if tool_call_progress is None:
-                            tool_call_progress = ui.create_loading("loading " + chunk.content[1:-1] + " ...")
+                            tool_call_progress = ui.create_loading(
+                                "loading " + chunk.content[1:-1] + " ..."
+                            )
                             tool_call_progress.start()
                         if chunk.finish_reason != "tool_calls":
                             # 说明工具调用正在生成，跳过
@@ -659,9 +707,16 @@ class Agent:
                         # 这里有且仅会有一个工具调用
                         tool_call = chunk.tool_calls[0]
                         tool_call_name = tool_call["function"]["name"]
-                        tool_call_arguments = json.loads(tool_call["function"]["arguments"])
-                        tool_call_arguments_str = "\n".join([f"{k}={v}" for k, v in tool_call_arguments.items()])
-                        ui.show_panel([self.name, tool_call_name], f"Arguments:\n{tool_call_arguments_str}")
+                        tool_call_arguments = json.loads(
+                            tool_call["function"]["arguments"]
+                        )
+                        tool_call_arguments_str = "\n".join(
+                            [f"{k}={v}" for k, v in tool_call_arguments.items()]
+                        )
+                        ui.show_panel(
+                            [self.name, tool_call_name],
+                            f"Arguments:\n{tool_call_arguments_str}",
+                        )
                         if not self.auto_approve:
                             # 征求用户同意
                             tool = self._tool_map.get(tool_call_name)
@@ -669,44 +724,49 @@ class Agent:
                             ui.show_text(tool_display)
                             user_approval = ui.acquire_user_input(choices=["yes", "no"])
                             if user_approval.strip().lower() not in ["yes", "y"]:
-                                user_input = f"用户拒绝执行本次工具调用：{tool_call_name}"
+                                user_input = (
+                                    f"用户拒绝执行本次工具调用：{tool_call_name}"
+                                )
                                 break
                         with ui.create_loading(tool_call_name):
                             tool_call_result = self.execute_tool(tool_call)
                             time.sleep(0.1)  # 等待一段时间，保证控制台能够输出 loading
-                        ui.show_panel([self.name, tool_call_name], f"Result:\n{tool_call_result}")
+                        ui.show_panel(
+                            [self.name, tool_call_name], f"Result:\n{tool_call_result}"
+                        )
                         user_input = tool_call_result
                     elif chunk.type == AgentResponseChunkType.DONE:
                         # 流式输出结束
                         ui.show_text("")  # 换行
                         ui.show_text(f"{self.name}: ")
                     else:
-                        raise ValueError(f"Unknown agent response chunk type: {chunk.type}")
-
+                        raise ValueError(
+                            f"Unknown agent response chunk type: {chunk.type}"
+                        )
 
 
 if __name__ == "__main__":
+
     def stream_generator():
         message = "文件内容已经存在且与我们想要的内容一样。接下来，我们可以确认 `bing_crawler.py` 的内容。\n\n<read_file>\n<path>temp/bing_crawler.py</path>\n</read_file>"
         for i in range(0, len(message), 3):
-            char = message[i:i + 3]
+            char = message[i : i + 3]
             if i == len(message) - 2:
                 finish_reason = "stop"
             else:
                 finish_reason = None
-            yield ChatCompletionChunk(**{
-                "id": "123",
-                "choices": [
-                    {
-                        "delta": {
-                            "content": char
-                        },
-                        "finish_reason": finish_reason,
-                        "tool_calls": None
-                    }
-                ]
-            })
-
+            yield ChatCompletionChunk(
+                **{
+                    "id": "123",
+                    "choices": [
+                        {
+                            "delta": {"content": char},
+                            "finish_reason": finish_reason,
+                            "tool_calls": None,
+                        }
+                    ],
+                }
+            )
 
     from echo.tools import ReadFileTool, EditFileWithReplace, ExecuteCommandTool
 

@@ -17,4 +17,5 @@ developer = Developer(
     capabilities=[AgentCapability.USE_TOOL],
     tools=[ReadFileTool(), EditFileWithReplace(), ExecuteCommandTool()]
 )
-developer.run_loop()
+# developer.run_loop()
+print(developer.system_prompt())

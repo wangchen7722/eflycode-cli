@@ -33,6 +33,7 @@
 
 {% if tools and "use_tool" in capabilities %}
 ---
+
 当你执行命令或工具时，应解释其作用及执行原因，以确保用户理解（当您运行会对用户系统进行更改的命令时，这一点尤为重要）。
 {% include "partials/tools.prompt" %}
 {% endif %}

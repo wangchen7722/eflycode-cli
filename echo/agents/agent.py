@@ -147,7 +147,8 @@ class AgentResponse(BaseModel):
         """获取流式输出的生成器"""
         if not self.is_streaming or not self.stream_generator:
             yield AgentResponseChunk(
-                content=self.content,
+                type=AgentResponseChunkType.DONE,
+                content=self.content or "",
                 finish_reason=self.finish_reason,
                 tool_calls=self.tool_calls,
                 usage=self.usage,

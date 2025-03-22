@@ -161,12 +161,13 @@ class AgentResponse(BaseModel):
                 self.finish_reason = chunk.finish_reason
             if chunk.usage:
                 self.usage = chunk.usage
-            if chunk.content:
+            if chunk.type == AgentResponseChunkType.TEXT and chunk.content:
                 if not self.content:
                     self.content = ""
                 self.content += chunk.content
-            if chunk.tool_calls:
-                if not self.tool_calls:
+            if chunk.type == AgentResponseChunkType.TOOL_CALL and chunk.tool_calls:
+                self.content += chunk.content
+                if self.tool_calls is None:
                     self.tool_calls = []
                 self.tool_calls.extend(chunk.tool_calls)
         self.is_streaming = False

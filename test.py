@@ -9,7 +9,7 @@ llm_config = LLMConfig(
     model=os.environ["ECHO_MODEL"],
     base_url=os.environ["ECHO_BASE_URL"],
     api_key=os.environ["ECHO_API_KEY"],
-    temperature=0.7
+    temperature=0.1
 )
 developer = Developer(
     name="developer",
@@ -17,5 +17,5 @@ developer = Developer(
     capabilities=[AgentCapability.USE_TOOL],
     tools=[ReadFileTool(), EditFileWithReplace(), ExecuteCommandTool()]
 )
-# developer.run_loop()
-print(developer.system_prompt())
+developer.run_loop()
+# print(developer.system_prompt())

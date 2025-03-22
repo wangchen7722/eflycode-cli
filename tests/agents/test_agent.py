@@ -88,11 +88,9 @@ class TestAgent(unittest.TestCase):
         response = self.agent.run("测试消息", stream=True)
 
         # 验证流式输出结果
-        content = ""
         for chunk in response.stream():
-            if chunk.content:
-                content += chunk.content
-
+            ...
+        content = response.content
         self.assertEqual(content, "第一部分回复")
         self.assertEqual(response.content, "第一部分回复")
         self.assertEqual(response.finish_reason, "stop")
@@ -131,10 +129,9 @@ class TestAgent(unittest.TestCase):
         mock_message1 = "<test_tool><arg>a</arg></test_tool>"
         self.llm_engine.generate.return_value = stream_generator(mock_message1)
         response = self.agent.run("使用单个工具", stream=True)
-        tool_calls = []
         for chunk in response.stream():
-            if chunk.tool_calls:
-                tool_calls.extend(chunk.tool_calls)
+            ...
+        tool_calls = response.tool_calls
         self.assertEqual(len(tool_calls), 1)
         self.assertEqual(tool_calls[0]["function"]["name"], "test_tool")
         self.assertEqual(tool_calls[0]["function"]["arguments"], "{\"arg\": \"a\"}")
@@ -143,10 +140,9 @@ class TestAgent(unittest.TestCase):
         mock_message2 = "<test_tool><arg>a</arg></test_tool><test_tool><arg>b</arg></test_tool>"
         self.llm_engine.generate.return_value = stream_generator(mock_message2)
         response = self.agent.run("使用多个工具", stream=True)
-        tool_calls = []
         for chunk in response.stream():
-            if chunk.tool_calls:
-                tool_calls.extend(chunk.tool_calls)
+            ...
+        tool_calls = response.tool_calls
         self.assertEqual(len(tool_calls), 2)
         self.assertEqual(tool_calls[0]["function"]["arguments"], "{\"arg\": \"a\"}")
         self.assertEqual(tool_calls[1]["function"]["arguments"], "{\"arg\": \"b\"}")
@@ -155,13 +151,10 @@ class TestAgent(unittest.TestCase):
         mock_message3 = "测试工具a<test_tool><arg>a</arg></test_tool>测试工具b<test_tool><arg>b</arg></test_tool>测试工具c<test_tool><arg>c</arg></test_tool>"
         self.llm_engine.generate.return_value = stream_generator(mock_message3)
         response = self.agent.run("混合场景", stream=True)
-        content = ""
-        tool_calls = []
         for chunk in response.stream():
-            if chunk.content:
-                content += chunk.content
-            if chunk.tool_calls:
-                tool_calls.extend(chunk.tool_calls)
+            ...
+        content = response.content
+        tool_calls = response.tool_calls
         self.assertEqual(content, mock_message3)
         self.assertEqual(len(tool_calls), 3)
         self.assertEqual(tool_calls[0]["function"]["arguments"], "{\"arg\": \"a\"}")

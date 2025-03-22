@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import traceback
 from typing import Dict, Any, List, Optional, Generator, Literal, Union, overload
 
 import httpx
@@ -72,25 +73,30 @@ class OpenAIEngine(LLMEngine):
         Returns:
             ChatCompletionChunk生成器
         """
-        with self._client.stream(
+        try:
+            with self._client.stream(
                 "POST",
-                "/v1/chat/completions",
+                "/chat/completions",
                 json=request_data
-        ) as response:
-            response.raise_for_status()
-            for line in response.iter_lines():
-                if line.startswith("data: "):
-                    data = line[6:]
-                    if data == "[DONE]":
-                        break
-                    chunk_data = json.loads(data)
-                    yield ChatCompletionChunk(**chunk_data)
+            ) as response:
+                response.raise_for_status()
+                for line in response.iter_lines():
+                    if line.startswith("data: "):
+                        data = line[6:]
+                        if data == "[DONE]":
+                            break
+                        chunk_data = json.loads(data)
+                        yield ChatCompletionChunk(**chunk_data)
+        except Exception as e:
+            details = traceback.format_exc()
+            logger.error(f"parse /chat/completions response error: {e}\ndetails: {details}, request_data: {request_data}")
+            raise
 
     @overload
     def generate(
         self,
         messages: List[Message],
-        stream: Literal[False] = False,
+        stream: Literal[False],
         **kwargs
     ) -> ChatCompletion:
         ...
@@ -99,7 +105,7 @@ class OpenAIEngine(LLMEngine):
     def generate(
         self,
         messages: List[Message],
-        stream: Literal[True] = True,
+        stream: Literal[True],
         **kwargs
     ) -> Generator[ChatCompletionChunk, None, None]:
         ...

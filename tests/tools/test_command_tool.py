@@ -1,0 +1,21 @@
+import unittest
+import platform
+from echo.tools import ExecuteCommandTool  # 假设文件名为 execute_command_tool.py
+
+class TestExecuteCommandTool(unittest.TestCase):
+    def setUp(self):
+        self.tool = ExecuteCommandTool()
+
+    def test_command_timeout(self):
+        """测试超时处理是否生效"""
+        # 根据操作系统选择耗时命令
+        if platform.system() == "Windows":
+            command = "ping -n 21 127.0.0.1"
+        else:
+            command = "sleep 20"
+
+        result = self.tool.run(command)
+        self.assertIn("Error: Command execution timed out", result)
+
+if __name__ == "__main__":
+    unittest.main()

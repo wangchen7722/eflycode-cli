@@ -166,6 +166,8 @@ class AgentResponse(BaseModel):
                     self.content = ""
                 self.content += chunk.content
             if chunk.type == AgentResponseChunkType.TOOL_CALL and chunk.tool_calls:
+                if self.content is None:
+                    self.content = ""
                 self.content += chunk.content
                 if self.tool_calls is None:
                     self.tool_calls = []
@@ -746,7 +748,7 @@ class Agent:
                             f"Unknown agent response chunk type: {chunk.type}"
                         )
 
-
+a = 1
 if __name__ == "__main__":
 
     def stream_generator():
@@ -770,8 +772,8 @@ if __name__ == "__main__":
                 }
             )
 
-    from echo.tools import ReadFileTool, EditFileWithReplace, ExecuteCommandTool
+    from echo.tools import ReadFileTool, UpdateFileTool, ExecuteCommandTool
 
-    tools = [ReadFileTool(), EditFileWithReplace()]
+    tools = [ReadFileTool(), UpdateFileTool()]
     for result in agent_message_stream_parser(tools, stream_generator()):
         print(result)

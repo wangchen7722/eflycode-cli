@@ -87,7 +87,7 @@ class LLMEngine:
     def generate(
         self,
         messages: List[Message],
-        stream: Literal[False] = False,
+        stream: Literal[False],
         **kwargs
     ) -> ChatCompletion:
         ...

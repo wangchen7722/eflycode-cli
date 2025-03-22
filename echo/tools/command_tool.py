@@ -106,8 +106,3 @@ class ExecuteCommandTool(BaseTool):
         except Exception as e:
             details = traceback.format_exc()
             return f"Error: execute command failed: {e}\ndetails:\n{details}"
-
-
-if __name__ == "__main__":
-    tool = ExecuteCommandTool()
-    print(tool.run("dir", cwd="D:/Project/echo/echo"))

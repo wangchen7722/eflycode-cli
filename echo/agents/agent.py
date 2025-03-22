@@ -70,6 +70,7 @@ class AgentResponseChunk(BaseModel):
     """Agent返回结果的流式输出类，用于处理大语言模型的流式响应
 
     Attributes:
+        type (AgentResponseChunkType): 当前chunk的类型
         content (Optional[str]): 当前chunk的文本内容
             示例: "这是一段生成的文本"
         finish_reason (Optional[str]): 当前chunk的结束原因
@@ -432,6 +433,7 @@ def agent_message_stream_parser(
     if state == STATE_POTENTIAL_TAG:
         for ch in tag_buffer:
             yield AgentResponseChunk(
+                type=AgentResponseChunkType.TEXT,
                 content=ch,
                 finish_reason=None,
                 tool_calls=None,
@@ -442,6 +444,7 @@ def agent_message_stream_parser(
         remaining = f"<{tool_call['name']}>" + tool_call["content"]
         for ch in remaining:
             yield AgentResponseChunk(
+                type=AgentResponseChunkType.TEXT,
                 content=ch,
                 finish_reason=None,
                 tool_calls=None,
@@ -452,6 +455,7 @@ def agent_message_stream_parser(
         remaining = f"<{tool_call['name']}>" + tool_call["content"]
         for ch in remaining:
             yield AgentResponseChunk(
+                type=AgentResponseChunkType.TEXT,
                 content=ch,
                 finish_reason=last_finish_reason,
                 tool_calls=None,

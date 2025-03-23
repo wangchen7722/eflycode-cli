@@ -80,7 +80,7 @@ class AgentResponseChunk(BaseModel):
         usage (Usage): 当前chunk的token使用统计
             示例: {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30}
     """
-
+    
     type: AgentResponseChunkType
     content: str
     finish_reason: Optional[str]
@@ -166,13 +166,14 @@ class AgentResponse(BaseModel):
                 if not self.content:
                     self.content = ""
                 self.content += chunk.content
-            if chunk.type == AgentResponseChunkType.TOOL_CALL and chunk.tool_calls:
+            if chunk.type == AgentResponseChunkType.TOOL_CALL:
                 if self.content is None:
                     self.content = ""
                 self.content += chunk.content
                 if self.tool_calls is None:
                     self.tool_calls = []
-                self.tool_calls.extend(chunk.tool_calls)
+                if chunk.tool_calls:
+                    self.tool_calls.extend(chunk.tool_calls)
         self.is_streaming = False
         self.stream_generator = None
         if self.on_stream_complete:
@@ -341,7 +342,7 @@ def agent_message_stream_parser(
                             # 匹配到工具调用结束标签，结束工具调用，yield 工具调用 chunk
                             yield AgentResponseChunk(
                                 type=AgentResponseChunkType.TOOL_CALL,
-                                content=tool_call["content"] + matched_candidate,
+                                content=matched_candidate,
                                 finish_reason="tool_calls",
                                 tool_calls=[
                                     ToolCall(
@@ -362,6 +363,13 @@ def agent_message_stream_parser(
                             tag_buffer = ""
                             tag_context = None
                         else:
+                            yield AgentResponseChunk(
+                                type=AgentResponseChunkType.TOOL_CALL,
+                                content=matched_candidate,
+                                finish_reason=None,
+                                tool_calls=None,
+                                usage=None,
+                            )
                             # 进入参数解析状态（这里匹配到参数起始标签）
                             tool_call["content"] += matched_candidate
                             param_name = matched_candidate[1:-1]
@@ -381,6 +389,13 @@ def agent_message_stream_parser(
                                 tool_call["arguments"][current_param] = (
                                     param_buffer.strip()
                                 )
+                            yield AgentResponseChunk(
+                                type=AgentResponseChunkType.TOOL_CALL,
+                                content=matched_candidate,
+                                finish_reason=None,
+                                tool_calls=None,
+                                usage=None,
+                            )
                             current_param = None
                             state = STATE_TOOL
                             tag_buffer = ""
@@ -752,7 +767,7 @@ class Agent:
                             f"Unknown agent response chunk type: {chunk.type}"
                         )
 
-a = 1
+
 if __name__ == "__main__":
 
     def stream_generator():
@@ -780,4 +795,4 @@ if __name__ == "__main__":
 
     tools = [ReadFileTool(), UpdateFileTool()]
     for result in agent_message_stream_parser(tools, stream_generator()):
-        print(result)
+        print(result.model_dump_json())

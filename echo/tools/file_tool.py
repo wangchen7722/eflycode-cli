@@ -274,9 +274,63 @@ class CreateFileTool(BaseTool):
         except Exception as e:
             return f"ERROR: Failed to create file at {path}: {e}"
 
-class UpdateFileTool(BaseTool):
+class InsertFileTool(BaseTool):
+    """插入文件工具类"""
+    NAME = "insert_file"
+    DESCRIPTION = """
+    Request to insert content into a file at the specified path.
+    Use this when you need to insert content into an existing file, such as when you need to insert code into a source code file.
+    Remember before using this tool, you MUST read the file first to understand the content and structure of the file.
+    """
+    DISPLAY = "{agent_name} want to insert this file"
+    PARAMETERS = {
+        "type": "object",
+        "properties": {
+            "path": {
+                "type": "string",
+                "description": "The path of the file to insert content into, including the file name and extension.",
+            }, 
+            "content": {
+                "type": "string",
+                "description": "The content to insert into the file.",
+            },
+            "line_number": {
+                "type": "integer",
+                "description": "The line number (starting from 1) where the content should be inserted (inclusive).",
+            }
+        },
+        "required": ["path", "content", "line_number"],
+    }
+    EXAMPLES = {
+        "Requesting to insert content into a file": {
+            "type": "function",
+            "name": "insert_file",
+            "arguments": {
+                "path": "/path/to/file",
+                "content": "This is the content to insert.",
+                "line_number": 10
+            }
+        }
+    }
+    
+    def run(self, path: str, content: str, line_number: int, **kwargs) -> str:
+        """执行插入文件的操作"""
+        if not os.path.exists(path):
+            return f"ERROR: File not found at {path}. Please ensure the file exists."
+        if not os.path.isfile(path):
+            return f"ERROR: {path} is not a file. Please ensure the path points to a file."
+        with open(path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+        if line_number < 1 or line_number > len(lines):
+            return f"ERROR: line_number must be between 1 and {len(lines)}. Please ensure the line_number is correct."
+        lines.insert(line_number - 1, content + "\n")
+        with open(path, "w", encoding="utf-8") as f:
+            f.writelines(lines)
+        return f"Successfully inserted content into file at {path} at line {line_number}."
+
+class EditFileTool(BaseTool):
     """搜索替换工具类"""
-    NAME = "update_file"
+    NAME = "edit_file"
     DESCRIPTION = """
     Request to search and replace text in a file at the specified path.
     When you need to edit the contents of an existing file, use this tool to search for a specific string and replace it with another string.
@@ -323,7 +377,7 @@ class UpdateFileTool(BaseTool):
     EXAMPLES = {
         "Replace 'foo' with 'bar' in /path/to/file": {
             "type": "function",
-            "name": "update_file",
+            "name": "edit_file",
             "arguments": {
                 "path": "/path/to/file",
                 "old_string": "foo",
@@ -366,8 +420,3 @@ class UpdateFileTool(BaseTool):
         with open(path, "w", encoding="utf-8") as f:
             f.write(file_content)
         return f"Successfully replaced '{old_string}' with '{new_string}' in {path}"
-
-
-if __name__ == "__main__":
-    # print(ReadFileTool().run(r"D:\Project\echo\requirements.txt", 2, 10))
-    print(SearchFilesTool().run(r"D:\Project\echo", r".*", r"*.py"))

@@ -1,0 +1,13 @@
+# Current Workspace ({{ workspace.path }})
+
+## Files
+
+{% for filepath in workspace.files %}
+{{ filepath }}
+{% endfor %}
+
+{% if workspace.readme %}
+## Readme
+
+{{ workspace.readme }}
+{% endif %}

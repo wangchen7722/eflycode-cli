@@ -65,7 +65,7 @@ class BaseTool:
     @property
     def parameters(self) -> Dict[str, Any]:
         """获取工具参数"""
-        required = self.PARAMETERS.get("required", [])
+        required = self.PARAMETERS["required"] or []
         return {
             param_name: {
                 "type": param_schema["type"],

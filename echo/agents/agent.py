@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 from echo.prompt.prompt_loader import PromptLoader
 from echo.llms.llm_engine import LLMEngine
 from echo.llms.schema import ChatCompletionChunk, Message, Usage, ToolCall
-from echo.utils.system_utils import system_info
+from echo.utils.system_utils import get_system_info, get_workspace_info
 from echo.utils.tool_utils import apply_tool_calls_template
 from echo.memory import AgentMemory
 from echo.tools import BaseTool
@@ -565,13 +565,16 @@ class Agent:
 
     def system_prompt(self) -> str:
         """渲染系统提示词"""
+        system_info = get_system_info()
+        workspace_info = get_workspace_info(system_info["work_dir"])
         return PromptLoader.get_instance().render_template(
             f"{self.role}/system.prompt",
             name=self.name,
             role=self.role,
             capabilities=[str(capability) for capability in self.capabilities],
             tools=self.tools,
-            system_info=system_info(),
+            system_info=system_info,
+            workspace=workspace_info
         )
 
     def retrieve_memories(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
@@ -717,6 +720,7 @@ class Agent:
                         ui.show_text(chunk.content, end="")
                     elif chunk.type == AgentResponseChunkType.TOOL_CALL:
                         # 工具调用
+                        # ui.show_text(chunk.content, end="")
                         if tool_call_progress is None:
                             tool_call_progress = ui.create_loading(
                                 "loading " + chunk.content[1:-1] + " ..."

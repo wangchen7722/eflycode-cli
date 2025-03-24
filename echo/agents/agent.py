@@ -30,19 +30,6 @@ from echo.utils.logger import get_logger
 from echo.ui.console import LoadingUI
 
 
-class AgentCapability(Enum):
-    """Agent能力枚举类"""
-
-    USE_TOOL = "use_tool"
-    USE_MCP = "use_mcp"
-
-    def __str__(self):
-        return self.value
-
-    def __repr__(self) -> str:
-        return self.value
-
-
 class AgentResponseMetadata(TypedDict, total=False):
     """Agent返回结果的元数据类，用于存储请求相关的上下文信息
 
@@ -506,7 +493,6 @@ class Agent:
         self,
         llm_engine: LLMEngine,
         vector_db_config: Optional[VectorDBConfig] = None,
-        capabilities: Optional[Sequence[AgentCapability]] = None,
         name: Optional[str] = None,
         description: Optional[str] = None,
         tools: Optional[Sequence[BaseTool]] = None,
@@ -525,17 +511,13 @@ class Agent:
         self._name = name or self.ROLE
         self._description = description or self.DESCRIPTION
         self.llm_engine = llm_engine
-        self.capabilities = capabilities or []
         self.vector_db_config = vector_db_config or {}
         self.kwargs = kwargs
         self._history_messages: List[Message] = []
         self._history_messages_limit = 10
         # 初始化工具
         self.auto_approve = kwargs.get("auto_approve", False)
-        if tools and AgentCapability.USE_TOOL not in self.capabilities:
-            logger.warning(
-                "AgentCapability.USE_TOOL not in capabilities, tools will not be used."
-            )
+
         self._tools = tools or []
         self._tool_map = {tool.NAME: tool for tool in self._tools}
 
@@ -571,7 +553,6 @@ class Agent:
             f"{self.role}/system.prompt",
             name=self.name,
             role=self.role,
-            capabilities=[str(capability) for capability in self.capabilities],
             tools=self.tools,
             system_info=system_info,
             workspace=workspace_info
@@ -684,8 +665,6 @@ class Agent:
         Args:
             tool_call: 工具调用
         """
-        if AgentCapability.USE_TOOL not in self.capabilities:
-            return "不支持工具调用，请在提示用户 capabilities 中添加 AgentCapability.USE_TOOL"
         tool_name = tool_call["function"]["name"]
         tool_call_arguments = json.loads(tool_call["function"]["arguments"])
         tool = self._tool_map.get(tool_name, None)
@@ -693,7 +672,7 @@ class Agent:
             return f"未找到工具：{tool_name}"
         try:
             tool_response = tool.run(**tool_call_arguments)
-            return f"This is auto-generated response from tool call ({tool_name}):\n{tool_response}"
+            return f"This is system-generated message.\nThe result of tool call ({tool_name}) is shown below:\n{tool_response}"
         except Exception as e:
             return f"工具调用失败：{e}"
 
@@ -703,7 +682,7 @@ class Agent:
         ui = ConsoleUI.get_instance()
         enable_stream = True
         user_input = None
-        tool_call_progress: Optional[LoadingUI] = None
+        # tool_call_progress: Optional[LoadingUI] = None
         while True:
             if user_input is None:
                 user_input = ui.acquire_user_input()
@@ -721,16 +700,16 @@ class Agent:
                     elif chunk.type == AgentResponseChunkType.TOOL_CALL:
                         # 工具调用
                         # ui.show_text(chunk.content, end="")
-                        if tool_call_progress is None:
-                            tool_call_progress = ui.create_loading(
-                                "loading " + chunk.content[1:-1] + " ..."
-                            )
-                            tool_call_progress.start()
+                        # if tool_call_progress is None:
+                        #     tool_call_progress = ui.create_loading(
+                        #         "loading " + chunk.content[1:-1] + " ..."
+                        #     )
+                        #     tool_call_progress.start()
                         if chunk.finish_reason != "tool_calls":
                             # 说明工具调用正在生成，跳过
                             continue
-                        tool_call_progress.stop()
-                        tool_call_progress = None
+                        # tool_call_progress.stop()
+                        # tool_call_progress = None
                         # 这里有且仅会有一个工具调用
                         tool_call = chunk.tool_calls[0]
                         tool_call_name = tool_call["function"]["name"]
@@ -765,38 +744,7 @@ class Agent:
                     elif chunk.type == AgentResponseChunkType.DONE:
                         # 流式输出结束
                         ui.show_text("")  # 换行
-                        ui.show_text(f"{self.name}: ")
                     else:
                         raise ValueError(
                             f"Unknown agent response chunk type: {chunk.type}"
                         )
-
-
-if __name__ == "__main__":
-
-    def stream_generator():
-        message = "文件内容已经存在且与我们想要的内容一样。接下来，我们可以确认 `bing_crawler.py` 的内容。\n\n<read_file>\n<path>temp/bing_crawler.py</path>\n</read_file>"
-        for i in range(0, len(message), 3):
-            char = message[i : i + 3]
-            if i == len(message) - 2:
-                finish_reason = "stop"
-            else:
-                finish_reason = None
-            yield ChatCompletionChunk(
-                **{
-                    "id": "123",
-                    "choices": [
-                        {
-                            "delta": {"content": char},
-                            "finish_reason": finish_reason,
-                            "tool_calls": None,
-                        }
-                    ],
-                }
-            )
-
-    from echo.tools import ReadFileTool, UpdateFileTool, ExecuteCommandTool
-
-    tools = [ReadFileTool(), UpdateFileTool()]
-    for result in agent_message_stream_parser(tools, stream_generator()):
-        print(result.model_dump_json())

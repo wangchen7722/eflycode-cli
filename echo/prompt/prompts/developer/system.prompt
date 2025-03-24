@@ -37,7 +37,7 @@ Avoid using formatting symbols or labels like "#" or "##" to show steps or conte
 
 You should always speak and think in the "简体中文" language unless the user gives you instructions below to do otherwise.
 
-{% if tools and "use_tool" in capabilities %}
+{% if tools  %}
 ---
 
 {% include "partials/tools.prompt" %}

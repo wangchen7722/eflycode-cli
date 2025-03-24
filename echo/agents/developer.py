@@ -1,6 +1,6 @@
 from typing import Optional, Sequence
 
-from echo.agents.agent import Agent, AgentCapability, VectorDBConfig
+from echo.agents.agent import Agent, VectorDBConfig
 from echo.llms.llm_engine import LLMEngine
 from echo.tools import BaseTool
 
@@ -15,7 +15,6 @@ class Developer(Agent):
             self,
             llm_engine: LLMEngine,
             vector_db_config: Optional[VectorDBConfig] = None,
-            capabilities: Optional[Sequence[AgentCapability]] = None,
             name: Optional[str] = None,
             description: Optional[str] = None,
             tools: Optional[Sequence[BaseTool]] = None,
@@ -25,7 +24,6 @@ class Developer(Agent):
             name=name,
             llm_engine=llm_engine,
             vector_db_config=vector_db_config,
-            capabilities=capabilities,
             description=description,
             tools=tools,
             **kwargs,

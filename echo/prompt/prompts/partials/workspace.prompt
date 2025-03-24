@@ -2,6 +2,7 @@
 
 ## Files
 
+Current workspace has {{ workspace.files|length }} files:
 {% for filepath in workspace.files %}
 {{ filepath }}
 {% endfor %}

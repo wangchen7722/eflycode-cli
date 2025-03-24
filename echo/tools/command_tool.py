@@ -10,12 +10,14 @@ class ExecuteCommandTool(BaseTool):
     """执行命令的工具"""
 
     NAME = "execute_command"
+    TYPE = "function"
     DESCRIPTION = """
     Request to execute a CLI command on the system. Use this when you need to perform system operations or run specific commands to accomplish any step in the user's task. 
     You must tailor your command to the user's system and provide a clear explanation of what the command does. 
     For command chaining, use the appropriate chaining syntax for the user's shell. Prefer to execute complex CLI commands over creating executable scripts, as they are more flexible and easier to run. 
-    Prefer relative commands and paths that avoid location sensitivity for terminal consistency, e.g: `touch ./testdata/example.file`, `dir ./examples/model1/data/yaml`, or `go test ./cmd/front --config ./cmd/front/config.yml`. 
-    If directed by the user, you may open a terminal in a different directory by using the `cwd` parameter.
+    Prefer relative commands and paths that avoid location sensitivity for terminal consistency, e.g: `python main.py`, or `go test ./cmd/front --config ./cmd/front/config.yml`. 
+    IMPORTANT: You MUST avoid using text-based search commands like `grep` or `find`. Instead, use file-system_related tool calls.
+    IMPORTANT: Prefer to using the provided tools over commands. For example, if you need to create a file, use the create_file tool instead of executing a command like `touch file.txt`.
     """
     DISPLAY = "{agent_name} want to execute this command"
     PARAMETERS = {
@@ -34,12 +36,11 @@ class ExecuteCommandTool(BaseTool):
         "required": ["command"],
     }
     EXAMPLES = {
-        "Requesting to execute ls in a specific directory if directed": {
+        "Requesting to launch a frontend server": {
             "type": "function",
             "name": "execute_command",
             "arguments": {
-                "command": "ls",
-                "cwd": "/path/to/directory",
+                "command": "npm start",
             }
         },
         "Requesting to execute pip install -r requirements.txt": {
@@ -51,7 +52,7 @@ class ExecuteCommandTool(BaseTool):
         }
     }
 
-    def run(self, command: str, cwd: Optional[str] = None) -> str:
+    def do_run(self, command: str, cwd: Optional[str] = None) -> str:
         """执行命令"""
         if cwd:
             work_dir = os.path.abspath(cwd)
@@ -61,7 +62,7 @@ class ExecuteCommandTool(BaseTool):
                 return f"Error: The specified path ({cwd}) is not a directory"
         else:
             work_dir = os.getcwd()
-        timeout = 10
+        timeout = 30
         try:
             process = subprocess.run(
                 command,
@@ -86,8 +87,11 @@ class ExecuteCommandTool(BaseTool):
             else:
                 output += f"stderr:\n{stderr}"
             return f"Command executed successfully in {work_dir}\n" + output
-        except subprocess.TimeoutExpired:
-            return f"Error: Command execution timed out after {timeout} seconds"
+        except subprocess.TimeoutExpired as e:
+            # 判断是否是超时异常，如果是一个常驻程序，那么可以忽略这个异常
+            stdout = e.stdout
+            stderr = e.stderr
+            return f"Error: Command execution timed out after {timeout} seconds\n" + f"stdout:\n{stdout}\n" + f"stderr:\n{stderr}"
         except subprocess.CalledProcessError as e:
             output = ""
             code = e.returncode

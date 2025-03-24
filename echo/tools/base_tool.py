@@ -1,3 +1,4 @@
+from abc import abstractmethod
 from typing import Any, Dict, Optional, Literal, List, Required
 from typing_extensions import TypedDict
 
@@ -29,11 +30,65 @@ class ToolCallSchema(TypedDict, total=False):
     arguments: Required[Dict[str, Any]]
 
 
+def _convert_basic_type(data, schema):
+    schema_type = schema.get('type')
+    try:
+        if schema_type == 'integer':
+            return int(data)
+        elif schema_type == 'number':
+            return float(data)
+        elif schema_type == 'boolean':
+            if isinstance(data, str):
+                return data.lower() in ['true', '1', 't', 'yes']
+            else:
+                return bool(data)
+        elif schema_type == 'string':
+            return str(data)
+        else:
+            return data
+    except (ValueError, TypeError):
+        return data
+
+
+def convert_data(data, schema):
+    schema_type = schema.get('type')
+
+    if schema_type == 'object':
+        return _convert_object(data, schema)
+    elif schema_type == 'array':
+        return _convert_array(data, schema)
+    else:
+        return _convert_basic_type(data, schema)
+
+
+def _convert_array(data, schema):
+    if not isinstance(data, list):
+        return data
+    items_schema = schema.get('items', {})
+    return [convert_data(item, items_schema) for item in data]
+
+
+def _convert_object(data, schema):
+    if not isinstance(data, dict):
+        return data
+    properties = schema.get('properties', {})
+    converted = {}
+    for key, value in data.items():
+        if key in properties:
+            prop_schema = properties[key]
+            converted[key] = convert_data(value, prop_schema)
+        else:
+            converted[key] = value
+    return converted
+
+
 class BaseTool:
     """工具基类，定义了所有工具的基本属性和执行接口"""
 
     NAME: str
     """工具名称"""
+    TYPE: str
+    """工具类型"""
     DESCRIPTION: str
     """工具描述"""
     DISPLAY: str = "{agent_name} want to use this tool"
@@ -46,7 +101,12 @@ class BaseTool:
     @property
     def name(self) -> str:
         """获取工具名称"""
-        return self.NAME.strip()
+        return self.NAME.strip(" ")
+
+    @property
+    def type(self) -> str:
+        """获取工具类型"""
+        return self.TYPE.strip(" ")
 
     @property
     def description(self) -> str:
@@ -55,7 +115,7 @@ class BaseTool:
 
     def display(self, agent_name) -> str:
         """获取工具显示名称"""
-        return self.DISPLAY.format(agent_name=agent_name).strip()
+        return self.DISPLAY.format(agent_name=agent_name).strip(" ")
 
     @property
     def raw_parameters(self) -> ToolFunctionParametersSchema:
@@ -95,8 +155,28 @@ class BaseTool:
             }
         }
 
-    def run(self, *args, **kwargs) -> str:
+    def _convert_type(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
+        # 参数名 -> 参数类型
+        typed_params = {}
+        for param_name, param_value in parameters.items():
+            if param_name in self.parameters:
+                typed_params[param_name] = convert_data(param_value, self.parameters[param_name])
+        return typed_params
+
+    @abstractmethod
+    def do_run(self, **kwargs) -> str:
         """执行工具的核心方法，需要被子类重写
+
+        Args:
+            **kwargs: 工具执行所需的参数
+
+        Returns:
+            str: 工具执行结果
+        """
+        raise NotImplementedError("Tool must implement do method")
+
+    def run(self, **kwargs) -> str:
+        """执行工具的包装方法，会先转换参数类型，然后调用 do_run 方法
         
         Args:
             **kwargs: 工具执行所需的参数
@@ -104,9 +184,9 @@ class BaseTool:
         Returns:
             str: 工具执行结果
         """
-        raise NotImplementedError("Tool must implement run method")
+        return self.do_run(**self._convert_type(kwargs))
 
-    def __call__(self, *args, **kwargs) -> str:
+    def __call__(self, **kwargs) -> str:
         """使工具实例可以像函数一样被调用
         
         Args:
@@ -115,4 +195,36 @@ class BaseTool:
         Returns:
             str: 工具执行结果
         """
-        return self.run(*args, **kwargs)
+        return self.run(**kwargs)
+
+
+if __name__ == "__main__":
+    # 原始数据（字符串类型）
+    raw_data = {"age": "25", "scores": ["90", "85"]}
+
+    # Schema定义
+    schema = {
+        "type": "object",
+        "properties": {
+            "age": {"type": "integer"},
+            "scores": {
+                "type": "array",
+                "items": {"type": "integer"}
+            }
+        }
+    }
+
+    # 转换数据
+    converted_data = convert_data(raw_data, schema)
+    print(converted_data)
+
+
+    # 输出: {'age': 25, 'scores': [90, 85]}
+
+    # 通过 **kwargs 传递
+    def process_data(age, scores):
+        print(f"Age type: {type(age)}, Scores type: {type(scores[0])}")
+
+
+    process_data(**converted_data)
+    # 输出: Age type: <class 'int'>, Scores type: <class 'int'>

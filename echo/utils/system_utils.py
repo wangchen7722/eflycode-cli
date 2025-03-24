@@ -27,9 +27,11 @@ def get_system_info():
     }
     return system_info
 
+
 def _is_ignored(path: Path, ignores: List[str]) -> bool:
     """判断文件或文件夹是否被忽略"""
     return any(part in ignores for part in path.parts)
+
 
 def get_workspace_info(path: Optional[str] = None, ignores: Optional[List[str]] = None) -> Dict[str, Any]:
     """获取工作区文件"""
@@ -40,14 +42,15 @@ def get_workspace_info(path: Optional[str] = None, ignores: Optional[List[str]] 
     else:
         workspace_path = Path(path)
     workspace_files = [
-        file.as_posix() 
-        for file in workspace_path.rglob("*") 
+        file.as_posix()
+        for file in workspace_path.rglob("*")
         if file.is_file() and not _is_ignored(file, ignores)
     ]
     return {
         "path": workspace_path.as_posix(),
         "files": workspace_files,
     }
+
 
 if __name__ == "__main__":
     system_info = get_system_info()

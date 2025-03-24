@@ -66,13 +66,13 @@ class ConsoleUI:
         """刷新控制台输出"""
         self.console.file.flush()
 
-    def acquire_user_input(self, choices: Optional[List[str]] = None) -> str:
+    def acquire_user_input(self, text: str = "", choices: Optional[List[str]] = None) -> str:
         """获取用户输入
 
         Returns:
             str: 用户输入的内容
         """
-        return Prompt.ask("user", choices=choices)
+        return Prompt.ask(f"user{text}", choices=choices)
 
     def exit(self) -> None:
         """退出控制台程序"""

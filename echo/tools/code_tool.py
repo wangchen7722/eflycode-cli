@@ -11,6 +11,7 @@ from echo.tools.base_tool import BaseTool
 class ListCodeDefinitionsTool(BaseTool):
     
     NAME = "list_code_definitions"
+    TYPE = "function"
     DESCRIPTION = """
     Request to list definition names (classes, functions, methods, etc.) used in source code files at the top level of the specified directory. 
     This tool provides insights into the codebase structure and important constructs, encapsulating high-level concepts and relationships that are crucial for understanding the overall architecture.
@@ -90,7 +91,7 @@ class ListCodeDefinitionsTool(BaseTool):
                 definition["globals"].append(name)
         return definition
     
-    def run(self, path: str, language: str, pattern: str) -> str:
+    def do_run(self, path: str, language: str, pattern: str) -> str:
         find_definition_func = None
         if language == "python":
             parser = get_parser("python")

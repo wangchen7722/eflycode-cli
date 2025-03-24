@@ -9,6 +9,7 @@ from echo.tools.base_tool import BaseTool
 class ListFilesTool(BaseTool):
     """列出文件工具类"""
     NAME = "list_files"
+    TYPE = "function"
     DESCRIPTION = """
     Request to list files and directories within the specified directory. 
     If recursive is true, it will list all files and directories recursively. 
@@ -32,8 +33,8 @@ class ListFilesTool(BaseTool):
     }
     EXAMPLES = {
         "Requesting to list all files in the current directory": {
-            "type": "function",
-            "name": "list_files",
+            "type": TYPE,
+            "name": NAME,
             "arguments": {
                 "path": ".",
                 "recursive": False
@@ -41,7 +42,7 @@ class ListFilesTool(BaseTool):
         }
     }
 
-    def run(self, path: str, recursive: bool = False, **kwargs) -> str:
+    def do_run(self, path: str, recursive: bool = False, **kwargs) -> str:
         """执行列出文件的操作"""
         if not os.path.exists(path):
             return f"ERROR: Directory not found at {path}. Please ensure the directory exists."
@@ -50,6 +51,13 @@ class ListFilesTool(BaseTool):
         if recursive:
             file_list = []
             for root, dirs, files in os.walk(path):
+                to_removed_dirs = [
+                    directory
+                    for directory in dirs
+                    if directory.startswith(".") or directory in ["__pycache__", "node_modules"]
+                ]
+                for to_removed_dir in to_removed_dirs:
+                    dirs.remove(to_removed_dir)
                 for file in files:
                     file_list.append(Path(os.path.join(root, file)).as_posix())
             return f"Successfully listed all files in {path} recursively:\n" + "\n".join(file_list)
@@ -64,6 +72,7 @@ class ListFilesTool(BaseTool):
 class ReadFileTool(BaseTool):
     """读取文件工具类"""
     NAME = "read_file"
+    TYPE = "function"
     DESCRIPTION = """
     Request to read the contents of a file at the specified path. 
     Use this when you need to examine the contents of an existing file you do not know the contents of, for example to analyze code, review text files, or extract information from configuration files. 
@@ -124,7 +133,7 @@ class ReadFileTool(BaseTool):
         }
     }
 
-    def run(self, path: str, start_line: Optional[int] = None, end_line: Optional[int] = None, **kwargs) -> str:
+    def do_run(self, path: str, start_line: Optional[int] = None, end_line: Optional[int] = None, **kwargs) -> str:
         """执行读取文件的操作"""
         if not os.path.exists(path):
             return f"ERROR: File not found at {path}. Please ensure the file exists."
@@ -149,6 +158,7 @@ class ReadFileTool(BaseTool):
 class SearchFilesTool(BaseTool):
     """搜索文件工具类"""
     NAME = "search_files"
+    TYPE = "function"
     DESCRIPTION = """
     Request to perform a regex search across files in a specified directory, providing context-rich results. 
     This tool searches for patterns or specific content across multiple files, displaying each match with encapsulating context.
@@ -179,12 +189,12 @@ class SearchFilesTool(BaseTool):
             "arguments": {
                 "path": ".",
                 "regex": ".*",
-                "pattern": "*.py" 
+                "pattern": "*.py"
             }
         }
     }
 
-    def run(self, path: str, regex: str, pattern: Optional[str] = None, **kwargs) -> str:
+    def do_run(self, path: str, regex: str, pattern: Optional[str] = None, **kwargs) -> str:
         """执行搜索文件的操作"""
         if not os.path.exists(path):
             return f"ERROR: Directory not found at {path}. Please ensure the directory exists."
@@ -232,10 +242,12 @@ class SearchFilesTool(BaseTool):
 class CreateFileTool(BaseTool):
     """创建文件工具类"""
     NAME = "create_file"
+    TYPE = "function"
     DESCRIPTION = """
     Request to create a new file at the specified path.
     Use this when you need to create a new file, such as when you need to create a new configuration file or when you need to create a new source code file.
     If the file already exists, it will return an error.
+    If the file's parent directory does not exist, it will create the parent directory automatically.
     """
     DISPLAY = "{agent_name} want to create this file"
     PARAMETERS = {
@@ -260,13 +272,19 @@ class CreateFileTool(BaseTool):
                 "path": "/path/to/new_file.txt",
                 "content": "This is the content of the new file."
             }
-        } 
+        }
     }
-    
-    def run(self, path: str, content: str = "", **kwargs) -> str:
+
+    def do_run(self, path: str, content: str = "", **kwargs) -> str:
         """执行创建文件的操作"""
+        dirpath = os.path.dirname(path)
+        if dirpath.strip() != "" and not os.path.exists(dirpath):
+            try:
+                os.makedirs(dirpath, exist_ok=True)
+            except Exception as e:
+                return f"ERROR: Failed to create directory at {dirpath}: {e}"
         if os.path.exists(path):
-            return f"ERROR: File already exists at {path}. Please ensure the file does not exist."
+            return f"ERROR: File already exists at {path}."
         try:
             with open(path, "w", encoding="utf-8") as f:
                 f.write(content)
@@ -274,9 +292,11 @@ class CreateFileTool(BaseTool):
         except Exception as e:
             return f"ERROR: Failed to create file at {path}: {e}"
 
+
 class InsertFileTool(BaseTool):
     """插入文件工具类"""
     NAME = "insert_file"
+    TYPE = "function"
     DESCRIPTION = """
     Request to insert content into a file at the specified path.
     Use this when you need to insert content into an existing file, such as when you need to insert code into a source code file.
@@ -289,7 +309,7 @@ class InsertFileTool(BaseTool):
             "path": {
                 "type": "string",
                 "description": "The path of the file to insert content into, including the file name and extension.",
-            }, 
+            },
             "content": {
                 "type": "string",
                 "description": "The content to insert into the file.",
@@ -312,8 +332,8 @@ class InsertFileTool(BaseTool):
             }
         }
     }
-    
-    def run(self, path: str, content: str, line_number: int, **kwargs) -> str:
+
+    def do_run(self, path: str, content: str, line_number: int, **kwargs) -> str:
         """执行插入文件的操作"""
         if not os.path.exists(path):
             return f"ERROR: File not found at {path}. Please ensure the file exists."
@@ -321,16 +341,19 @@ class InsertFileTool(BaseTool):
             return f"ERROR: {path} is not a file. Please ensure the path points to a file."
         with open(path, "r", encoding="utf-8") as f:
             lines = f.readlines()
-        if line_number < 1 or line_number > len(lines):
-            return f"ERROR: line_number must be between 1 and {len(lines)}. Please ensure the line_number is correct."
+        max_line_number = max(len(lines), 1)
+        if line_number < 1 or line_number > max_line_number:
+            return f"ERROR: line_number must be between 1 and {max_line_number}. Please ensure the line_number is correct."
         lines.insert(line_number - 1, content + "\n")
         with open(path, "w", encoding="utf-8") as f:
             f.writelines(lines)
         return f"Successfully inserted content into file at {path} at line {line_number}."
 
+
 class EditFileTool(BaseTool):
     """搜索替换工具类"""
     NAME = "edit_file"
+    TYPE = "function"
     DESCRIPTION = """
     Request to search and replace text in a file at the specified path.
     When you need to edit the contents of an existing file, use this tool to search for a specific string and replace it with another string.
@@ -386,7 +409,7 @@ class EditFileTool(BaseTool):
         }
     }
 
-    def run(self, path: str, old_string: str, new_string: str, **kwargs) -> str:
+    def do_run(self, path: str, old_string: str, new_string: str, **kwargs) -> str:
         """执行搜索替换的操作"""
         if old_string == "":
             # 说明是要创建文件

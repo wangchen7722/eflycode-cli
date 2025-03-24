@@ -362,7 +362,7 @@ class EditFileTool(BaseTool):
     1. UNIQUENESS: The old_string MUST uniquely identify the specific instance you want to change. This means:
     - Include AT LEAST 3-5 lines of context BEFORE the change point
     - Include AT LEAST 3-5 lines of context AFTER the change point
-    - Include all whitespace, indentation, and surrounding code exactly as it appears in the file
+    - Include all whitespace, indentation, linebreak and surrounding code exactly as it appears in the file
     2. SINGLE INSTANCE: This tool can only change ONE instance at a time. If you need to change multiple instances:
     - Make separate calls to this tool for each instance
     - Each call must uniquely identify its specific instance using extensive context
@@ -373,10 +373,6 @@ class EditFileTool(BaseTool):
     WARNING: If you do not follow these requirements:
     - The tool will fail if old_string matches multiple locations
     - The tool will fail if old_string doesn't match exactly (including whitespace)
-    IMPORTANT: If you want to create a new file, use:
-    - A new file path, including absolute file path and file name (e.g. /path/to/new_file.txt)
-    - An empty old_string
-    - The new content you want to write to the file as new_string
     """
     DISPLAY = "{agent_name} want to edit this file"
     PARAMETERS = {

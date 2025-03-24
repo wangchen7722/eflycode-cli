@@ -781,37 +781,38 @@ class Agent:
                         # tool_call_progress.stop()
                         # tool_call_progress = None
                         # 这里有且仅会有一个工具调用
-                        tool_call = chunk.tool_calls[0]
-                        tool_call_name = tool_call["function"]["name"]
-                        tool_call_arguments = json.loads(
-                            tool_call["function"]["arguments"]
-                        )
-                        tool_call_arguments_str = "\n".join(
-                            [f"{k}={v}" for k, v in tool_call_arguments.items()]
-                        )
-                        ui.show_panel(
-                            [self.name, tool_call_name],
-                            f"Arguments:\n{tool_call_arguments_str}",
-                        )
-                        if not self.auto_approve:
-                            # 征求用户同意
-                            tool = self._tool_map.get(tool_call_name)
-                            tool_display = tool.display(self.name)
-                            ui.show_text(tool_display)
-                            user_approval = ui.acquire_user_input("\[yes/no]")
-                            if user_approval.strip().lower() in ["no", "n"]:
-                                user_input = f"This is system-generated message. User refused to execute the tool: {tool_call_name}"
-                                break
-                            elif user_approval.strip().lower() not in ["yes", "y"]:
-                                user_input = user_approval
-                                break
-                        with ui.create_loading(tool_call_name):
-                            tool_call_result = self.execute_tool(tool_call)
-                            time.sleep(0.1)  # 等待一段时间，保证控制台能够输出 loading
-                        ui.show_panel(
-                            [self.name, tool_call_name], f"Result:\n{tool_call_result}"
-                        )
-                        user_input = tool_call_result
+                        user_input = ""
+                        for tool_call in chunk.tool_calls:
+                            tool_call_name = tool_call["function"]["name"]
+                            tool_call_arguments = json.loads(
+                                tool_call["function"]["arguments"]
+                            )
+                            tool_call_arguments_str = "\n".join(
+                                [f"{k}={v}" for k, v in tool_call_arguments.items()]
+                            )
+                            ui.show_panel(
+                                [self.name, tool_call_name],
+                                f"Arguments:\n{tool_call_arguments_str}",
+                            )
+                            if not self.auto_approve:
+                                # 征求用户同意
+                                tool = self._tool_map.get(tool_call_name)
+                                tool_display = tool.display(self.name)
+                                ui.show_text(tool_display)
+                                user_approval = ui.acquire_user_input("\[yes/no]")
+                                if user_approval.strip().lower() in ["no", "n"]:
+                                    user_input = f"This is system-generated message. User refused to execute the tool: {tool_call_name}"
+                                    break
+                                elif user_approval.strip().lower() not in ["yes", "y"]:
+                                    user_input = user_approval
+                                    break
+                            with ui.create_loading(tool_call_name):
+                                tool_call_result = self.execute_tool(tool_call)
+                                time.sleep(0.1)  # 等待一段时间，保证控制台能够输出 loading
+                            ui.show_panel(
+                                [self.name, tool_call_name], f"Result:\n{tool_call_result}"
+                            )
+                            user_input += tool_call_result + "\n"
                     elif chunk.type == AgentResponseChunkType.DONE:
                         # 流式输出结束
                         ui.show_text("")  # 换行

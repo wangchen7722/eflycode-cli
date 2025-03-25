@@ -1,2 +1,2 @@
-from .agent import AgentResponseMetadata, AgentResponse, AgentResponseChunk, VectorDBConfig, Agent
+from .agent import AgentResponse, AgentResponseChunk, VectorDBConfig, Agent
 from .developer import Developer

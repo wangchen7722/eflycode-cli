@@ -28,17 +28,7 @@ from echo.memory import AgentMemory
 from echo.tools import BaseTool
 from echo.utils.logger import get_logger
 
-
-class AgentResponseMetadata(TypedDict, total=False):
-    """Agent返回结果的元数据类，用于存储请求相关的上下文信息
-
-    Attributes:
-        request_context (Dict[str, Any]): 请求上下文信息，可以包含原始请求消息、时间戳等
-            示例: {"message": "用户输入", "timestamp": "2024-01-01 12:00:00"}
-    """
-
-    request_context: Required[Dict[str, Any]]
-
+logger: logging.Logger = get_logger()
 
 class AgentResponseChunkType(Enum):
     TEXT = "text"
@@ -86,85 +76,12 @@ class AgentResponse(BaseModel):
             示例: [{"name": "search", "arguments": {"query": "搜索内容"}}]
         usage (Usage): 完整响应的token使用统计
             示例: {"prompt_tokens": 100, "completion_tokens": 200, "total_tokens": 300}
-        metadata (AgentResponseMetadata): 响应相关的元数据信息
-            示例: {"request_context": {"message": "用户输入"}}
-        is_streaming (bool): 是否为流式响应
-            示例: True
-        _stream_generator (Optional[Generator[AgentResponseChunk, None, None]]): 流式响应的生成器
-            示例: <generator object stream at 0x...>
     """
 
     content: Optional[str]
     finish_reason: Optional[str]
     tool_calls: Optional[List[ToolCall]]
     usage: Optional[Usage]
-    metadata: Optional[AgentResponseMetadata]
-
-    is_streaming: Optional[bool] = Field(default=False, alias="_is_streaming")
-    stream_generator: Optional[Generator[AgentResponseChunk, None, None]] = Field(
-        default=None, alias="_stream_generator"
-    )
-    on_stream_complete: Optional[Callable[["AgentResponse"], None]] = Field(
-        default=None, alias="_on_stream_complete"
-    )
-
-    def set_stream_generator(
-            self, generator: Generator[AgentResponseChunk, None, None]
-    ):
-        """设置流式输出生成器
-        Args:
-            generator: 流式输出的生成器
-        """
-        self.is_streaming = True
-        self.stream_generator = generator
-        return self
-
-    def set_on_stream_complete(self, on_stream_complete: Callable):
-        """设置流式输出完成时的回调函数
-        Args:
-            on_stream_complete: 流式输出完成时的回调函数
-        """
-        if self.is_streaming:
-            self.on_stream_complete = on_stream_complete
-        else:
-            raise ValueError("Cannot set on_stream_complete for non-streaming response")
-        return self
-
-    def stream(self) -> Generator[AgentResponseChunk, None, None]:
-        """获取流式输出的生成器"""
-        if not self.is_streaming or not self.stream_generator:
-            yield AgentResponseChunk(
-                type=AgentResponseChunkType.DONE,
-                content=self.content or "",
-                finish_reason=self.finish_reason,
-                tool_calls=self.tool_calls,
-                usage=self.usage,
-            )
-            return
-
-        for chunk in self.stream_generator:
-            yield chunk
-            if chunk.finish_reason:
-                self.finish_reason = chunk.finish_reason
-            if chunk.usage:
-                self.usage = chunk.usage
-            if chunk.type == AgentResponseChunkType.TEXT and chunk.content:
-                if not self.content:
-                    self.content = ""
-                self.content += chunk.content
-            if chunk.type == AgentResponseChunkType.TOOL_CALL:
-                if self.content is None:
-                    self.content = ""
-                self.content += chunk.content
-                if self.tool_calls is None:
-                    self.tool_calls = []
-                if chunk.tool_calls:
-                    self.tool_calls.extend(chunk.tool_calls)
-        self.is_streaming = False
-        self.stream_generator = None
-        if self.on_stream_complete:
-            self.on_stream_complete(self)
-        logger.debug(self.content)
 
 
 class AgentMessageParserResult(TypedDict, total=False):
@@ -547,9 +464,6 @@ class VectorDBConfig(TypedDict):
     short_term_capacity: int
 
 
-logger: logging.Logger = get_logger(os.path.splitext(os.path.basename(__file__))[0])
-
-
 class Agent:
     """基础智能体类"""
 
@@ -670,30 +584,62 @@ class Agent:
         return new_messages
 
     def _run_no_stream(
-            self, messages: List[Message], stream: Literal[False], **kwargs
+            self, messages: List[Message], **kwargs
     ) -> AgentResponse:
-        response = self.llm_engine.generate(messages=messages, stream=stream, **kwargs)
+        response = self.llm_engine.generate(messages=messages, stream=False, **kwargs)
+        self._history_messages.append(response["choices"][0]["message"])
         return AgentResponse(
             content=response["choices"][0]["message"].get("content", None),
             finish_reason=response["choices"][0]["finish_reason"],
             tool_calls=response["choices"][0]["message"].get("tool_calls", None),
             usage=response["usage"],
-            metadata=None,
         )
 
     def _run_stream(
-            self, messages: List[Message], stream: Literal[True], **kwargs
-    ) -> AgentResponse:
-        response = self.llm_engine.generate(messages=messages, stream=stream, **kwargs)
-        return AgentResponse(
-            content=None,
-            finish_reason=None,
-            tool_calls=None,
-            usage=Usage(prompt_tokens=0, completion_tokens=0, total_tokens=0),
-            metadata=None,
-        ).set_stream_generator(agent_message_stream_parser(self.tools, response))
+            self, messages: List[Message], **kwargs
+    ) -> Generator[AgentResponseChunk, None, None]:
+        stream_interval = kwargs.get("stream_interval", 3)
+        response = self.llm_engine.generate(messages=messages, stream=True, **kwargs)
+        response_content = ""
+        last_chunk: Optional[AgentResponseChunk] = None
+        buffer = ""
+        for chunk in agent_message_stream_parser(self.tools, response):
+            if chunk.content:
+                response_content += chunk.content
+            if last_chunk is None:
+                # 第一个块
+                last_chunk = chunk
+            if chunk.type == last_chunk.type:
+                # 合并连续的文本块
+                buffer += chunk.content
+                if len(buffer) >= stream_interval:
+                    yield AgentResponseChunk(
+                        type=chunk.type,
+                        content=buffer,
+                        finish_reason=chunk.finish_reason,
+                        tool_calls=chunk.tool_calls,
+                        usage=chunk.usage,
+                    )
+                    buffer = ""
+            else:
+                # 输出上一个块
+                if buffer:
+                    yield AgentResponseChunk(
+                        type=last_chunk.type,
+                        content=buffer,
+                        finish_reason=last_chunk.finish_reason,
+                        tool_calls=last_chunk.tool_calls,
+                        usage=last_chunk.usage,
+                    )
+                    buffer = ""
+                yield chunk
+            last_chunk = chunk
+        self._history_messages.append(
+            {"role": "assistant", "content": response_content}
+        )
 
-    def run(self, content: str, stream: bool = False) -> AgentResponse:
+
+    def run(self, content: str, stream: bool = False) -> AgentResponse | Generator[AgentResponseChunk, None, None]:
         """运行智能体，处理用户输入并生成响应
 
         Args:
@@ -704,29 +650,19 @@ class Agent:
             AgentResponse: 智能体的响应结果
         """
         # history_messages = self.retrieve_memories(content, top_k=5)
-        content = content + "\n---\nThe following info is automatically generated by the system.\n" + PromptLoader.get_instance().render_template(
-            "partials/workspace.prompt",
-            workspace=get_workspace_info(get_system_info()["work_dir"])
-        )
+        # content = content + "\n---\nThe following info is automatically generated by the system.\n" + PromptLoader.get_instance().render_template(
+        #     "partials/workspace.prompt",
+        #     workspace=get_workspace_info(get_system_info()["work_dir"])
+        # )
 
         messages = self._history_messages + [{"role": "user", "content": content}]
         messages = self._preprocess_messages(messages)
         self._history_messages.append({"role": "user", "content": content})
 
         if stream:
-            def on_stream_complete(res: AgentResponse):
-                self._history_messages.append(
-                    {"role": "assistant", "content": res.content}
-                )
-
-            response = self._run_stream(messages, stream=True)
-            # NOTE: 流式输出时会自动记录历史消息，无需再次记录
-            response.set_on_stream_complete(on_stream_complete)
+            response = self._run_stream(messages, stream_interval=5)
         else:
-            response = self._run_no_stream(messages, stream=False)
-            self._history_messages.append(
-                {"role": "assistant", "content": response.content}
-            )
+            response = self._run_no_stream(messages)
         return response
 
     def execute_tool(self, tool_call: ToolCall) -> str:
@@ -761,7 +697,7 @@ class Agent:
             agent_response = self.run(user_input, stream=enable_stream)
             user_input = None
             if enable_stream:
-                for chunk in agent_response.stream():
+                for chunk in agent_response:
                     if chunk.type == AgentResponseChunkType.TEXT:
                         # 文本输出
                         if not chunk.content:

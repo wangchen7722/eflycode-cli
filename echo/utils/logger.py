@@ -7,8 +7,10 @@ from threading import Lock
 # 用于存储已创建的logger实例
 _logger_cache: Dict[str, logging.Logger] = {}
 
+
 class ThreadSafeRotatingFileHandler(RotatingFileHandler):
     """线程安全的日志文件处理器"""
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._lock = Lock()
@@ -17,8 +19,9 @@ class ThreadSafeRotatingFileHandler(RotatingFileHandler):
         with self._lock:
             super().emit(record)
 
+
 def get_logger(
-    name: str,
+    name: Optional[str] = None,
     log_dir: Optional[str] = None,
     log_level: int = logging.INFO,
     max_bytes: int = 10 * 1024 * 1024,  # 10MB
@@ -43,9 +46,11 @@ def get_logger(
     Returns:
         logging.Logger: 配置好的日志记录器
     """
+    if name is None:
+        name = "echoai"
     if name in _logger_cache:
         return _logger_cache[name]
-    
+
     logger = setup_logger(
         name=name,
         log_dir=log_dir,
@@ -57,6 +62,7 @@ def get_logger(
     )
     _logger_cache[name] = logger
     return logger
+
 
 def setup_logger(
     name: str,
@@ -96,7 +102,7 @@ def setup_logger(
     elif not os.path.isabs(log_dir):
         # 如果提供的是相对路径，则转换为基于项目根目录的绝对路径
         log_dir = os.path.join(project_root, log_dir)
-    
+
     # 创建日志目录
     os.makedirs(log_dir, exist_ok=True)
 
@@ -133,3 +139,4 @@ def setup_logger(
         logger.addHandler(console_handler)
 
     return logger
+

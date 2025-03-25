@@ -10,11 +10,11 @@ class TestExecuteCommandTool(unittest.TestCase):
         """测试超时处理是否生效"""
         # 根据操作系统选择耗时命令
         if platform.system() == "Windows":
-            command = "ping -n 21 127.0.0.1"
+            command = "ping -n 31 127.0.0.1"
         else:
-            command = "sleep 20"
+            command = "sleep 31"
 
-        result = self.tool.run(command)
+        result = self.tool.run(command=command)
         self.assertIn("Error: Command execution timed out", result)
 
 if __name__ == "__main__":

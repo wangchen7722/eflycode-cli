@@ -6,10 +6,9 @@ from echo.tools import ReadFileTool, CreateFileTool, EditFileTool, InsertFileToo
 
 def main():
     llm_config = LLMConfig(
-        model="ep-20250220154917-m5tv5",
-        # model="ep-20250220155009-8ckjl",
-        base_url="https://ark.cn-beijing.volces.com/api/v3",
-        api_key="cb7cb751-3de9-4e2b-89bb-bbd7a303f193",
+        model="deepseek-chat",
+        base_url="https://api.deepseek.com",
+        api_key="sk-915afa73916e496fa8bcd002bb0c78aa",
         temperature=0.1
     )
 

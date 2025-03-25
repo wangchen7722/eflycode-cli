@@ -288,7 +288,7 @@ class CreateFileTool(BaseTool):
         try:
             with open(path, "w", encoding="utf-8") as f:
                 f.write(content)
-            return f"Successfully created file at {path} with content: {content}"
+            return f"Successfully created file at {path}."
         except Exception as e:
             return f"ERROR: Failed to create file at {path}: {e}"
 
@@ -434,8 +434,8 @@ class EditFileTool(BaseTool):
         if len(matches) == 0:
             return f"ERROR: '{old_string}' not found in {path}. Please ensure the old_string is correct."
         if len(matches) != 1:
-            return f"ERROR: Found {len(matches)} instances of '{old_string}' in {path}. Please ensure the old_string is UNIQUE."
+            return f"ERROR: Found {len(matches)} instances of '{old_string}' in {path}. Please ensure the old_string is existed and unique."
         file_content = file_content.replace(old_string, new_string)
         with open(path, "w", encoding="utf-8") as f:
             f.write(file_content)
-        return f"Successfully replaced '{old_string}' with '{new_string}' in {path}"
+        return f"Successfully replaced '{old_string}' with '{new_string}' in {path}."

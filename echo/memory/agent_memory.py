@@ -103,7 +103,7 @@ class AgentMemory:
             print(f"获取文本嵌入失败: {e}")
             return None
 
-    def add_memory(self, content: str, memory_type: MemoryType,
+    def store_memory(self, content: str, memory_type: MemoryType,
                    metadata: Optional[Dict[str, Any]] = None) -> MemoryItem:
         """添加记忆
         

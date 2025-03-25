@@ -1,4 +1,5 @@
 from abc import abstractmethod
+from enum import Enum
 from typing import Any, Dict, Optional, Literal, List, Required
 from typing_extensions import TypedDict
 
@@ -25,7 +26,7 @@ class ToolSchema(TypedDict, total=False):
 
 class ToolCallSchema(TypedDict, total=False):
     """工具的schema定义"""
-    type: Required[Literal["function"]]
+    type: Required[Literal["function", "memory"]]
     name: Required[str]
     arguments: Required[Dict[str, Any]]
 
@@ -80,6 +81,11 @@ def _convert_object(data, schema):
         else:
             converted[key] = value
     return converted
+
+class ToolType:
+    """工具类型"""
+    FUNCTION = "function"
+    MEMORY = "memory"
 
 
 class BaseTool:
@@ -164,7 +170,7 @@ class BaseTool:
         return typed_params
 
     @abstractmethod
-    def do_run(self, **kwargs) -> str:
+    def do_run(self, *args, **kwargs) -> str:
         """执行工具的核心方法，需要被子类重写
 
         Args:
@@ -175,7 +181,7 @@ class BaseTool:
         """
         raise NotImplementedError("Tool must implement do method")
 
-    def run(self, **kwargs) -> str:
+    def run(self, *args, **kwargs) -> str:
         """执行工具的包装方法，会先转换参数类型，然后调用 do_run 方法
         
         Args:
@@ -186,7 +192,7 @@ class BaseTool:
         """
         return self.do_run(**self._convert_type(kwargs))
 
-    def __call__(self, **kwargs) -> str:
+    def __call__(self, *args, **kwargs) -> str:
         """使工具实例可以像函数一样被调用
         
         Args:
@@ -196,35 +202,3 @@ class BaseTool:
             str: 工具执行结果
         """
         return self.run(**kwargs)
-
-
-if __name__ == "__main__":
-    # 原始数据（字符串类型）
-    raw_data = {"age": "25", "scores": ["90", "85"]}
-
-    # Schema定义
-    schema = {
-        "type": "object",
-        "properties": {
-            "age": {"type": "integer"},
-            "scores": {
-                "type": "array",
-                "items": {"type": "integer"}
-            }
-        }
-    }
-
-    # 转换数据
-    converted_data = convert_data(raw_data, schema)
-    print(converted_data)
-
-
-    # 输出: {'age': 25, 'scores': [90, 85]}
-
-    # 通过 **kwargs 传递
-    def process_data(age, scores):
-        print(f"Age type: {type(age)}, Scores type: {type(scores[0])}")
-
-
-    process_data(**converted_data)
-    # 输出: Age type: <class 'int'>, Scores type: <class 'int'>

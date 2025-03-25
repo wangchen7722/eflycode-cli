@@ -62,7 +62,7 @@ class ExecuteCommandTool(BaseTool):
                 return f"Error: The specified path ({cwd}) is not a directory"
         else:
             work_dir = os.getcwd()
-        timeout = 30
+        timeout = 60
         try:
             process = subprocess.run(
                 command,

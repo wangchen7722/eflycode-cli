@@ -683,12 +683,12 @@ class Agent:
             return f"工具调用失败：{e}"
 
     def run_loop(self):
-        from echo.ui.console import ConsoleUI
+        from echo.ui.console import ConsoleUI, LoadingUI
 
         ui = ConsoleUI.get_instance()
         enable_stream = True
         user_input = None
-        # tool_call_progress: Optional[LoadingUI] = None
+        tool_call_progress: Optional[LoadingUI] = None
         while True:
             if user_input is None:
                 user_input = ui.acquire_user_input()
@@ -705,17 +705,16 @@ class Agent:
                         ui.show_text(chunk.content, end="")
                     elif chunk.type == AgentResponseChunkType.TOOL_CALL:
                         # 工具调用
-                        # ui.show_text(chunk.content, end="")
-                        # if tool_call_progress is None:
-                        #     tool_call_progress = ui.create_loading(
-                        #         "loading " + chunk.content[1:-1] + " ..."
-                        #     )
-                        #     tool_call_progress.start()
+                        if tool_call_progress is None:
+                            tool_call_progress = ui.create_loading(
+                                "loading " + chunk.content[1:-1] + " ..."
+                            )
+                            tool_call_progress.start()
                         if chunk.finish_reason != "tool_calls":
                             # 说明工具调用正在生成，跳过
                             continue
-                        # tool_call_progress.stop()
-                        # tool_call_progress = None
+                        tool_call_progress.stop()
+                        tool_call_progress = None
                         # 这里有且仅会有一个工具调用
                         user_input = ""
                         for tool_call in chunk.tool_calls:

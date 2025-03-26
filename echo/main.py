@@ -1,14 +1,19 @@
+import os
+
+from dotenv import load_dotenv
+
 from echo.agents import Developer
 from echo.llms import LLMConfig, OpenAIEngine
 from echo.tools import ReadFileTool, CreateFileTool, EditFileTool, InsertFileTool, SearchFilesTool, ListFilesTool, \
     ExecuteCommandTool, ListCodeDefinitionsTool
 
+load_dotenv()
 
 def main():
     llm_config = LLMConfig(
-        model="deepseek-chat",
-        base_url="https://api.deepseek.com",
-        api_key="sk-915afa73916e496fa8bcd002bb0c78aa",
+        model=os.environ["ECHO_MODEL"],
+        base_url=os.environ["ECHO_BASE_URL"],
+        api_key=os.environ["ECHO_API_KEY"],
         temperature=0.1
     )
 

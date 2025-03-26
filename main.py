@@ -1,28 +1,18 @@
 import os
+
+from dotenv import load_dotenv
+
 from echo.agents import Developer
 from echo.llms import LLMConfig
 from echo.llms import OpenAIEngine
 from echo.tools import ReadFileTool, CreateFileTool, EditFileTool, InsertFileTool, SearchFilesTool, ListFilesTool, ExecuteCommandTool, ListCodeDefinitionsTool, StoreMemoryTool
 
-# llm_config = LLMConfig(
-#     model=os.environ["ECHO_MODEL"],
-#     base_url=os.environ["ECHO_BASE_URL"],
-#     api_key=os.environ["ECHO_API_KEY"],
-#     temperature=0.1
-# )
-
-# llm_config = LLMConfig(
-#     # model="ep-20250220154917-m5tv5",
-#     model="ep-20250220155009-8ckjl",
-#     base_url="https://ark.cn-beijing.volces.com/api/v3",
-#     api_key="cb7cb751-3de9-4e2b-89bb-bbd7a303f193",
-#     temperature=0.1
-# )
+load_dotenv()
 
 llm_config = LLMConfig(
-    model="deepseek-chat",
-    base_url="https://api.deepseek.com",
-    api_key="sk-915afa73916e496fa8bcd002bb0c78aa",
+    model=os.environ["ECHO_MODEL"],
+    base_url=os.environ["ECHO_BASE_URL"],
+    api_key=os.environ["ECHO_API_KEY"],
     temperature=0.1
 )
 

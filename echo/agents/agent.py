@@ -728,6 +728,9 @@ class Agent:
                         if chunk.finish_reason != "tool_calls":
                             # 说明工具调用正在生成，跳过
                             continue
+                        if chunk.tool_calls is None:
+                            # 说明工具调用未生成，跳过
+                            continue
                         # tool_call_progress.stop()
                         # tool_call_progress = None
                         # 这里有且仅会有一个工具调用
@@ -746,7 +749,10 @@ class Agent:
                             )
                             if not self.auto_approve:
                                 # 征求用户同意
-                                tool = self._tool_map.get(tool_call_name)
+                                tool = self._tool_map.get(tool_call_name, None)
+                                if not tool:
+                                    user_input = f"This is system-generated message. {tool_call_name} is not found."
+                                    break
                                 tool_display = tool.display(self.name)
                                 ui.show_text(tool_display)
                                 user_approval = ui.acquire_user_input("\[yes/no]")

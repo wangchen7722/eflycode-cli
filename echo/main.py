@@ -9,6 +9,7 @@ from echo.tools import ReadFileTool, CreateFileTool, EditFileTool, InsertFileToo
 
 load_dotenv()
 
+
 def main():
     llm_config = LLMConfig(
         model=os.environ["ECHO_MODEL"],

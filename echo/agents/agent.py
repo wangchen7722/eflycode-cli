@@ -1,6 +1,5 @@
 import json
 import logging
-import os.path
 import time
 import uuid
 from typing import (
@@ -12,7 +11,7 @@ from typing import (
     Any,
     Required,
     Sequence,
-    Callable,
+    overload
 )
 from typing_extensions import TypedDict
 from enum import Enum
@@ -644,6 +643,14 @@ class Agent:
                 "response": response_content,
             })
         )
+    
+    @overload 
+    def run(self, content: str, stream: Literal[False] = False) -> AgentResponse:
+        ...
+
+    @overload
+    def run(self, content: str, stream: Literal[True]) -> Generator[AgentResponseChunk, None, None]:
+       ...
 
     def run(self, content: str, stream: bool = False) -> AgentResponse | Generator[AgentResponseChunk, None, None]:
         """运行智能体，处理用户输入并生成响应
@@ -747,7 +754,7 @@ class Agent:
                                     user_input = f"This is system-generated message. User refused to execute the tool: {tool_call_name}"
                                     break
                                 elif user_approval.strip().lower() not in ["yes", "y"]:
-                                    user_input = user_approval
+                                    user_input = f"This is system-generated message. User refused to execute the tool: {tool_call_name} and say: {user_approval}"
                                     break
                             with ui.create_loading(tool_call_name):
                                 tool_call_result = self.execute_tool(tool_call)

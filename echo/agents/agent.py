@@ -24,7 +24,7 @@ from echo.llms.llm_engine import LLMEngine
 from echo.llms.schema import ChatCompletionChunk, Message, Usage, ToolCall
 from echo.utils.system_utils import get_system_info, get_workspace_info
 from echo.utils.tool_utils import apply_tool_calls_template
-from echo.memory import AgentMemory
+# from echo.memory import AgentMemory
 from echo.tools import BaseTool
 from echo.utils.logger import get_logger
 
@@ -504,11 +504,11 @@ class Agent:
         self._tool_map = {tool.NAME: tool for tool in self._tools}
 
         # 初始化记忆管理器
-        self.memory = AgentMemory(
-            vector_db_path=self.vector_db_config.get("vector_db_path", None),
-            embedding_model=self.vector_db_config.get("embedding_model", None),
-            short_term_capacity=self.vector_db_config.get("short_term_capacity", 10),
-        )
+        # self.memory = AgentMemory(
+        #     vector_db_path=self.vector_db_config.get("vector_db_path", None),
+        #     embedding_model=self.vector_db_config.get("embedding_model", None),
+        #     short_term_capacity=self.vector_db_config.get("short_term_capacity", 10),
+        # )
 
     @property
     def tools(self) -> Sequence[BaseTool]:
@@ -540,23 +540,23 @@ class Agent:
             workspace=workspace_info
         )
 
-    def retrieve_memories(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
-        """检索相关记忆
-
-        Args:
-            query: 查询文本
-            top_k: 返回结果数量
-
-        Returns:
-            List[MemoryItem]: 相关记忆列表
-        """
-        if self.memory.is_empty():
-            return []
-
-        # 从短期和长期记忆中检索
-        agent_memories = self.memory.search_memory(query, top_k=10)
-
-        return [memory.to_message() for memory in agent_memories]
+    # def retrieve_memories(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
+    #     """检索相关记忆
+    #
+    #     Args:
+    #         query: 查询文本
+    #         top_k: 返回结果数量
+    #
+    #     Returns:
+    #         List[MemoryItem]: 相关记忆列表
+    #     """
+    #     if self.memory.is_empty():
+    #         return []
+    #
+    #     # 从短期和长期记忆中检索
+    #     agent_memories = self.memory.search_memory(query, top_k=10)
+    #
+    #     return [memory.to_message() for memory in agent_memories]
 
     def _preprocess_messages(self, messages: List[Message]) -> List[Message]:
         """预处理消息列表，添加系统提示词和角色信息

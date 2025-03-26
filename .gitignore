@@ -5,3 +5,4 @@ logs
 run_echo.bat
 *.egg-info
 build
+temp

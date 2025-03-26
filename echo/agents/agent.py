@@ -30,6 +30,7 @@ from echo.utils.logger import get_logger
 
 logger: logging.Logger = get_logger()
 
+
 class AgentResponseChunkType(Enum):
     TEXT = "text"
     TOOL_CALL = "tool_call"
@@ -637,7 +638,12 @@ class Agent:
         self._history_messages.append(
             {"role": "assistant", "content": response_content}
         )
-
+        logger.debug(
+            json.dumps({
+                "messages": messages,
+                "response": response_content,
+            })
+        )
 
     def run(self, content: str, stream: bool = False) -> AgentResponse | Generator[AgentResponseChunk, None, None]:
         """运行智能体，处理用户输入并生成响应
@@ -704,17 +710,19 @@ class Agent:
                             continue
                         ui.show_text(chunk.content, end="")
                     elif chunk.type == AgentResponseChunkType.TOOL_CALL:
+                        if chunk.content:
+                            ui.show_text(chunk.content, end="")
                         # 工具调用
-                        if tool_call_progress is None:
-                            tool_call_progress = ui.create_loading(
-                                "loading " + chunk.content[1:-1] + " ..."
-                            )
-                            tool_call_progress.start()
+                        # if tool_call_progress is None:
+                            # tool_call_progress = ui.create_loading(
+                            #     "loading " + chunk.content[1:-1] + " ..."
+                            # )
+                            # tool_call_progress.start()
                         if chunk.finish_reason != "tool_calls":
                             # 说明工具调用正在生成，跳过
                             continue
-                        tool_call_progress.stop()
-                        tool_call_progress = None
+                        # tool_call_progress.stop()
+                        # tool_call_progress = None
                         # 这里有且仅会有一个工具调用
                         user_input = ""
                         for tool_call in chunk.tool_calls:

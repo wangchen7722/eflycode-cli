@@ -4,8 +4,6 @@ import gradio as gr
 from echoai.agents.agent import AgentResponseChunkType
 from echoai.agents import Developer
 from echoai.llms import LLMConfig, OpenAIEngine
-from echoai.tools import ReadFileTool, CreateFileTool, EditFileTool, InsertFileTool, SearchFilesTool, ListFilesTool, \
-    ExecuteCommandTool, ListCodeDefinitionsTool, StoreMemoryTool
 
 load_dotenv()
 
@@ -27,8 +25,6 @@ class ChatInterface:
 
         return Developer(
             llm_engine=OpenAIEngine(llm_config),
-            tools=[ReadFileTool(), EditFileTool(), InsertFileTool(), ExecuteCommandTool(), ListCodeDefinitionsTool(),
-                   CreateFileTool(), SearchFilesTool(), ListFilesTool(), StoreMemoryTool()]
         )
 
     def process_message(self, message, history):

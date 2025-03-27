@@ -135,8 +135,4 @@ class ListCodeDefinitionsTool(BaseTool):
             return f"Successfully list all top level source code definitions in the {path}:\n\n{output}"
         else:
             return f"Successfully list all top level source code definitions in the {path} and found {len(definitions)} files:\n\n{output}" 
-            
-
-if __name__ == "__main__":
-    tool = ListCodeDefinitionsTool()
-    print(tool.run("echoai", "python", "**/*.py"))
+    

@@ -7,7 +7,7 @@ import chromadb
 from chromadb.utils.embedding_functions.sentence_transformer_embedding_function import \
     SentenceTransformerEmbeddingFunction
 
-from echoai.memory.schema import MemoryItem, MemoryType
+from echoai.memory.schema import MemoryItem
 
 
 class GlobalMemory:

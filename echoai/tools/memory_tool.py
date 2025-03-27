@@ -1,4 +1,4 @@
-from echoai.memory import AgentMemory, MemoryType
+from echoai.memory import AgentMemory
 from echoai.tools.base_tool import BaseTool, ToolType
 
 class BaseMemoryTool(BaseTool):
@@ -45,18 +45,6 @@ class StoreMemoryTool(BaseMemoryTool):
     }
 
     def do_run(self, topic: str, content: str) -> str:
-        """
-        存储记忆。
-        """
-        try:
-            memory_item = self.memory.store_memory(
-                content=content,
-                memory_type=MemoryType.LONG_TERM,
-                metadata={"topic": topic},
-            )
-            print(memory_item)
-            return "Memory stored successfully. "
-        except Exception as e:
-            return f"Failed to store memory: {e}"
+        raise NotImplementedError
 
 

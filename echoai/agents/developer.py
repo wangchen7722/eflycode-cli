@@ -6,8 +6,6 @@ from echoai.tools import ReadFileTool, CreateFileTool, EditFileTool, InsertFileT
     ExecuteCommandTool, ListCodeDefinitionsTool, StoreMemoryTool
 
 
-
-
 class Developer(Agent):
     ROLE = "developer"
     DESCRIPTION = """

@@ -1,11 +1,11 @@
-from .schema import MemoryItem, MemoryType
+from .schema import MemoryItem, MemoryItemType
 from .agent_memory import AgentMemory
 from .global_memory import GlobalMemory
 
 
 __all__ = [
     "MemoryItem",
-    "MemoryType",
+    "MemoryItemType",
     "AgentMemory",
     "GlobalMemory"
 ]

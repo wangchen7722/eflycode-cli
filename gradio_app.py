@@ -1,10 +1,10 @@
 import os
 from dotenv import load_dotenv
 import gradio as gr
-from echo.agents.agent import AgentResponseChunkType
-from echo.agents import Developer
-from echo.llms import LLMConfig, OpenAIEngine
-from echo.tools import ReadFileTool, CreateFileTool, EditFileTool, InsertFileTool, SearchFilesTool, ListFilesTool, \
+from echoai.agents.agent import AgentResponseChunkType
+from echoai.agents import Developer
+from echoai.llms import LLMConfig, OpenAIEngine
+from echoai.tools import ReadFileTool, CreateFileTool, EditFileTool, InsertFileTool, SearchFilesTool, ListFilesTool, \
     ExecuteCommandTool, ListCodeDefinitionsTool, StoreMemoryTool
 
 load_dotenv()

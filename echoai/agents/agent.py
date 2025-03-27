@@ -701,7 +701,7 @@ class Agent:
         ui = ConsoleUI.get_instance()
         enable_stream = True
         user_input = None
-        tool_call_progress: Optional[LoadingUI] = None
+        # tool_call_progress: Optional[LoadingUI] = None
         while True:
             if user_input is None:
                 user_input = ui.acquire_user_input()

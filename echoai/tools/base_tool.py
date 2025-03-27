@@ -1,5 +1,4 @@
 from abc import abstractmethod
-from enum import Enum
 from typing import Any, Dict, Optional, Literal, List, Required
 from typing_extensions import TypedDict
 

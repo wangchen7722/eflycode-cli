@@ -3,7 +3,7 @@ from typing import Optional
 from echoai.agents.agent import Agent, VectorDBConfig
 from echoai.llms.llm_engine import LLMEngine
 from echoai.tools import ReadFileTool, CreateFileTool, EditFileTool, InsertFileTool, SearchFilesTool, ListFilesTool, \
-    ExecuteCommandTool, ListCodeDefinitionsTool, StoreMemoryTool
+    ExecuteCommandTool, ListCodeDefinitionsTool
 
 
 

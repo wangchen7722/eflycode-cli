@@ -1,6 +1,5 @@
 import json
 import logging
-import os.path
 import time
 import uuid
 from typing import (
@@ -12,7 +11,7 @@ from typing import (
     Any,
     Required,
     Sequence,
-    Callable,
+    overload
 )
 from typing_extensions import TypedDict
 from enum import Enum
@@ -504,11 +503,11 @@ class Agent:
         self._tool_map = {tool.NAME: tool for tool in self._tools}
 
         # 初始化记忆管理器
-        self.memory = AgentMemory(
-            vector_db_path=self.vector_db_config.get("vector_db_path", None),
-            embedding_model=self.vector_db_config.get("embedding_model", None),
-            short_term_capacity=self.vector_db_config.get("short_term_capacity", 10),
-        )
+        # self.memory = AgentMemory(
+        #     vector_db_path=self.vector_db_config.get("vector_db_path", None),
+        #     embedding_model=self.vector_db_config.get("embedding_model", None),
+        #     short_term_capacity=self.vector_db_config.get("short_term_capacity", 10),
+        # )
 
     @property
     def tools(self) -> Sequence[BaseTool]:
@@ -540,23 +539,23 @@ class Agent:
             workspace=workspace_info
         )
 
-    def retrieve_memories(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
-        """检索相关记忆
-
-        Args:
-            query: 查询文本
-            top_k: 返回结果数量
-
-        Returns:
-            List[MemoryItem]: 相关记忆列表
-        """
-        if self.memory.is_empty():
-            return []
-
-        # 从短期和长期记忆中检索
-        agent_memories = self.memory.search_memory(query, top_k=10)
-
-        return [memory.to_message() for memory in agent_memories]
+    # def retrieve_memories(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
+    #     """检索相关记忆
+    #
+    #     Args:
+    #         query: 查询文本
+    #         top_k: 返回结果数量
+    #
+    #     Returns:
+    #         List[MemoryItem]: 相关记忆列表
+    #     """
+    #     if self.memory.is_empty():
+    #         return []
+    #
+    #     # 从短期和长期记忆中检索
+    #     agent_memories = self.memory.search_memory(query, top_k=10)
+    #
+    #     return [memory.to_message() for memory in agent_memories]
 
     def _preprocess_messages(self, messages: List[Message]) -> List[Message]:
         """预处理消息列表，添加系统提示词和角色信息
@@ -644,6 +643,14 @@ class Agent:
                 "response": response_content,
             })
         )
+    
+    @overload 
+    def run(self, content: str, stream: Literal[False] = False) -> AgentResponse:
+        ...
+
+    @overload
+    def run(self, content: str, stream: Literal[True]) -> Generator[AgentResponseChunk, None, None]:
+       ...
 
     def run(self, content: str, stream: bool = False) -> AgentResponse | Generator[AgentResponseChunk, None, None]:
         """运行智能体，处理用户输入并生成响应
@@ -721,6 +728,9 @@ class Agent:
                         if chunk.finish_reason != "tool_calls":
                             # 说明工具调用正在生成，跳过
                             continue
+                        if chunk.tool_calls is None:
+                            # 说明工具调用未生成，跳过
+                            continue
                         # tool_call_progress.stop()
                         # tool_call_progress = None
                         # 这里有且仅会有一个工具调用
@@ -739,7 +749,10 @@ class Agent:
                             )
                             if not self.auto_approve:
                                 # 征求用户同意
-                                tool = self._tool_map.get(tool_call_name)
+                                tool = self._tool_map.get(tool_call_name, None)
+                                if not tool:
+                                    user_input = f"This is system-generated message. {tool_call_name} is not found."
+                                    break
                                 tool_display = tool.display(self.name)
                                 ui.show_text(tool_display)
                                 user_approval = ui.acquire_user_input("\[yes/no]")
@@ -747,7 +760,7 @@ class Agent:
                                     user_input = f"This is system-generated message. User refused to execute the tool: {tool_call_name}"
                                     break
                                 elif user_approval.strip().lower() not in ["yes", "y"]:
-                                    user_input = user_approval
+                                    user_input = f"This is system-generated message. User refused to execute the tool: {tool_call_name} and say: {user_approval}"
                                     break
                             with ui.create_loading(tool_call_name):
                                 tool_call_result = self.execute_tool(tool_call)

@@ -16,14 +16,14 @@ from typing import (
 from typing_extensions import TypedDict
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from echoai.prompt.prompt_loader import PromptLoader
 from echoai.llms.llm_engine import LLMEngine
 from echoai.llms.schema import ChatCompletionChunk, Message, Usage, ToolCall
 from echoai.utils.system_utils import get_system_info, get_workspace_info
 from echoai.utils.tool_utils import apply_tool_calls_template
-from echoai.memory import AgentMemory
+# from echoai.memory import AgentMemory
 from echoai.tools import BaseTool
 from echoai.utils.logger import get_logger
 

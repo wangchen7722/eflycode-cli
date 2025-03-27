@@ -1,6 +1,6 @@
 import json
 from typing import List
-from echo.llms.schema import ToolCall
+from echoai.llms.schema import ToolCall
 
 
 def _apply_tool_call_template(tool_call: ToolCall):

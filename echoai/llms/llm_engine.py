@@ -3,8 +3,8 @@ import os
 from typing import Dict, Any, List, NotRequired, Optional, Generator, Literal, overload
 from typing_extensions import TypedDict
 
-from echo.llms.schema import Message, ChatCompletion, ChatCompletionChunk
-from echo.utils.logger import get_logger
+from echoai.llms.schema import Message, ChatCompletion, ChatCompletionChunk
+from echoai.utils.logger import get_logger
 
 
 class LLMConfig(TypedDict):

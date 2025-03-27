@@ -1,8 +1,8 @@
 from typing import Optional, Sequence
 
-from echo.agents.agent import Agent, VectorDBConfig
-from echo.llms.llm_engine import LLMEngine
-from echo.tools import BaseTool
+from echoai.agents.agent import Agent, VectorDBConfig
+from echoai.llms.llm_engine import LLMEngine
+from echoai.tools import BaseTool
 
 
 class Developer(Agent):

@@ -1,4 +1,4 @@
-from echo.agents.agent import Agent
+from echoai.agents.agent import Agent
 
 
 class Observer(Agent):

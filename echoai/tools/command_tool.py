@@ -3,7 +3,7 @@ import subprocess
 import traceback
 from typing import Optional
 
-from echo.tools.base_tool import BaseTool
+from echoai.tools.base_tool import BaseTool
 
 
 class ExecuteCommandTool(BaseTool):

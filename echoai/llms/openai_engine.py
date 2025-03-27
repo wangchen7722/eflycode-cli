@@ -6,9 +6,9 @@ from typing import Dict, Any, List, Optional, Generator, Literal, Union, overloa
 
 import httpx
 
-from echo.llms.llm_engine import LLMEngine, LLMConfig, build_generate_config
-from echo.llms.schema import ChatCompletion, ChatCompletionChunk, Message
-from echo.utils.logger import get_logger
+from echoai.llms.llm_engine import LLMEngine, LLMConfig, build_generate_config
+from echoai.llms.schema import ChatCompletion, ChatCompletionChunk, Message
+from echoai.utils.logger import get_logger
 
 logger: logging.Logger = get_logger(os.path.splitext(os.path.basename(__file__))[0])
 

@@ -5,7 +5,7 @@ from typing import Dict, List
 from tree_sitter import Node
 from tree_sitter_languages import get_parser
 
-from echo.tools.base_tool import BaseTool
+from echoai.tools.base_tool import BaseTool
 
 
 class ListCodeDefinitionsTool(BaseTool):
@@ -138,4 +138,4 @@ class ListCodeDefinitionsTool(BaseTool):
 
 if __name__ == "__main__":
     tool = ListCodeDefinitionsTool()
-    print(tool.run("echo", "python", "**/*.py"))
+    print(tool.run("echoai", "python", "**/*.py"))

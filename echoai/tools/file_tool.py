@@ -3,7 +3,7 @@ from pathlib import Path
 import re
 from typing import Optional
 import glob
-from echo.tools.base_tool import BaseTool
+from echoai.tools.base_tool import BaseTool
 
 
 class ListFilesTool(BaseTool):

@@ -2,9 +2,9 @@ import os
 
 from dotenv import load_dotenv
 
-from echo.agents import Developer
-from echo.llms import LLMConfig, OpenAIEngine
-from echo.tools import ReadFileTool, CreateFileTool, EditFileTool, InsertFileTool, SearchFilesTool, ListFilesTool, \
+from echoai.agents import Developer
+from echoai.llms import LLMConfig, OpenAIEngine
+from echoai.tools import ReadFileTool, CreateFileTool, EditFileTool, InsertFileTool, SearchFilesTool, ListFilesTool, \
     ExecuteCommandTool, ListCodeDefinitionsTool
 
 load_dotenv()

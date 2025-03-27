@@ -1,5 +1,5 @@
-from echo.memory import AgentMemory, MemoryType
-from echo.tools.base_tool import BaseTool, ToolType
+from echoai.memory import AgentMemory, MemoryType
+from echoai.tools.base_tool import BaseTool, ToolType
 
 
 class StoreMemoryTool(BaseTool):

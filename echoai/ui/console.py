@@ -1,6 +1,5 @@
 import sys
 from typing import List, Literal, Optional, Sequence
-from contextlib import contextmanager
 from rich.console import Console
 from rich.prompt import Prompt
 from rich.table import Table

@@ -19,14 +19,14 @@ from enum import Enum
 
 from pydantic import BaseModel, Field
 
-from echo.prompt.prompt_loader import PromptLoader
-from echo.llms.llm_engine import LLMEngine
-from echo.llms.schema import ChatCompletionChunk, Message, Usage, ToolCall
-from echo.utils.system_utils import get_system_info, get_workspace_info
-from echo.utils.tool_utils import apply_tool_calls_template
-from echo.memory import AgentMemory
-from echo.tools import BaseTool
-from echo.utils.logger import get_logger
+from echoai.prompt.prompt_loader import PromptLoader
+from echoai.llms.llm_engine import LLMEngine
+from echoai.llms.schema import ChatCompletionChunk, Message, Usage, ToolCall
+from echoai.utils.system_utils import get_system_info, get_workspace_info
+from echoai.utils.tool_utils import apply_tool_calls_template
+from echoai.memory import AgentMemory
+from echoai.tools import BaseTool
+from echoai.utils.logger import get_logger
 
 logger: logging.Logger = get_logger()
 
@@ -689,7 +689,7 @@ class Agent:
             return f"工具调用失败：{e}"
 
     def run_loop(self):
-        from echo.ui.console import ConsoleUI, LoadingUI
+        from echoai.ui.console import ConsoleUI, LoadingUI
 
         ui = ConsoleUI.get_instance()
         enable_stream = True

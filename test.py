@@ -1,4 +1,4 @@
-from echo.prompt import PromptLoader
+from echoai.prompt import PromptLoader
 
 mcp_prompt = PromptLoader.get_instance().render_template(
     "partials/mcp.prompt",

@@ -21,8 +21,6 @@ def main():
     developer = Developer(
         name="developer",
         llm_engine=OpenAIEngine(llm_config),
-        tools=[ReadFileTool(), EditFileTool(), InsertFileTool(), ExecuteCommandTool(), ListCodeDefinitionsTool(),
-               CreateFileTool(), SearchFilesTool(), ListFilesTool()]
     )
     developer.run_loop()
 

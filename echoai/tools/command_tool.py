@@ -11,6 +11,7 @@ class ExecuteCommandTool(BaseTool):
 
     NAME = "execute_command"
     TYPE = "function"
+    IS_APPROVAL = True
     DESCRIPTION = """
     Request to execute a CLI command on the system. Use this when you need to perform system operations or run specific commands to accomplish any step in the user's task. 
     You must tailor your command to the user's system and provide a clear explanation of what the command does. 

@@ -743,13 +743,15 @@ class Agent:
                             tool_call_arguments_str = "\n".join(
                                 [f"{k}={v}" for k, v in tool_call_arguments.items()]
                             )
+                            # 换行
+                            ui.show_text("", end="")
                             ui.show_panel(
                                 [self.name, tool_call_name],
                                 f"Arguments:\n{tool_call_arguments_str}",
                             )
-                            if not self.auto_approve:
+                            tool = self._tool_map.get(tool_call_name, None)
+                            if not self.auto_approve and tool.is_approval:
                                 # 征求用户同意
-                                tool = self._tool_map.get(tool_call_name, None)
                                 if not tool:
                                     user_input = f"This is system-generated message. {tool_call_name} is not found."
                                     break

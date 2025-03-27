@@ -1,8 +1,11 @@
-from typing import Optional, Sequence
+from typing import Optional
 
 from echoai.agents.agent import Agent, VectorDBConfig
 from echoai.llms.llm_engine import LLMEngine
-from echoai.tools import BaseTool
+from echoai.tools import ReadFileTool, CreateFileTool, EditFileTool, InsertFileTool, SearchFilesTool, ListFilesTool, \
+    ExecuteCommandTool, ListCodeDefinitionsTool, StoreMemoryTool
+
+
 
 
 class Developer(Agent):
@@ -12,19 +15,26 @@ class Developer(Agent):
     """
 
     def __init__(
-            self,
-            llm_engine: LLMEngine,
-            vector_db_config: Optional[VectorDBConfig] = None,
-            name: Optional[str] = None,
-            description: Optional[str] = None,
-            tools: Optional[Sequence[BaseTool]] = None,
-            **kwargs,
+        self,
+        llm_engine: LLMEngine,
+        vector_db_config: Optional[VectorDBConfig] = None,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        **kwargs,
     ):
+        developer_tools = [
+            # 文件操作工具
+            ReadFileTool(), CreateFileTool(), EditFileTool(), InsertFileTool(), SearchFilesTool(), ListFilesTool(),
+            # 执行命令工具
+            ExecuteCommandTool(),
+            # 代码分析工具
+            ListCodeDefinitionsTool()
+        ]
         super().__init__(
             name=name,
             llm_engine=llm_engine,
             vector_db_config=vector_db_config,
             description=description,
-            tools=tools,
+            tools=developer_tools,
             **kwargs,
         )

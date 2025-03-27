@@ -10,6 +10,7 @@ class ListFilesTool(BaseTool):
     """列出文件工具类"""
     NAME = "list_files"
     TYPE = "function"
+    IS_APPROVAL = False
     DESCRIPTION = """
     Request to list files and directories within the specified directory. 
     If recursive is true, it will list all files and directories recursively. 
@@ -73,6 +74,7 @@ class ReadFileTool(BaseTool):
     """读取文件工具类"""
     NAME = "read_file"
     TYPE = "function"
+    IS_APPROVAL = False
     DESCRIPTION = """
     Request to read the contents of a file at the specified path. 
     Use this when you need to examine the contents of an existing file you do not know the contents of, for example to analyze code, review text files, or extract information from configuration files. 
@@ -159,6 +161,7 @@ class SearchFilesTool(BaseTool):
     """搜索文件工具类"""
     NAME = "search_files"
     TYPE = "function"
+    IS_APPROVAL = False
     DESCRIPTION = """
     Request to perform a regex search across files in a specified directory, providing context-rich results. 
     This tool searches for patterns or specific content across multiple files, displaying each match with encapsulating context.
@@ -243,6 +246,7 @@ class CreateFileTool(BaseTool):
     """创建文件工具类"""
     NAME = "create_file"
     TYPE = "function"
+    IS_APPROVAL = False
     DESCRIPTION = """
     Request to create a new file at the specified path.
     Use this when you need to create a new file, such as when you need to create a new configuration file or when you need to create a new source code file.
@@ -297,6 +301,7 @@ class InsertFileTool(BaseTool):
     """插入文件工具类"""
     NAME = "insert_file"
     TYPE = "function"
+    IS_APPROVAL = True
     DESCRIPTION = """
     Request to insert content into a file at the specified path.
     Use this when you need to insert content into an existing file, such as when you need to insert code into a source code file.
@@ -354,6 +359,7 @@ class EditFileTool(BaseTool):
     """搜索替换工具类"""
     NAME = "edit_file"
     TYPE = "function"
+    IS_APPROVAL = True
     DESCRIPTION = """
     Request to search and replace text in a file at the specified path.
     When you need to edit the contents of an existing file, use this tool to search for a specific string and replace it with another string.

@@ -19,9 +19,7 @@ llm_config = LLMConfig(
 
 developer = Developer(
     name="developer",
-    llm_engine=OpenAIEngine(llm_config),
-    tools=[ReadFileTool(), EditFileTool(), InsertFileTool(), ExecuteCommandTool(), ListCodeDefinitionsTool(),
-           CreateFileTool(), SearchFilesTool(), ListFilesTool(), StoreMemoryTool(), ]
+    llm_engine=OpenAIEngine(llm_config)
 )
 developer.run_loop()
 # print(developer.system_prompt())

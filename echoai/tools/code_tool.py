@@ -12,6 +12,7 @@ class ListCodeDefinitionsTool(BaseTool):
     
     NAME = "list_code_definitions"
     TYPE = "function"
+    IS_APPROVAL = False
     DESCRIPTION = """
     Request to list definition names (classes, functions, methods, etc.) used in source code files at the top level of the specified directory. 
     This tool provides insights into the codebase structure and important constructs, encapsulating high-level concepts and relationships that are crucial for understanding the overall architecture.

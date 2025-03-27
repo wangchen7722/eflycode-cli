@@ -95,6 +95,8 @@ class BaseTool:
     """工具名称"""
     TYPE: str
     """工具类型"""
+    IS_APPROVAL: bool = True
+    """工具是否需要审批"""
     DESCRIPTION: str
     """工具描述"""
     DISPLAY: str = "{agent_name} want to use this tool"
@@ -113,6 +115,11 @@ class BaseTool:
     def type(self) -> str:
         """获取工具类型"""
         return self.TYPE.strip(" ")
+    
+    @property
+    def is_approval(self) -> bool:
+        """获取工具是否需要审批"""
+        return self.IS_APPROVAL
 
     @property
     def description(self) -> str:

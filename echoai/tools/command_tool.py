@@ -32,7 +32,11 @@ class ExecuteCommandTool(BaseTool):
             "cwd": {
                 "type": "string",
                 "description": f"The working directory to execute the command in default ({os.getcwd()}).",
-            }
+            },
+            "timeout": {
+                "type": "integer",
+                "description": "The maximum time in seconds to wait for the command to complete. If the command takes longer than this time, the execution will be stopped and an error will be returned.",
+            },
         },
         "required": ["command"],
     }
@@ -53,7 +57,7 @@ class ExecuteCommandTool(BaseTool):
         }
     }
 
-    def do_run(self, command: str, cwd: Optional[str] = None) -> str:
+    def do_run(self, command: str, cwd: Optional[str] = None, timeout: Optional[int] = None) -> str:
         """执行命令"""
         if cwd:
             work_dir = os.path.abspath(cwd)
@@ -63,7 +67,6 @@ class ExecuteCommandTool(BaseTool):
                 return f"Error: The specified path ({cwd}) is not a directory"
         else:
             work_dir = os.getcwd()
-        timeout = 60
         try:
             process = subprocess.run(
                 command,

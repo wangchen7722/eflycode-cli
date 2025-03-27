@@ -1,11 +1,11 @@
-from typing import Dict, List, Optional, Any, Sequence, Union
+from typing import Dict, List, Optional, Any, Sequence
 import time
 import json
 import os
 
-import chromadb
-from chromadb.utils.embedding_functions.sentence_transformer_embedding_function import \
-    SentenceTransformerEmbeddingFunction
+from langchain_huggingface.embeddings import HuggingFaceEmbeddings
+from langchain_chroma.vectorstores import Chroma
+from langchain_community.docstore.document import Document
 
 from echoai.memory.schema import MemoryItem, MemoryType
 
@@ -35,28 +35,25 @@ class AgentMemory:
         self.short_term_memory: List[MemoryItem] = []
         self.long_term_memory: List[MemoryItem] = []
 
-        # 向量数据库相关初始化
         self.vector_db_path = vector_db_path
         self.embedding_model_name = embedding_model
 
-        # 初始化向量数据库和嵌入模型
-        self.embedding_function = SentenceTransformerEmbeddingFunction(model_name=self.embedding_model_name)
-        # 如果提供了路径，使用持久化存储，否则使用内存存储
-        if self.vector_db_path == "::memory::":
-            self.chroma_client = chromadb.EphemeralClient()
-        else:
-            os.makedirs(os.path.dirname(self.vector_db_path), exist_ok=True)
-            self.chroma_client = chromadb.PersistentClient(path=self.vector_db_path)
-
-        # 创建或获取集合
-        self.short_term_collection = self.chroma_client.get_or_create_collection(
-            name="short_term_memory",
-            metadata={"hnsw:space": "cosine"}
+        # 初始化 Langchain SentenceTransformer embeddings
+        self.embedding_function = HuggingFaceEmbeddings(
+            model_name=self.embedding_model_name
         )
 
-        self.long_term_collection = self.chroma_client.get_or_create_collection(
-            name="long_term_memory",
-            metadata={"hnsw:space": "cosine"}
+        # 初始化 Langchain Chroma 存储
+        self.short_term_collection = Chroma(
+            collection_name="short_term_memory",
+            embedding_function=self.embedding_function,
+            persist_directory=self.vector_db_path if self.vector_db_path != "::memory::" else None
+        )
+
+        self.long_term_collection = Chroma(
+            collection_name="long_term_memory",
+            embedding_function=self.embedding_function,
+            persist_directory=self.vector_db_path if self.vector_db_path != "::memory::" else None
         )
 
         # 加载记忆项元数据
@@ -85,7 +82,7 @@ class AgentMemory:
             except Exception as e:
                 print(f"加载记忆元数据失败: {e}")
 
-    def _get_embedding(self, text: str) -> Optional[Union[Sequence[float], Sequence[int]]]:
+    def _get_embedding(self, text: str) -> Optional[List[float]]:
         """获取文本的向量嵌入
         
         Args:
@@ -94,11 +91,8 @@ class AgentMemory:
         Returns:
             Optional[np.ndarray]: 向量嵌入，如果失败则返回None
         """
-        if not self.embedding_function:
-            return None
-
         try:
-            return self.embedding_function([text])[0].tolist()
+            return self.embedding_function.embed_query(text)
         except Exception as e:
             print(f"获取文本嵌入失败: {e}")
             return None
@@ -129,35 +123,27 @@ class AgentMemory:
             embedding=None
         )
 
-        # 获取向量嵌入
-        if self.embedding_function:
-            embedding_np = self._get_embedding(content)
-            if embedding_np is not None:
-                memory_item.embedding = embedding_np
+        # 创建 Langchain Document
+        doc = Document(
+            page_content=content,
+            metadata={**metadata, "timestamp": memory_item.timestamp, "id": item_id}
+        )
 
-        if memory_item.embedding:
-            # 根据记忆类型选择集合
-            collection = self.short_term_collection if memory_type == MemoryType.SHORT_TERM else self.long_term_collection
-            chroma_metadata = {**metadata, "timestamp": memory_item.timestamp}
-            collection.add(
-                ids=[item_id],
-                embeddings=[memory_item.embedding],
-                documents=[content],
-                metadatas=[chroma_metadata]
-            )
+        # 存储到向量数据库
+        collection = self.short_term_collection if memory_type == MemoryType.SHORT_TERM else self.long_term_collection
+        collection.add_documents([doc])
 
-        # 根据记忆类型添加到不同的记忆存储
         if memory_type == MemoryType.SHORT_TERM:
             self.short_term_memory.append(memory_item)
 
             # 如果短期记忆超出容量，移除最旧的记忆
             if len(self.short_term_memory) > self.short_term_capacity:
                 oldest_item = self.short_term_memory.pop(0)
-                # 从ChromaDB中删除
+                # 从向量存储中删除
                 try:
-                    self.short_term_collection.delete(ids=[oldest_item.id])
+                    self.short_term_collection.delete([oldest_item.id])
                 except Exception as e:
-                    print(f"从ChromaDB删除记忆失败: {e}")
+                    print(f"从向量存储删除记忆失败: {e}")
 
         else:  # 长期记忆
             self.long_term_memory.append(memory_item)
@@ -182,71 +168,32 @@ class AgentMemory:
         include_short_term = MemoryType.SHORT_TERM in include
         include_long_term = MemoryType.LONG_TERM in include
         results = []
-        query_embedding = self._get_embedding(query)
 
-        if query_embedding is None:
-            # 如果embedding_function不可用，返回最近的记忆
-            if include_short_term:
-                results.extend(self.short_term_memory)
-            if include_long_term:
-                results.extend(self.long_term_memory)
-            # 按时间戳排序，最新的在前
-            results.sort(key=lambda x: x.timestamp, reverse=True)
-            return results[:top_k]
-
-        # 使用ChromaDB搜索
         try:
-            # 从短期记忆搜索
-            short_term_results = []
-            if include_short_term and self.short_term_collection:
-                results_short = self.short_term_collection.query(
-                    query_embeddings=query_embedding,
-                    n_results=top_k
-                )
+            # 使用 Langchain 搜索
+            if include_short_term:
+                docs = self.short_term_collection.similarity_search(query, k=top_k)
+                for doc in docs:
+                    item_id = doc.metadata.get("id")
+                    for memory_item in self.short_term_memory:
+                        if memory_item.id == item_id:
+                            results.append(memory_item)
+                            break
 
-                if results_short and results_short["ids"] and results_short["ids"][0]:
-                    for i, item_id in enumerate(results_short["ids"][0]):
-                        # 查找对应的记忆项
-                        for memory_item in self.short_term_memory:
-                            if memory_item.id == item_id:
-                                short_term_results.append(memory_item)
-                                break
+            if include_long_term:
+                docs = self.long_term_collection.similarity_search(query, k=top_k)
+                for doc in docs:
+                    item_id = doc.metadata.get("id")
+                    for memory_item in self.long_term_memory:
+                        if memory_item.id == item_id:
+                            results.append(memory_item)
+                            break
 
-            # 从长期记忆搜索
-            long_term_results = []
-            if include_long_term and self.long_term_collection:
-                results_long = self.long_term_collection.query(
-                    query_embeddings=query_embedding,
-                    n_results=top_k
-                )
-
-                if results_long and results_long["ids"] and results_long["ids"][0]:
-                    for i, item_id in enumerate(results_long["ids"][0]):
-                        # 查找对应的记忆项
-                        for memory_item in self.long_term_memory:
-                            if memory_item.id == item_id:
-                                long_term_results.append(memory_item)
-                                break
-
-            # 合并结果
-            results = short_term_results + long_term_results
-
-            # 如果结果数量超过top_k，按相关性排序并截取
-            if len(results) > top_k:
-                # 由于我们已经通过向量搜索获取了最相关的结果，这里直接截取
-                results = results[:top_k]
-
-            return results
+            return results[:top_k]
         except Exception as e:
             print(f"搜索记忆失败: {e}")
             # 发生异常时，返回最近的记忆
-            if include_short_term:
-                results.extend(self.short_term_memory)
-            if include_long_term:
-                results.extend(self.long_term_memory)
-            # 按时间戳排序，最新的在前
-            results.sort(key=lambda x: x.timestamp, reverse=True)
-            return results[:top_k]
+            return self.get_recent_memories(limit=top_k, include=include)
 
     def save_memory(self) -> bool:
         """保存记忆到磁盘
@@ -288,24 +235,20 @@ class AgentMemory:
         try:
             # 清除短期记忆
             if memory_type is None or memory_type == MemoryType.SHORT_TERM:
-                try:
-                    # 获取所有ID
-                    ids = [item.id for item in self.short_term_memory if item.id]
-                    if ids:
-                        self.short_term_collection.delete(ids=ids)
-                except Exception as e:
-                    print(f"清除短期记忆集合失败: {e}")
+                self.short_term_collection = Chroma(
+                    collection_name="short_term_memory",
+                    embedding_function=self.embedding_function,
+                    persist_directory=self.vector_db_path if self.vector_db_path != "::memory::" else None
+                )
                 self.short_term_memory = []
 
             # 清除长期记忆
             if memory_type is None or memory_type == MemoryType.LONG_TERM:
-                try:
-                    # 获取所有ID
-                    ids = [item.id for item in self.long_term_memory if item.id]
-                    if ids:
-                        self.long_term_collection.delete(ids=ids)
-                except Exception as e:
-                    print(f"清除长期记忆集合失败: {e}")
+                self.long_term_collection = Chroma(
+                    collection_name="long_term_memory",
+                    embedding_function=self.embedding_function,
+                    persist_directory=self.vector_db_path if self.vector_db_path != "::memory::" else None
+                )
                 self.long_term_memory = []
 
             if self.vector_db_path:
@@ -364,3 +307,12 @@ class AgentMemory:
         # 按时间戳排序，最新的在前
         results.sort(key=lambda x: x.timestamp, reverse=True)
         return results[:limit]
+
+
+if __name__ == "__main__":
+    memory = AgentMemory()
+    memory.store_memory("用户向AI助手问候，询问其状态。助手解释其作为AI没有情感，但愿意提供帮助。", MemoryType.SHORT_TERM)
+    memory.store_memory(content="用户计划欧洲旅行，寻求建议。助手询问用户感兴趣的国家、城市或活动。", memory_type=MemoryType.SHORT_TERM)
+    memory.store_memory(content="用户对历史和美食感兴趣，特别关注意大利和法国。助手推荐了意大利的罗马和佛罗伦萨，以及法国的巴黎和里昂，指出这些城市的历史景点和美食特色。", memory_type=MemoryType.SHORT_TERM)
+    memory.store_memory(content="用户对历史和美食感兴趣，特别关注意大利和法国的旅行。助手根据用户兴趣，推荐了意大利的罗马、佛罗伦萨和威尼斯，以及法国的巴黎、里昂和普罗旺斯地区，并为期两周的行程提供了详细建议，包括各城市的主要景点和美食体验。", memory_type=MemoryType.SHORT_TERM)
+    print(memory.search_memory("用户要做什么"))

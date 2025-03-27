@@ -23,8 +23,8 @@ from echoai.llms.llm_engine import LLMEngine
 from echoai.llms.schema import ChatCompletionChunk, Message, Usage, ToolCall
 from echoai.utils.system_utils import get_system_info, get_workspace_info
 from echoai.utils.tool_utils import apply_tool_calls_template
-# from echoai.memory import AgentMemory
-from echoai.tools import BaseTool
+from echoai.memory import AgentMemory
+from echoai.tools import BaseTool, BaseMemoryTool
 from echoai.utils.logger import get_logger
 
 logger: logging.Logger = get_logger()
@@ -471,13 +471,13 @@ class Agent:
     DESCRIPTION = "一个通用对话智能助手"
 
     def __init__(
-            self,
-            llm_engine: LLMEngine,
-            vector_db_config: Optional[VectorDBConfig] = None,
-            name: Optional[str] = None,
-            description: Optional[str] = None,
-            tools: Optional[Sequence[BaseTool]] = None,
-            **kwargs,
+        self,
+        llm_engine: LLMEngine,
+        vector_db_config: Optional[VectorDBConfig] = None,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        tools: Optional[Sequence[BaseTool]] = None,
+        **kwargs,
     ):
         """初始化智能体
         Args:
@@ -500,14 +500,14 @@ class Agent:
         self.auto_approve = kwargs.get("auto_approve", False)
 
         self._tools = tools or []
-        self._tool_map = {tool.NAME: tool for tool in self._tools}
+        self._tool_map = {tool.name: tool for tool in self._tools}
 
         # 初始化记忆管理器
-        # self.memory = AgentMemory(
-        #     vector_db_path=self.vector_db_config.get("vector_db_path", None),
-        #     embedding_model=self.vector_db_config.get("embedding_model", None),
-        #     short_term_capacity=self.vector_db_config.get("short_term_capacity", 10),
-        # )
+        self.memory = AgentMemory(
+            vector_db_path=self.vector_db_config.get("vector_db_path", None),
+            embedding_model=self.vector_db_config.get("embedding_model", None),
+            short_term_capacity=self.vector_db_config.get("short_term_capacity", 10),
+        )
 
     @property
     def tools(self) -> Sequence[BaseTool]:
@@ -538,6 +538,7 @@ class Agent:
             system_info=system_info,
             workspace=workspace_info
         )
+
 
     # def retrieve_memories(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
     #     """检索相关记忆

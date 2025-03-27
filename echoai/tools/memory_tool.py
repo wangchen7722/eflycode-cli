@@ -1,8 +1,12 @@
 from echoai.memory import AgentMemory, MemoryType
 from echoai.tools.base_tool import BaseTool, ToolType
 
+class BaseMemoryTool(BaseTool):
 
-class StoreMemoryTool(BaseTool):
+    def __init__(self, memory: AgentMemory):
+        self.memory = memory
+
+class StoreMemoryTool(BaseMemoryTool):
     """
     用于存储和管理记忆的工具。
     """
@@ -40,16 +44,17 @@ class StoreMemoryTool(BaseTool):
         },
     }
 
-    def do_run(self, memory: AgentMemory, topic: str, content: str) -> str:
+    def do_run(self, topic: str, content: str) -> str:
         """
         存储记忆。
         """
         try:
-            memory_item = memory.store_memory(
+            memory_item = self.memory.store_memory(
                 content=content,
                 memory_type=MemoryType.LONG_TERM,
                 metadata={"topic": topic},
             )
+            print(memory_item)
             return "Memory stored successfully. "
         except Exception as e:
             return f"Failed to store memory: {e}"

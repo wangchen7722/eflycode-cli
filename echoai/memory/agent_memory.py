@@ -1,11 +1,7 @@
-import time
-import json
-import os
 import uuid
 from abc import abstractmethod
 from concurrent.futures import ThreadPoolExecutor, Future
-from typing import Dict, List, Optional, Any, Sequence
-from collections import OrderedDict
+from typing import Dict, List, Optional, Any
 
 from langchain_huggingface.embeddings import HuggingFaceEmbeddings
 from langchain_chroma.vectorstores import Chroma

@@ -169,9 +169,9 @@ if __name__ == "__main__":
                 name=server_name, config=StdioServerConfig(**server_config)
             )
             break
-        # await mcp_hub.aclose_all()
-        # while True:
-        #     user_input = input("Enter command: ")
-        #     if user_input == "exit":
-        #         break
+        while True:
+            user_input = input("Enter command: ")
+            if user_input == "exit":
+                break
+        await mcp_hub.aclose_all()
     asyncio.run(async_main())

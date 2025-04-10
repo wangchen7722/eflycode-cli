@@ -23,3 +23,7 @@ class WebsocketServerConfig(BaseServerConfig):
     """Configuration for the Websocket MCP server."""
     type: Literal["websocket"] = "websocket"
     url: str = Field(..., description="URL of the Websocket MCP server.")
+
+class MCPServerSetting(BaseModel):
+    """Configuration for the MCP server."""
+    mcpServers: Dict[str, BaseServerConfig] = Field(..., description="Configuration for the MCP servers.")

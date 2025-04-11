@@ -173,7 +173,7 @@ class McpHub:
         """Initialize the MCP manager."""
         self._lock = anyio.Lock()
         self._task_group: Optional[TaskGroup] = None
-        # self.initialize_mcp_servers()
+        self._initialized = False
 
     def __new__(cls) -> Self:
         """Singleton pattern."""
@@ -217,6 +217,9 @@ class McpHub:
 
     async def initialize_mcp_servers(self):
         """Initialize all MCP connections."""
+        if self._initialized:
+            logger.info("MCP servers already initialized.")
+            return
         logger.info("initialize mcp servers...")
         mcp_setting_filepath = self.get_mcp_setting_filepath()
         try:
@@ -235,6 +238,7 @@ class McpHub:
         except Exception as e:
             logger.error(f"Error updating MCP connections: {e}")
             return
+        self._initialized = True
         logger.info("mcp servers initialized.")
 
     async def get_mcp_connection(self, server_name: str) -> Optional[McpConnection]:
@@ -328,10 +332,8 @@ if __name__ == "__main__":
 
     async def async_main():
         mcp_hub = McpHub()
-        await mcp_hub.initialize_mcp_servers()
         while True:
-            # 使用 anyio.to_thread.run_sync 将 input() 放在单独线程中执行
-            user_input = await anyio.to_thread.run_sync(input, "Enter command: ")
+            user_input =input("Enter command: ")
             if user_input == "list":
                 for connection in mcp_hub.connections:
                     print(f"{connection.name}: {connection.status}")

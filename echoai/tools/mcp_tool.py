@@ -1,4 +1,5 @@
 import json
+import traceback
 from unittest import result
 
 import anyio
@@ -8,9 +9,6 @@ from echoai.services.mcp.mcp_hub import McpHub
 from echoai.tools.base_tool import BaseTool
 
 mcp_hub = McpHub.get_instance()
-
-if not mcp_hub.is_initialized:
-    raise Exception("McpHub is not initialized")
 
 class UseMcpTool(BaseTool):
     NAME = "use_mcp_tool"
@@ -49,14 +47,16 @@ class UseMcpTool(BaseTool):
     }
     
     async def _a_do_run(self, server_name: str, tool_name: str, arguments: str):
-        """
-        Use a tool provided by a connected MCP server.
+        """Use a tool provided by a connected MCP server.
 
         Args:
             server_name: The name of the MCP server that provides the tool.
             tool_name: The name of the tool to be used.
             arguments: A JSON object containing the tool's input parameters,, following the tool's input schema.
         """
+        if not mcp_hub._servers_initialized:
+            await mcp_hub.initialize_mcp_servers()
+            
         mcp_connection = await mcp_hub.get_mcp_connection(server_name)
         if mcp_connection is None:
             avaliable_connections = mcp_hub.list_connections()
@@ -79,11 +79,11 @@ class UseMcpTool(BaseTool):
             result = await mcp_connection.call_tool(tool_name, json_data)
             return result
         except Exception as e:
+            print(traceback.format_exc())
             return f"Failed to call tool {tool_name} in server {server_name}: {e}"
     
     def do_run(self, server_name: str, tool_name: str, arguments: str):
-        """
-        Use a tool provided by a connected MCP server.
+        """Use a tool provided by a connected MCP server.
 
         Args:
             server_name: The name of the MCP server that provides the tool.
@@ -95,5 +95,5 @@ class UseMcpTool(BaseTool):
         
 if __name__ == "__main__":
     tool = UseMcpTool()
-    result = tool.do_run("weather", "get_weather", '{"city": "Shanghai", "date": "2023-03-20"}')
+    result = tool.do_run("filesystem", "list_directory", '{"path": "/home/wangchen/projects/Roo-Code"}')
     print(result)

@@ -137,7 +137,7 @@ class McpConnection:
     def get_tool(self, tool_name: str) -> Optional[ToolSchema]:
         """Get a tool."""
         for tool in self.tools:
-            if tool.function["name"] == tool_name:
+            if tool["function"]["name"] == tool_name:
                 return tool
         return None
 

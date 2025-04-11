@@ -134,6 +134,13 @@ class McpConnection:
         )
         return tool_schema
 
+    def get_tool(self, tool_name: str) -> Optional[ToolSchema]:
+        """Get a tool."""
+        for tool in self.tools:
+            if tool.function["name"] == tool_name:
+                return tool
+        return None
+
     async def call_tool(self, name: str, arguments: dict) -> mcp_types.CallToolResult:
         """Call a tool."""
         return await self._session.call_tool(name, arguments)
@@ -173,12 +180,19 @@ class McpHub:
         """Initialize the MCP manager."""
         self._lock = anyio.Lock()
         self._task_group: Optional[TaskGroup] = None
-        self._initialized = False
+        self._servers_initialized = False
 
     def __new__(cls) -> Self:
         """Singleton pattern."""
         if cls._instance is None:
             cls._instance = super().__new__(cls)
+        return cls._instance
+    
+    @classmethod
+    def get_instance(cls) -> Self:
+        """Singleton pattern."""
+        if cls._instance is None:
+            cls._instance = cls()
         return cls._instance
 
     def get_mcp_setting_filepath(self):
@@ -217,7 +231,7 @@ class McpHub:
 
     async def initialize_mcp_servers(self):
         """Initialize all MCP connections."""
-        if self._initialized:
+        if self._servers_initialized:
             logger.info("MCP servers already initialized.")
             return
         logger.info("initialize mcp servers...")
@@ -238,18 +252,17 @@ class McpHub:
         except Exception as e:
             logger.error(f"Error updating MCP connections: {e}")
             return
-        self._initialized = True
+        self._servers_initialized = True
         logger.info("mcp servers initialized.")
 
     async def get_mcp_connection(self, server_name: str) -> Optional[McpConnection]:
         """Get a MCP connection."""
-        await self._lock.acquire()
         connection = None
-        for conn in self.connections:
-            if conn.name == server_name:
-                connection = conn
-                break
-        self._lock.release()
+        async with self._lock:
+            for conn in self.connections:
+                if conn.name == server_name:
+                    connection = conn
+                    break
         return connection
 
     async def _add_mcp_connection(
@@ -327,13 +340,36 @@ class McpHub:
                 logger.info(f"Shutting down MCP connection [{connection.name}]")
             self.connections = []
 
+    @property
+    def is_initialized(self) -> bool:
+        """Check if MCP servers are initialized.
+
+        Returns:
+            bool: True if MCP servers are initialized, False otherwise.
+        """
+        return self._servers_initialized
+    
+    def list_connections(self) -> List[str]:
+        """List all MCP connections."""
+        return [
+            connection.name for connection in self.connections
+        ]
+    
+    def list_tools(self) -> Dict[str, List[ToolSchema]]:
+        """List all tools."""
+        tools = {}
+        for connection in self.connections:
+            tools[connection.name] = connection.tools
+        return tools
+
 
 if __name__ == "__main__":
 
     async def async_main():
         mcp_hub = McpHub()
+        await mcp_hub.initialize_mcp_servers()
         while True:
-            user_input =input("Enter command: ")
+            user_input = input("Enter command: ")
             if user_input == "list":
                 for connection in mcp_hub.connections:
                     print(f"{connection.name}: {connection.status}")

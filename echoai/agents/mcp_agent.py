@@ -39,14 +39,7 @@ class McpAgent(Agent):
         mcp_hub = McpHub.get_instance()
         mcp_connections = mcp_hub.list_connections()
         mcp_tools = {}
-        temp_mcp_tools = mcp_hub.list_tools()
-        for server_name, tools in temp_mcp_tools.items():
-            mcp_tools[server_name] = []
-            for tool in tools:
-                if "screenshot" in tool["function"]["name"]:
-                    continue
-                mcp_tools[server_name].append(tool)
-            tools = mcp_tools[server_name]
+        mcp_tools = mcp_hub.list_tools()
         mcp_prompt = PromptLoader.get_instance().render_template(
             "partials/mcp.prompt",
             mcp_servers=mcp_connections,

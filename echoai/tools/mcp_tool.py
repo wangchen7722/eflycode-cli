@@ -88,5 +88,5 @@ class UseMcpTool(BaseTool):
     
 if __name__ == "__main__":
     tool = UseMcpTool()
-    tool_result = tool.do_run("filesystem", "list_directory", '{"path": "/root/projects/Roo-Code"}')
+    tool_result = tool.run("filesystem", "list_directory", '{"path": "/root/projects/Roo-Code"}')
     print(tool_result)

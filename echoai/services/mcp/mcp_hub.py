@@ -8,6 +8,7 @@ import threading
 import traceback
 from typing import Any, Dict, List, Optional, Self, Union
 
+import anyio
 from anyio import create_task_group
 from anyio.abc import TaskGroup
 from mcp import ClientSession, StdioServerParameters
@@ -280,24 +281,13 @@ class McpHub:
 
     async def _get_mcp_connection(self, server_name: str) -> Optional[McpConnection]:
         """Get a MCP connection."""
-        print(f"[DEBUG] _get_mcp_connection begin in thread: {threading.current_thread().name}")
         connection = None
-        # async with self._lock:
-        print(f"[DEBUG] Acquired lock in _get_mcp_connection for {server_name}")
-        for conn in self.connections:
-            if conn.name == server_name:
-                connection = conn
-                break
-        print(f"[DEBUG] _get_mcp_connection end in thread: {threading.current_thread().name}")
+        async with self._lock:
+            for conn in self.connections:
+                if conn.name == server_name:
+                    connection = conn
+                    break
         return connection
-
-        # connection = None
-        # async with self._lock:
-        #     for conn in self.connections:
-        #         if conn.name == server_name:
-        #             connection = conn
-        #             break
-        # return connection
     
     def get_mcp_connection(self, server_name: str) -> Optional[McpConnection]:
         """Get a MCP connection."""
@@ -330,39 +320,39 @@ class McpHub:
 
     async def _update_mcp_connections(self, mcp_server_setting: MCPServerSetting):
         """Update all MCP connections."""
-        # async with self._lock:
-        currnet_server_names = [connection.name for connection in self.connections]
-        new_server_names = [
-            server_name for server_name in mcp_server_setting.mcpServers.keys()
-        ]
-        # 删除连接
-        for server_name in currnet_server_names:
-            if server_name not in new_server_names:
-                await self._remove_mcp_connection(server_name)
-                logger.info(f"Removed MCP connection [{server_name}]")
-        # 添加或更新连接
-        for server_name, server_config in mcp_server_setting.mcpServers.items():
-            if server_name in currnet_server_names:
-                try:
+        async with self._lock:
+            currnet_server_names = [connection.name for connection in self.connections]
+            new_server_names = [
+                server_name for server_name in mcp_server_setting.mcpServers.keys()
+            ]
+            # 删除连接
+            for server_name in currnet_server_names:
+                if server_name not in new_server_names:
                     await self._remove_mcp_connection(server_name)
-                    await self._add_mcp_connection(server_name, server_config)
-                    logger.info(f"update MCP connection [{server_name}]")
-                except Exception as e:
-                    logger.error(
-                        f"Error updating MCP connection [{server_name}]: {e}"
-                    )
-                    continue
-            else:
-                try:
-                    await self._add_mcp_connection(server_name, server_config)
-                    logger.info(f"add MCP connection [{server_name}]")
-                except Exception as e:
-                    error_details = traceback.format_exc()
-                    print(error_details)
-                    logger.error(
-                        f"Error adding MCP connection [{server_name}]: {e}"
-                    )
-                    continue
+                    logger.info(f"Removed MCP connection [{server_name}]")
+            # 添加或更新连接
+            for server_name, server_config in mcp_server_setting.mcpServers.items():
+                if server_name in currnet_server_names:
+                    try:
+                        await self._remove_mcp_connection(server_name)
+                        await self._add_mcp_connection(server_name, server_config)
+                        logger.info(f"update MCP connection [{server_name}]")
+                    except Exception as e:
+                        logger.error(
+                            f"Error updating MCP connection [{server_name}]: {e}"
+                        )
+                        continue
+                else:
+                    try:
+                        await self._add_mcp_connection(server_name, server_config)
+                        logger.info(f"add MCP connection [{server_name}]")
+                    except Exception as e:
+                        error_details = traceback.format_exc()
+                        print(error_details)
+                        logger.error(
+                            f"Error adding MCP connection [{server_name}]: {e}"
+                        )
+                        continue
 
     async def _remove_mcp_connection(self, server_name: str):
         """Remove a MCP connection."""
@@ -373,11 +363,11 @@ class McpHub:
 
     async def _remove_all_connections(self):
         """Close all MCP connections."""
-        # async with self._lock:
-        for connection in self.connections:
-            connection.shutdown()
-            logger.info(f"shutting down MCP connection [{connection.name}]")
-        self.connections = []
+        async with self._lock:
+            for connection in self.connections:
+                connection.shutdown()
+                logger.info(f"shutting down MCP connection [{connection.name}]")
+            self.connections = []
 
     @property
     def is_initialized(self) -> bool:
@@ -403,13 +393,16 @@ class McpHub:
         """Asynchronously launch MCP servers.
         First initialize the service and wait for the shutdown signal, then close all connections.
         """
+        # 在事件循环中初始化 asyncio.Lock
+        self._lock = asyncio.Lock()
         logger.info("launching MCP servers...")
         await self._initialize_mcp_servers()
         self._server_initialize_event.set()
         logger.info("mcp servers launched.")
         # 异步等待关闭信号（将阻塞操作转为异步调用）
-        # await anyio.from_thread.run_sync(self._server_shutdown_event.wait)
-        self._server_shutdown_event.wait()
+        # await self._background_loop.run_until_complete(self._server_shutdown_event.wait())
+        await anyio.from_thread.run_sync(self._server_shutdown_event.wait)
+        # self._server_shutdown_event.wait()
         logger.info("shutting down MCP servers...")
         await self._remove_all_connections()
         logger.info("MCP servers shutdown.")
@@ -426,8 +419,6 @@ class McpHub:
 
         def run_loop():
             asyncio.set_event_loop(self._background_loop)
-            # 在事件循环中初始化 asyncio.Lock
-            self._lock = asyncio.Lock()
             # 将异步启动任务调度到后台事件循环中
             self._background_loop.create_task(self._async_launch_mcp_servers())
             self._background_loop.run_forever()

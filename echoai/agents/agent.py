@@ -24,7 +24,8 @@ from echoai.llms.schema import ChatCompletionChunk, Message, Usage, ToolCall
 from echoai.utils.system_utils import get_system_info, get_workspace_info
 from echoai.utils.tool_utils import apply_tool_calls_template
 # from echoai.memory import AgentMemory
-from echoai.tools import BaseTool, BaseMemoryTool
+from echoai.tools.base_tool import BaseTool
+from echoai.tools.memory_tool import BaseMemoryTool
 from echoai.utils.logger import get_logger
 
 logger: logging.Logger = get_logger(log_level=logging.DEBUG)

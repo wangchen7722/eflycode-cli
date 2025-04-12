@@ -1,10 +1,11 @@
 from typing import Optional
 
+from echoai.prompt.prompt_loader import PromptLoader
+from echoai.services.mcp.mcp_hub import McpHub
 from echoai.agents.agent import Agent, VectorDBConfig
 from echoai.llms.llm_engine import LLMEngine
-from echoai.tools import ReadFileTool, CreateFileTool, EditFileTool, InsertFileTool, SearchFilesTool, ListFilesTool, \
-    ExecuteCommandTool, ListCodeDefinitionsTool
-
+from echoai.tools.file_tool import ReadFileTool, CreateFileTool, EditFileTool, InsertFileTool, SearchFilesTool, ListFilesTool
+from echoai.tools.mcp_tool import UseMcpTool
 
 class McpAgent(Agent):
     ROLE = "developer"
@@ -20,19 +21,54 @@ class McpAgent(Agent):
         description: Optional[str] = None,
         **kwargs,
     ):
-        developer_tools = [
-            # 文件操作工具
-            ReadFileTool(), CreateFileTool(), EditFileTool(), InsertFileTool(), SearchFilesTool(), ListFilesTool(),
-            # 执行命令工具
-            ExecuteCommandTool(),
-            # 代码分析工具
-            ListCodeDefinitionsTool()
+        mcp_agent_tools = [
+            UseMcpTool(), 
+            # ReadFileTool(), CreateFileTool(), EditFileTool(), InsertFileTool(), SearchFilesTool(), ListFilesTool()
         ]
         super().__init__(
             name=name,
             llm_engine=llm_engine,
             vector_db_config=vector_db_config,
             description=description,
-            tools=developer_tools,
+            tools=mcp_agent_tools,
             **kwargs,
         )
+        
+    def system_prompt(self):
+        super_system_prompt = super().system_prompt()
+        mcp_hub = McpHub.get_instance()
+        mcp_connections = mcp_hub.list_connections()
+        mcp_tools = {}
+        temp_mcp_tools = mcp_hub.list_tools()
+        for server_name, tools in temp_mcp_tools.items():
+            mcp_tools[server_name] = []
+            for tool in tools:
+                if "screenshot" in tool["function"]["name"]:
+                    continue
+                mcp_tools[server_name].append(tool)
+            tools = mcp_tools[server_name]
+        mcp_prompt = PromptLoader.get_instance().render_template(
+            "partials/mcp.prompt",
+            mcp_servers=mcp_connections,
+            mcp_tools=mcp_tools,
+        )
+        return f"{super_system_prompt}\n{mcp_prompt}"
+
+if __name__ == "__main__":
+    import os
+    from dotenv import load_dotenv
+    from echoai.llms import LLMConfig, OpenAIEngine
+    load_dotenv()
+    llm_config = LLMConfig(
+        model=os.environ["ECHO_MODEL"],
+        base_url=os.environ["ECHO_BASE_URL"],
+        api_key=os.environ["ECHO_API_KEY"],
+        temperature=0.1
+    )
+    mcp_agent = McpAgent(llm_engine=OpenAIEngine(llm_config))
+    
+    mcp_hub = McpHub.get_instance()
+    mcp_hub.launch_mcp_servers()
+    mcp_agent.run_loop()
+    mcp_hub.shutdown_mcp_servers()
+    

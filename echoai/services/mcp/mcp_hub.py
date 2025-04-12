@@ -8,7 +8,6 @@ import threading
 import traceback
 from typing import Any, Dict, List, Optional, Self, Union
 
-import anyio
 from anyio import create_task_group
 from anyio.abc import TaskGroup
 from mcp import ClientSession, StdioServerParameters
@@ -23,7 +22,7 @@ from echoai.services.mcp.schema import (
     StdioServerConfig,
     WebsocketServerConfig,
 )
-from echoai.tools.base_tool import ToolSchema
+from echoai.tools.schema import ToolSchema
 from echoai.utils.logger import get_logger
 
 logger: logging.Logger = get_logger(log_level=logging.DEBUG)
@@ -61,8 +60,8 @@ class McpConnection:
         self.resources: List[mcp_types.Resource] = []
 
         self._session: Optional[ClientSession] = None
-        self._initialize_event: anyio.Event = anyio.Event()
-        self._shutdown_event: anyio.Event = anyio.Event()
+        self._initialize_event: asyncio.Event = asyncio.Event()
+        self._shutdown_event: asyncio.Event = asyncio.Event()
         self._exit_stack: AsyncExitStack = AsyncExitStack()
 
     def shutdown(self):
@@ -84,7 +83,7 @@ class McpConnection:
         if self.config.type == "stdio":
             await self._connect_to_stdio_server()
         elif self.config.type == "sse":
-            raise NotImplementedError("SSE not supported yet.")
+            await self._connect_to_sse_server()
         elif self.config.type == "websocket":
             raise NotImplementedError("Websocket not supported yet.")
         else:
@@ -104,6 +103,15 @@ class McpConnection:
         # 创建并打开 session
         self._session = await self._exit_stack.enter_async_context(ClientSession(read_stream, write_stream))
         # NOTE: 此时还未初始化完成
+        
+    async def _connect_to_sse_server(self):
+        """Connect to a SSE server."""
+        transport = await self._exit_stack.enter_async_context(
+            sse_client(self.config.url),
+        )
+        read_stream, write_stream = transport
+        # 创建并打开 session
+        self._session = await self._exit_stack.enter_async_context(ClientSession(read_stream, write_stream))
 
     async def _initialize(self):
         """Initialize the MCP connection."""
@@ -126,12 +134,13 @@ class McpConnection:
 
     def _convert_mcp_tool_schema(self, mcp_tool: mcp_types.Tool) -> ToolSchema:
         """Convert a MCP tool schema to a ToolSchema."""
+        # 过滤掉 inputSchema 中名为
         tool_schema = ToolSchema(
             type="function",
             function={
                 "name": mcp_tool.name,
                 "description": mcp_tool.description,
-                "parameters": mcp_tool.inputSchema,
+                "parameters": mcp_tool.inputSchema.get("properties", {}),
             },
         )
         return tool_schema
@@ -180,9 +189,8 @@ class McpHub:
 
     def __init__(self) -> None:
         """Initialize the MCP manager."""
-        self._lock = anyio.Lock()
+        self._lock = None
         self._task_group: Optional[TaskGroup] = None
-        self._servers_initialized = False
         
         # 以下为后台服务相关属性
         self._server_thread: Optional[threading.Thread] = None
@@ -225,7 +233,18 @@ class McpHub:
         # 验证 mcpServers 字段中的每个子字段
         for server_name, server_config in mcp_setting["mcpServers"].items():
             if "type" not in server_config:
-                server_config["type"] = "stdio"
+                if "command" in server_config:
+                    server_config["type"] = "stdio"
+                elif "url" in server_config:
+                    server_url = server_config["url"]
+                    if server_url.startswith("http"):
+                        server_config["type"] = "sse"
+                    elif server_url.startswith("ws"):
+                        server_config["type"] = "websocket"
+                    else:
+                        raise ValueError("Unknown MCP server type.")
+                else:
+                    raise ValueError("Unknown MCP server type.")
             if server_config["type"] == "stdio":
                 server_config_obj = StdioServerConfig.model_validate(server_config)
             elif server_config["type"] == "sse":
@@ -237,11 +256,8 @@ class McpHub:
             validated_mcp_setting["mcpServers"][server_name] = server_config_obj
         return MCPServerSetting.model_validate(validated_mcp_setting)
 
-    async def initialize_mcp_servers(self):
+    async def _initialize_mcp_servers(self):
         """Initialize all MCP connections."""
-        if self._servers_initialized:
-            logger.info("MCP servers already initialized.")
-            return
         logger.info("initialize mcp servers...")
         mcp_setting_filepath = self.get_mcp_setting_filepath()
         try:
@@ -256,11 +272,10 @@ class McpHub:
             logger.error(f"Error validating MCP setting: {e}")
             return
         try:
-            await self.update_mcp_connections(mcp_server_setting)
+            await self._update_mcp_connections(mcp_server_setting)
         except Exception as e:
             logger.error(f"Error updating MCP connections: {e}")
             return
-        self._servers_initialized = True
         logger.info("mcp servers initialized.")
 
     async def _get_mcp_connection(self, server_name: str) -> Optional[McpConnection]:
@@ -275,7 +290,8 @@ class McpHub:
     
     def get_mcp_connection(self, server_name: str) -> Optional[McpConnection]:
         """Get a MCP connection."""
-        return asyncio.run_coroutine_threadsafe(self._get_mcp_connection(server_name), self._background_loop).result()
+        future = asyncio.run_coroutine_threadsafe(self._get_mcp_connection(server_name), self._background_loop)
+        return future.result()
 
     async def _add_mcp_connection(
         self,
@@ -301,7 +317,7 @@ class McpHub:
         await mcp_connection.wait_for_initialize()
         self.connections.append(mcp_connection)
 
-    async def update_mcp_connections(self, mcp_server_setting: MCPServerSetting):
+    async def _update_mcp_connections(self, mcp_server_setting: MCPServerSetting):
         """Update all MCP connections."""
         async with self._lock:
             currnet_server_names = [connection.name for connection in self.connections]
@@ -339,17 +355,17 @@ class McpHub:
 
     async def _remove_mcp_connection(self, server_name: str):
         """Remove a MCP connection."""
-        connection = await self.get_mcp_connection(server_name)
+        connection = await self._get_mcp_connection(server_name)
         if connection:
             connection.shutdown()
             self.connections.remove(connection)
 
-    async def remove_all_connections(self):
+    async def _remove_all_connections(self):
         """Close all MCP connections."""
         async with self._lock:
             for connection in self.connections:
                 connection.shutdown()
-                logger.info(f"Shutting down MCP connection [{connection.name}]")
+                logger.info(f"shutting down MCP connection [{connection.name}]")
             self.connections = []
 
     @property
@@ -359,7 +375,7 @@ class McpHub:
         Returns:
             bool: True if MCP servers are initialized, False otherwise.
         """
-        return self._servers_initialized
+        return self._server_initialize_event.is_set()
 
     def list_connections(self) -> List[str]:
         """List all MCP connections."""
@@ -376,29 +392,43 @@ class McpHub:
         """Asynchronously launch MCP servers.
         First initialize the service and wait for the shutdown signal, then close all connections.
         """
+        # ✅ 在事件循环中初始化 asyncio.Lock
+        self._lock = asyncio.Lock()
         logger.info("launching MCP servers...")
-        await self.initialize_mcp_servers()
+        await self._initialize_mcp_servers()
         self._server_initialize_event.set()
         logger.info("mcp servers launched.")
         # 异步等待关闭信号（将阻塞操作转为异步调用）
-        await anyio.from_thread.run_sync(self._server_shutdown_event.wait)
-        logger.info("shutting down MCP servers asynchronously...")
-        await self.remove_all_connections()
+        # await anyio.from_thread.run_sync(self._server_shutdown_event.wait)
+        self._server_shutdown_event.wait()
+        logger.info("shutting down MCP servers...")
+        await self._remove_all_connections()
         logger.info("MCP servers shutdown.")
         
     def launch_mcp_servers(self):
         """Launch MCP servers in a background thread.
         This method will block until the initialization is complete.
         """
-        logger.info("Launching MCP servers (sync) in background thread...")
+        if self._server_thread is not None and self._server_thread.is_alive() and self._server_initialize_event.is_set():
+            return
         self._server_initialize_event.clear()
         self._server_shutdown_event.clear()
         self._background_loop = asyncio.new_event_loop()
 
+        # def run_loop():
+        #     asyncio.set_event_loop(self._background_loop)
+        #     # 将异步启动任务调度到后台事件循环中
+        #     self._background_loop.create_task(self._async_launch_mcp_servers())
+        #     self._background_loop.run_forever()
         def run_loop():
             asyncio.set_event_loop(self._background_loop)
-            # 将异步启动任务调度到后台事件循环中
-            self._background_loop.create_task(self._async_launch_mcp_servers())
+
+            # ✅ 保证 _async_launch_mcp_servers 执行完才 set_event
+            async def runner():
+                await self._async_launch_mcp_servers()
+                self._server_initialize_event.set()
+
+            self._background_loop.run_until_complete(runner())
             self._background_loop.run_forever()
 
         self._server_thread = threading.Thread(
@@ -412,7 +442,6 @@ class McpHub:
     def shutdown_mcp_servers(self):
         """Shutdown the MCP servers service, send the shutdown signal and wait for the background thread to exit.
         """
-        logger.info("Shutting down MCP servers (sync)...")
         self._server_shutdown_event.set()
         if self._background_loop is not None:
             self._background_loop.call_soon_threadsafe(self._background_loop.stop)
@@ -426,7 +455,7 @@ class McpHub:
 if __name__ == "__main__":
     hub = McpHub.get_instance()
     try:
-        hub.launch_servers()
+        hub.launch_mcp_servers()
         while True:
             user_input = input("Enter command: ").strip()
             if user_input == "list":
@@ -442,9 +471,9 @@ if __name__ == "__main__":
                 for connection in hub.connections:
                     print(f"{connection.name}: {connection.resources}")
             elif user_input == "restart":
-                hub.shutdown_servers()
-                hub.launch_servers()
+                hub.shutdown_mcp_servers()
+                hub.launch_mcp_servers()
             elif user_input == "exit":
                 break
     finally:
-        hub.shutdown_servers()
+        hub.shutdown_mcp_servers()

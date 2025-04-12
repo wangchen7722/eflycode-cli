@@ -1,5 +1,4 @@
 import json
-from unittest import result
 
 import jsonschema
 
@@ -38,15 +37,17 @@ class UseMcpTool(BaseTool):
                 "type": "string",
                 "description": "A JSON object containing the tool's input parameters, , following the tool's input schema."
             }
-        }
+        },
+        "required": ["server_name", "tool_name", "arguments"],
     }
     EXAMPLES = {
         "Request to use weather tool provided by weather MCP server": {
-            "server_name": "weather",
-            "tool_name": "get_weather",
+            "type": TYPE,
+            "name": NAME,
             "arguments": {
-                "city": "Shanghai",
-                "date": "2023-03-20"
+                "server_name": "weather",
+                "tool_name": "get_weather",
+                "arguments": "{\"city\": \"Shanghai\", \"date\": \"2023-03-20\"}"
             }
         }
     }
@@ -85,3 +86,7 @@ class UseMcpTool(BaseTool):
         except Exception as e:
             return f"Failed to call tool {tool_name} in server {server_name}: {e}"
     
+if __name__ == "__main__":
+    tool = UseMcpTool()
+    tool_result = tool.do_run("filesystem", "list_directory", '{"path": "/root/projects/Roo-Code"}')
+    print(tool_result)

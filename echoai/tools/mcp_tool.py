@@ -17,7 +17,7 @@ if not mcp_hub.is_initialized:
 class UseMcpTool(BaseTool):
     NAME = "use_mcp_tool"
     TYPE = "function"
-    IS_APPROVAL = True
+    IS_APPROVAL = False
     DESCRIPTION = """
     Request to use a tool provided by a connected MCP server. Each MCP server can provide multiple tools with different capabilities. Tools have defined input schemas that specify required and optional parameters.
     """

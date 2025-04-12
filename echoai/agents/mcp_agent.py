@@ -23,7 +23,7 @@ class McpAgent(Agent):
     ):
         mcp_agent_tools = [
             UseMcpTool(), 
-            # ReadFileTool(), CreateFileTool(), EditFileTool(), InsertFileTool(), SearchFilesTool(), ListFilesTool()
+            ReadFileTool(), CreateFileTool(), EditFileTool(), InsertFileTool(), SearchFilesTool(), ListFilesTool()
         ]
         super().__init__(
             name=name,
@@ -64,4 +64,8 @@ if __name__ == "__main__":
     mcp_hub.launch_mcp_servers()
     mcp_agent.run_loop()
     mcp_hub.shutdown_mcp_servers()
+
+    """
+利用google搜索MCP相关文档，并保存到当前目录下的mcp_document.md中，我想要查询的文档内容是如何编写mcp服务，在你详细了解如何创建服务后再编写文档，你可以多次搜索和访问网页。你应该尽可能通过官方网站和文档来获取信息。并在获取信息后，继续搜索相关内容，以获得更加完整且详细的文档，包括详细的概念介绍、解释以及对应的示例代码，最后再将其保存到mcp_document.md中。
+    """
     

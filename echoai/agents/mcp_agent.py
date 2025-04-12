@@ -6,7 +6,7 @@ from echoai.tools import ReadFileTool, CreateFileTool, EditFileTool, InsertFileT
     ExecuteCommandTool, ListCodeDefinitionsTool
 
 
-class Developer(Agent):
+class McpAgent(Agent):
     ROLE = "developer"
     DESCRIPTION = """
     一名技术精湛的软件开发者，精通多种编程语言、开发框架、设计模式以及最佳实践。

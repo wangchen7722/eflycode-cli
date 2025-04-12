@@ -1,6 +1,8 @@
 from contextlib import AsyncExitStack, asynccontextmanager
 from enum import Enum as PyEnum
+import threading
 import json
+import time
 import logging
 from pathlib import Path
 import traceback
@@ -157,11 +159,12 @@ async def mcp_connection_lifecycle_task(mcp_connection: McpConnection):
     try:
         async with mcp_connection.create_transport() as (read_stream, write_stream):
             mcp_session = await mcp_connection.create_session(read_stream, write_stream)
-            # 这里需要使用 async with 来确保 session 能够正常被初始化
-            async with mcp_session:
-                await mcp_connection.initialize()
-
-                await mcp_connection.wait_for_shutdown()
+        await mcp_session.__aenter__()
+        try:
+            await mcp_connection.initialize()
+            await mcp_connection.wait_for_shutdown()
+        finally:
+            await mcp_session.__aexit__(None, None, None)
     except Exception as e:
         error_details = traceback.format_exc()
         logger.error(f"Error in MCP connection lifecycle task for {name}: {e}")
@@ -187,7 +190,7 @@ class McpHub:
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
-    
+
     @classmethod
     def get_instance(cls) -> Self:
         """Singleton pattern."""
@@ -348,13 +351,11 @@ class McpHub:
             bool: True if MCP servers are initialized, False otherwise.
         """
         return self._servers_initialized
-    
+
     def list_connections(self) -> List[str]:
         """List all MCP connections."""
-        return [
-            connection.name for connection in self.connections
-        ]
-    
+        return [connection.name for connection in self.connections]
+
     def list_tools(self) -> Dict[str, List[ToolSchema]]:
         """List all tools."""
         tools = {}
@@ -362,12 +363,61 @@ class McpHub:
             tools[connection.name] = connection.tools
         return tools
 
+_mcp_server_initialized = False
+_mcp_server_thread = None
+_mcp_server_shutdown_thread_event = threading.Event()
+
+
+async def _async_launch_mcp_servers():
+    """Launch MCP servers."""
+    global _mcp_server_initialized
+    # 启动 MCP 服务器
+    logger.info("Launching MCP servers...")
+    mcp_hub = McpHub()
+    await mcp_hub.initialize_mcp_servers()
+    _mcp_server_initialized = True
+    logger.info("MCP servers launched.")
+    while not _mcp_server_shutdown_thread_event.is_set():
+        await anyio.sleep(0.5)
+    logger.info("Shutting down MCP servers...")
+    await mcp_hub.remove_all_connections()
+    logger.info("MCP servers shutdown.")
+
+def is_mcp_server_initialized():
+    """Check if MCP servers are initialized."""
+    return _mcp_server_initialized
+
+
+def launch_mcp_servers():
+    """Setup MCP hub."""
+    global _mcp_server_thread
+    _mcp_server_thread = threading.Thread(
+        target=lambda: anyio.run(_async_launch_mcp_servers),
+        daemon=True,
+    )
+    _mcp_server_thread.start()
+    # 等待 MCP 服务器初始化完成
+    while not _mcp_server_initialized:
+        time.sleep(0.5)
+
+
+
+def shutdown_mcp_servers():
+    """Shutdown MCP hub."""
+    global _mcp_server_thread, _mcp_server_initialized
+    _mcp_server_shutdown_thread_event.set()
+    # 等待 MCP 服务器线程退出
+    _mcp_server_thread.join()
+    _mcp_server_shutdown_thread_event.clear()
+    _mcp_server_initialized = False
+    _mcp_server_thread = None
+
 
 if __name__ == "__main__":
 
     async def async_main():
-        mcp_hub = McpHub()
-        await mcp_hub.initialize_mcp_servers()
+        launch_mcp_servers()
+        mcp_hub = McpHub.get_instance()
         while True:
             user_input = input("Enter command: ")
             if user_input == "list":
@@ -383,10 +433,10 @@ if __name__ == "__main__":
                 for connection in mcp_hub.connections:
                     print(f"{connection.name}: {connection.resources}")
             elif user_input == "restart":
-                await mcp_hub.remove_all_connections()
-                await mcp_hub.initialize_mcp_servers()
+                shutdown_mcp_servers()
+                launch_mcp_servers()
             elif user_input == "exit":
                 break
-        await mcp_hub.remove_all_connections()
+        shutdown_mcp_servers()
 
     anyio.run(async_main)

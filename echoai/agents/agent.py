@@ -28,7 +28,7 @@ from echoai.tools.base_tool import BaseTool
 from echoai.tools.memory_tool import BaseMemoryTool
 from echoai.utils.logger import get_logger
 
-logger: logging.Logger = get_logger(log_level=logging.DEBUG)
+logger: logging.Logger = get_logger()
 
 
 class AgentResponseChunkType(Enum):
@@ -639,7 +639,7 @@ class Agent:
         self._history_messages.append(
             {"role": "assistant", "content": response_content}
         )
-        logger.debug(f"{self.name}: {response_content}")
+        # logger.debug(f"{self.name}: {response_content}")
         # logger.debug(
         #     json.dumps({
         #         "messages": messages,
@@ -670,7 +670,7 @@ class Agent:
         #     "partials/workspace.prompt",
         #     workspace=get_workspace_info(get_system_info()["work_dir"])
         # )
-        logger.debug(f"user: {content}")
+        # logger.debug(f"user: {content}")
         messages = self._history_messages + [{"role": "user", "content": content}]
         messages = self._preprocess_messages(messages)
         self._history_messages.append({"role": "user", "content": content})

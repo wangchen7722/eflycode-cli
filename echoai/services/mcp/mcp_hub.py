@@ -1,10 +1,10 @@
-from contextlib import AsyncExitStack, asynccontextmanager
+from contextlib import AsyncExitStack
 from enum import Enum as PyEnum
-import threading
 import json
-import time
+import threading
 import logging
 from pathlib import Path
+import time
 import traceback
 from typing import Any, Dict, List, Optional, Self, Union
 
@@ -79,33 +79,33 @@ class McpConnection:
         await self._initialize_event.wait()
         self.status = McpServerStatus.CONNECTED
 
-    @asynccontextmanager
-    async def create_transport(self):
-        """Create a transport for the MCP server."""
+    async def connect(self):
+        """Connect to the MCP server."""
         if self.config.type == "stdio":
-            server_params = StdioServerParameters(
-                command=self.config.command, args=self.config.args, env=self.config.env
-            )
-            transport = stdio_client(server_params)
-            async with transport as (read_stream, write_stream):
-                yield (read_stream, write_stream)
-        # TODO: 支持更多种类 MCP 服务
+            await self._connect_to_stdio_server()
         elif self.config.type == "sse":
             raise NotImplementedError("SSE not supported yet.")
-            # yield sse_client(self.config.url, headers=self.config.headers)
         elif self.config.type == "websocket":
             raise NotImplementedError("Websocket not supported yet.")
-            # yield websocket_client(self.config.url)
         else:
             raise ValueError("Unknown MCP server type.")
+        await self._initialize()
 
-    async def create_session(self, read_stream, write_stream):
-        """Create a session for the MCP server."""
-        mcp_session = ClientSession(read_stream, write_stream)
-        self._session = mcp_session
-        return mcp_session
+    async def _connect_to_stdio_server(self):
+        """Connect to a stdio server."""
+        server_params = StdioServerParameters(
+            command=self.config.command, args=self.config.args, env=self.config.env
+        )
+        # 自动启动 stdio mcp server
+        transport = await self._exit_stack.enter_async_context(
+            stdio_client(server_params),
+        )
+        read_stream, write_stream = transport
+        # 创建并打开 session
+        self._session = await self._exit_stack.enter_async_context(ClientSession(read_stream, write_stream))
+        # NOTE: 此时还未初始化完成
 
-    async def initialize(self):
+    async def _initialize(self):
         """Initialize the MCP connection."""
         initialize_result = await self._session.initialize()
         self.server_info = {
@@ -155,16 +155,10 @@ class McpConnection:
 async def mcp_connection_lifecycle_task(mcp_connection: McpConnection):
     """MCP connection lifecycle task."""
     name = mcp_connection.name
-    logger.info(f"Starting MCP connection lifecycle task for {name}")
+    logger.info(f"starting MCP connection lifecycle task for {name}")
     try:
-        async with mcp_connection.create_transport() as (read_stream, write_stream):
-            mcp_session = await mcp_connection.create_session(read_stream, write_stream)
-        await mcp_session.__aenter__()
-        try:
-            await mcp_connection.initialize()
-            await mcp_connection.wait_for_shutdown()
-        finally:
-            await mcp_session.__aexit__(None, None, None)
+        await mcp_connection.connect()
+        await mcp_connection.wait_for_shutdown()
     except Exception as e:
         error_details = traceback.format_exc()
         logger.error(f"Error in MCP connection lifecycle task for {name}: {e}")
@@ -310,7 +304,7 @@ class McpHub:
                     try:
                         await self._remove_mcp_connection(server_name)
                         await self._add_mcp_connection(server_name, server_config)
-                        logger.info(f"Updated MCP connection [{server_name}]")
+                        logger.info(f"update MCP connection [{server_name}]")
                     except Exception as e:
                         logger.error(
                             f"Error updating MCP connection [{server_name}]: {e}"
@@ -319,7 +313,7 @@ class McpHub:
                 else:
                     try:
                         await self._add_mcp_connection(server_name, server_config)
-                        logger.info(f"Added MCP connection [{server_name}]")
+                        logger.info(f"add MCP connection [{server_name}]")
                     except Exception as e:
                         error_details = traceback.format_exc()
                         print(error_details)
@@ -363,53 +357,51 @@ class McpHub:
             tools[connection.name] = connection.tools
         return tools
 
-_mcp_server_initialized = False
 _mcp_server_thread = None
-_mcp_server_shutdown_thread_event = threading.Event()
+_mcp_server_initialize_event = threading.Event()
+_mcp_server_shutdown_event = threading.Event()
 
 
 async def _async_launch_mcp_servers():
     """Launch MCP servers."""
-    global _mcp_server_initialized
     # 启动 MCP 服务器
-    logger.info("Launching MCP servers...")
+    logger.info("launching MCP servers...")
     mcp_hub = McpHub()
     await mcp_hub.initialize_mcp_servers()
-    _mcp_server_initialized = True
-    logger.info("MCP servers launched.")
-    while not _mcp_server_shutdown_thread_event.is_set():
-        await anyio.sleep(0.5)
-    logger.info("Shutting down MCP servers...")
+    # MCP 服务器初始化完成
+    _mcp_server_initialize_event.set()
+    logger.info("mcp servers launched.")
+    _mcp_server_shutdown_event.wait()
+    logger.info("shutting down MCP servers...")
     await mcp_hub.remove_all_connections()
     logger.info("MCP servers shutdown.")
 
 def is_mcp_server_initialized():
     """Check if MCP servers are initialized."""
-    return _mcp_server_initialized
+    return _mcp_server_initialize_event.is_set()
 
 
 def launch_mcp_servers():
     """Setup MCP hub."""
     global _mcp_server_thread
+    logger.info("launching MCP servers...")
     _mcp_server_thread = threading.Thread(
         target=lambda: anyio.run(_async_launch_mcp_servers),
         daemon=True,
     )
     _mcp_server_thread.start()
     # 等待 MCP 服务器初始化完成
-    while not _mcp_server_initialized:
-        time.sleep(0.5)
-
+    _mcp_server_initialize_event.wait()
 
 
 def shutdown_mcp_servers():
     """Shutdown MCP hub."""
-    global _mcp_server_thread, _mcp_server_initialized
-    _mcp_server_shutdown_thread_event.set()
+    global _mcp_server_thread
+    _mcp_server_shutdown_event.set()
     # 等待 MCP 服务器线程退出
     _mcp_server_thread.join()
-    _mcp_server_shutdown_thread_event.clear()
-    _mcp_server_initialized = False
+    _mcp_server_shutdown_event.clear()
+    _mcp_server_initialize_event.clear()
     _mcp_server_thread = None
 
 

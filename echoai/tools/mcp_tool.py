@@ -2,7 +2,7 @@ import json
 
 import jsonschema
 
-from echoai.services.mcp.mcp_hub import McpHub
+from echoai.mcp.mcp_hub import McpHub
 from echoai.tools.base_tool import BaseTool
 from echoai.utils.logger import get_logger
 

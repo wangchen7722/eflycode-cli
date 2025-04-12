@@ -1,7 +1,7 @@
 from typing import Optional
 
 from echoai.prompt.prompt_loader import PromptLoader
-from echoai.services.mcp.mcp_hub import McpHub
+from echoai.mcp.mcp_hub import McpHub
 from echoai.agents.agent import Agent, VectorDBConfig
 from echoai.llms.llm_engine import LLMEngine
 from echoai.tools.file_tool import ReadFileTool, CreateFileTool, EditFileTool, InsertFileTool, SearchFilesTool, ListFilesTool

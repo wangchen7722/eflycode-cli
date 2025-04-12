@@ -17,7 +17,7 @@ from mcp.client.stdio import stdio_client
 from mcp.client.websocket import websocket_client
 import mcp.types as mcp_types
 
-from echoai.services.mcp.schema import (
+from echoai.mcp.schema import (
     MCPServerSetting,
     SSEServerConfig,
     StdioServerConfig,
@@ -215,7 +215,7 @@ class McpHub:
     def get_mcp_setting_filepath(self):
         """Get the MCP setting filepath."""
         # 当前项目的根目录
-        project_root = Path(__file__).parent.parent.parent.parent
+        project_root = Path(__file__).parent.parent.parent
         mcp_setting_filepath = project_root / "echoai_mcp_setting.json"
         if not mcp_setting_filepath.exists():
             with open(mcp_setting_filepath, "w") as f:
@@ -401,7 +401,7 @@ class McpHub:
         logger.info("mcp servers launched.")
         # 异步等待关闭信号（将阻塞操作转为异步调用）
         # await self._background_loop.run_until_complete(self._server_shutdown_event.wait())
-        await anyio.from_thread.run_sync(self._server_shutdown_event.wait)
+        await anyio.to_thread.run_sync(self._server_shutdown_event.wait)
         # self._server_shutdown_event.wait()
         logger.info("shutting down MCP servers...")
         await self._remove_all_connections()

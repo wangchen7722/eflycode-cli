@@ -1,11 +1,9 @@
-import re
 import json
 from typing import Literal, Sequence, Optional
 from pydantic import BaseModel, Field, field_validator
 
-uuid4_pattern = re.compile(
-    r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
-)
+from echoai.server.utils.validator import validate_uuid4
+
 
 # ===================================================================================
 # ================================= Message Content =================================
@@ -62,7 +60,7 @@ class ChatMessageToolCallContentModel(BaseModel):
     def id_must_be_startwith_tool_and_endwith_uuid4(cls, v: str):
         if not v.startswith("tool-"):
             raise ValueError("Invalid id")
-        if not uuid4_pattern.match(v[5:]):
+        if not validate_uuid4(v[5:]):
             raise ValueError("Invalid id")
         return v
 
@@ -79,11 +77,11 @@ class ChatMessageToolResultContentModel(BaseModel):
     content: str = Field(..., min_length=1)
     """工具结果内容"""
 
-    @field_validator("id")
-    def id_must_be_startwith_tool_and_endwith_uuid4(cls, v: str):
+    @field_validator("tool_call_id")
+    def tool_call_id_must_be_startwith_tool_and_endwith_uuid4(cls, v: str):
         if not v.startswith("tool-"):
             raise ValueError("Invalid id")
-        if not uuid4_pattern.match(v[5:]):
+        if not validate_uuid4(v[5:]):
             raise ValueError("Invalid id")
         return v
 
@@ -139,7 +137,7 @@ class ChatUserMessageModel(ChatBaseMessageModel):
     用户消息模型。
     """
 
-    type: Literal["user"]
+    role: Literal["user"]
     """消息类型"""
     content: (
         str
@@ -254,7 +252,7 @@ class ChatRequest(BaseModel):
 
     @field_validator("chat_id")
     def chat_id_must_be_uuid4(cls, v: str):
-        if not uuid4_pattern.match(v):
+        if not validate_uuid4(v):
             raise ValueError("Invalid chat_id")
         return v
 
@@ -285,11 +283,13 @@ class ChatChunkResponse(BaseModel):
     """
     聊天响应模型。
     """
+    type: Literal[""]
+    """消息类型"""
     delta: ChatAssistantMessageModel
     """助手的响应消息。
     包含模型生成的响应文本或其他内容。
     """
-    finish_reason: Optional[Literal["stop", "length"]]
+    finish_reason: Optional[Literal["stop", "length"]] = None
     """完成原因。
     指示模型停止生成响应的原因，可选字段。
     """

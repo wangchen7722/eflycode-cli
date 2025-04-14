@@ -19,6 +19,7 @@ class LLMConfig(TypedDict):
 logger: logging.Logger = get_logger(os.path.splitext(os.path.basename(__file__))[0])
 
 ALLOWED_GENERATE_CONFIG_KEYS = [
+    "model",
     "max_tokens",
     "frequency_penalty",
     "presence_penalty",

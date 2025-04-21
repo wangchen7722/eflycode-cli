@@ -3,7 +3,7 @@ from pathlib import Path
 from unittest import mock
 from jinja2 import TemplateNotFound
 
-from echo.prompt.prompt_loader import PromptLoader
+from echoai.core.prompt.prompt_loader import PromptLoader
 
 
 class TestPromptLoader(unittest.TestCase):
@@ -15,7 +15,7 @@ class TestPromptLoader(unittest.TestCase):
         PromptLoader._prompt_dirs = []
         
         # 注意这里的mock路径修改为PromptLoader所在模块的Environment
-        self.mock_env_patcher = mock.patch('echo.prompt.prompt_loader.Environment')
+        self.mock_env_patcher = mock.patch('echoai.core.prompt.prompt_loader.Environment')
         self.mock_env = self.mock_env_patcher.start()
         self.mock_env_instance = mock.MagicMock()
         self.mock_env.return_value = self.mock_env_instance

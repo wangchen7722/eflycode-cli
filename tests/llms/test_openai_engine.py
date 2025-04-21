@@ -3,9 +3,9 @@ import unittest
 from typing import Generator, List
 from unittest.mock import MagicMock, patch
 
-from echo.llms.openai_engine import OpenAIEngine
-from echo.llms.llm_engine import LLMConfig
-from echo.llms.schema import Message
+from echoai.core.llms.llm_engine import LLMConfig
+from echoai.core.llms.openai_engine import OpenAIEngine
+from echoai.core.llms.schema import Message
 
 
 class TestOpenAIEngine(unittest.TestCase):

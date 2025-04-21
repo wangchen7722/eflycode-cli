@@ -1,6 +1,10 @@
 import unittest
-from echo.llms.schema import ToolCall, ToolCallFunction
-from echo.utils.tool_utils import apply_tool_calls_template, _apply_tool_call_template
+
+from echoai.core.llms.schema import ToolCall, ToolCallFunction
+from echoai.core.utils.tool_utils import (
+    _apply_tool_call_template,
+    apply_tool_calls_template,
+)
 
 
 class TestToolUtils(unittest.TestCase):

@@ -1,8 +1,16 @@
 import os
-import unittest
-import tempfile
 import shutil
-from echo.tools.file_tool import ListFilesTool, ReadFileTool, SearchFilesTool, CreateFileTool, UpdateFileTool
+import tempfile
+import unittest
+
+from echoai.cli.tools.file_tool import (
+    CreateFileTool,
+    EditFileTool,
+    ListFilesTool,
+    ReadFileTool,
+    SearchFilesTool,
+)
+
 
 class FileToolTestBase(unittest.TestCase):
     def setUp(self):
@@ -123,7 +131,7 @@ class TestCreateFileTool(FileToolTestBase):
 
 class TestUpdateFileTool(FileToolTestBase):
     def test_update_file_success(self):
-        tool = UpdateFileTool()
+        tool = EditFileTool()
         with open(self.temp_file, "r", encoding="utf-8") as f:
             old_content = f.read()
         result = tool.run(self.temp_file, old_content, "Updated content")
@@ -132,12 +140,12 @@ class TestUpdateFileTool(FileToolTestBase):
             self.assertEqual(f.read(), "Updated content")
     
     def test_update_file_non_existent(self):
-        tool = UpdateFileTool()
+        tool = EditFileTool()
         result = tool.run("non_existent.txt", "old", "new")
         self.assertIn("ERROR: File not found", result)
     
     def test_update_file_no_match(self):
-        tool = UpdateFileTool()
+        tool = EditFileTool()
         result = tool.run(self.temp_file, "nonexistent content", "new content")
         self.assertIn("ERROR: 'nonexistent content' not found", result)
     
@@ -148,12 +156,12 @@ class TestUpdateFileTool(FileToolTestBase):
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(content)
         
-        tool = UpdateFileTool()
+        tool = EditFileTool()
         result = tool.run(file_path, "test", "updated")
         self.assertIn("ERROR: Found 2 instances", result)
     
     def test_create_new_file_with_update_tool(self):
-        tool = UpdateFileTool()
+        tool = EditFileTool()
         file_path = os.path.join(self.temp_dir, "created.txt")
         result = tool.run(file_path, "", "new content")
         self.assertIn("Successfully created new file", result)

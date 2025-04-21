@@ -1,6 +1,6 @@
 import unittest
 
-from echo.llms.llm_engine import LLMEngine, LLMConfig, build_generate_config
+from echoai.core.llms.llm_engine import LLMConfig, LLMEngine, build_generate_config
 
 
 class TestLLMEngine(unittest.TestCase):

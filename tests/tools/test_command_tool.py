@@ -1,6 +1,6 @@
 import unittest
 import platform
-from echo.tools import ExecuteCommandTool  # 假设文件名为 execute_command_tool.py
+from echoai.cli.tools.command_tool import ExecuteCommandTool
 
 class TestExecuteCommandTool(unittest.TestCase):
     def setUp(self):
@@ -14,7 +14,7 @@ class TestExecuteCommandTool(unittest.TestCase):
         else:
             command = "sleep 31"
 
-        result = self.tool.run(command=command)
+        result = self.tool.run(command=command, timeout=30)
         self.assertIn("Error: Command execution timed out", result)
 
 if __name__ == "__main__":

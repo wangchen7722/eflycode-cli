@@ -1,9 +1,19 @@
 import unittest
 from unittest.mock import MagicMock
-from echo.agents.agent import Agent, AgentResponse, AgentResponseChunkType
-from echo.llms.llm_engine import LLMEngine
-from echo.tools import BaseTool, ReadFileTool, EditFileTool, SearchFilesTool, CreateFileTool, InsertFileTool, \
-    ListFilesTool, ListCodeDefinitionsTool, ExecuteCommandTool
+
+from echoai.cli.tools.code_tool import ListCodeDefinitionsTool
+from echoai.cli.tools.command_tool import ExecuteCommandTool
+from echoai.cli.tools.file_tool import (
+    CreateFileTool,
+    EditFileTool,
+    InsertFileTool,
+    ListFilesTool,
+    ReadFileTool,
+    SearchFilesTool,
+)
+from echoai.core.agents.agent import Agent, AgentResponse, AgentResponseChunkType
+from echoai.core.llms.llm_engine import ChatCompletionChunk, LLMEngine
+from echoai.core.tools.base_tool import BaseTool
 
 
 class TestAgent(unittest.TestCase):
@@ -99,7 +109,6 @@ class TestAgent(unittest.TestCase):
 
     def test_run_stream_mode_with_tool_call_with_html(self):
         """测试流式输出模式下的HTML标签处理"""
-        from echo.llms import ChatCompletionChunk
 
         def stream_generator(message):
             for i in range(0, len(message), 3):
@@ -140,7 +149,6 @@ class TestAgent(unittest.TestCase):
 
     def test_run_stream_mode_with_tool_calls(self):
         """测试流式模式下的工具调用场景"""
-        from echo.llms import ChatCompletionChunk
         # 创建测试工具
         test_tool = MagicMock(spec=BaseTool)
         test_tool.name = "test_tool"

@@ -3,7 +3,7 @@ import threading
 
 class Snowflake:
     """
-    雪花算法（Snowflake ID）简介
+    Twitter 雪花算法（Snowflake ID）简介
     ──────────────────────────────────────────
     一个 64 位无符号整数被拆成 4 段：
 
@@ -58,7 +58,13 @@ class Snowflake:
                 
             # 2. 时钟回拨
             if timestamp < self.last_timestamp:
-                raise ValueError("Clock moved backwards. Refusing to generate id for %d milliseconds" % (self.last_timestamp - timestamp))
+                if timestamp - self.last_timestamp > 500:
+                    # 2.1 时钟回拨超过 500 毫秒，不可忍受，抛出异常
+                    raise ValueError("Clock moved backwards. Refusing to generate id for %d milliseconds" % (self.last_timestamp - timestamp))
+                else:
+                    # 2.2 时钟回拨未超过 500 毫秒，自旋等待至下一毫秒
+                    while timestamp < self.last_timestamp:
+                        timestamp = self._timestamp()
             
             # 3. 生成 ID
             self.last_timestamp = timestamp

@@ -1,9 +1,9 @@
 import json
-from typing import Literal, Sequence, Optional
+from typing import Literal, Optional, Sequence
+
 from pydantic import BaseModel, Field, field_validator
 
 from echoai.server.utils.validator import validate_uuid4
-
 
 # ===================================================================================
 # ================================= Message Content =================================
@@ -127,7 +127,7 @@ class ChatBaseMessageModel(BaseModel):
 
     # @field_validator("id")
     # def id_must_be_uuid4(cls, v: str):
-    #     if v is not None and not uuid4_pattern.match(v):
+    #     if not validate_uuid4(v):
     #         raise ValueError("Invalid id")
     #     return v
 

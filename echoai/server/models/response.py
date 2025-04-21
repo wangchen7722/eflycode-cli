@@ -1,6 +1,8 @@
 from functools import wraps
-from typing import Any, Dict, Optional, Sequence
+from typing import Any, Optional
+
 from pydantic import BaseModel
+
 
 class ServerSentEvent:
     """

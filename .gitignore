@@ -8,3 +8,4 @@ build
 temp
 .env
 echoai_mcp_setting.json
+research/

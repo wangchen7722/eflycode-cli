@@ -1,5 +1,5 @@
 import time
-import threading
+import anyio
 
 class Snowflake:
     """
@@ -30,7 +30,7 @@ class Snowflake:
         # 上次生成 ID 的时间戳
         self.last_timestamp = -1
         
-        self.lock = threading.Lock()
+        self.lock = anyio.Lock()
         
     def _timestamp(self) -> int:
         """
@@ -38,11 +38,11 @@ class Snowflake:
         """
         return int(time.time() * 1000)
     
-    def generate(self) -> int:
+    async def generate(self) -> int:
         """
         生成雪花ID
         """
-        with self.lock:
+        async with self.lock:
             timestamp = self._timestamp()
 
             # 1. 同一毫秒内再次调用

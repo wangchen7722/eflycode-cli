@@ -1,9 +1,10 @@
 import asyncio
-from contextlib import asynccontextmanager
-from datetime import datetime
 import json
 import sys
+import time
 import traceback
+from contextlib import asynccontextmanager
+from datetime import datetime
 from typing import Dict
 
 from fastapi import FastAPI, Request
@@ -13,7 +14,12 @@ from redis.asyncio import Redis
 from starlette.responses import StreamingResponse
 
 from echoai.cli.utils.logger import get_logger
-from echoai.server.constants import CHAT_PENDING_TTL, REDIS_URL, CHAT_PENDING_REDIS_KEY
+from echoai.server.constants import (
+    REDIS_CHAT_CANCEL_KEY,
+    REDIS_CHAT_PENDING_KEY,
+    REDIS_CHAT_PENDING_TTL,
+    REDIS_URL,
+)
 from echoai.server.handlers.exception_handler import (
     request_validation_exception_handler,
     service_exception_handler,
@@ -44,24 +50,36 @@ logger.add(
 redis = Redis.from_url(REDIS_URL, decode_responses=True)
 snowflake = Snowflake(datacenter_id=1, worker_id=1)
 
-async def redis_pending_gc():
-    """Garbage Collection for Redis Pending Requests
+async def redis_chat_pending_gc():
+    """Garbage Collection for Redis Pending Chat Requests
     定期清理 Redis 中过期的 Pending 请求
     """
     while True:
-        ids = await redis.hkeys(CHAT_PENDING_REDIS_KEY)
+        now = int(time.time())
+        pending_items = await redis.hgetall(REDIS_CHAT_PENDING_TTL)
+        if pending_items:
+            pipe = redis.pipeline()
+            for mid, deadline in pending_items.items():
+                if int(deadline) < now:
+                    # 标记为已取消
+                    pipe.hdel(REDIS_CHAT_PENDING_TTL, mid)
+                    pipe.hset(REDIS_CHAT_CANCEL_KEY, mid, 1)
+            await pipe.execute()
+            logger.debug(f"[Redis] 清理过期的 Pending 请求: {mid}")
+        await asyncio.sleep(3)
         
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # asyncio.create_task()
-    ...
+    # 启动时执行 Redis Chat Request 清理
+    asyncio.create_task(
+        redis_chat_pending_gc(),
+    )
 
 app = FastAPI()
 app.add_exception_handler(ServiceException, service_exception_handler)
 app.add_exception_handler(RequestValidationError, request_validation_exception_handler)
 
-# @app
 
 if __name__ == "__main__":
     import uvicorn

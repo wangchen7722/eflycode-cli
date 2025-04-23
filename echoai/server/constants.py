@@ -1,6 +1,5 @@
-# Chat Request 的生成时间, 30 秒后过期
-CHAT_PENDING_REDIS_TTL = 30
-CHAT_PENDING_REDIS_KEY = "chat_pending"
-
-# Redis
+# ---------------------------- Redis & 常量 ------------------------ #
 REDIS_URL = "redis://echoai123@127.0.0.1:6379/0"
+REDIS_CHAT_PENDING_TTL = 30
+REDIS_CHAT_PENDING_KEY = "chat:pending"
+REDIS_CHAT_CANCEL_KEY = "chat:cancel"

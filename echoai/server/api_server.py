@@ -14,13 +14,13 @@ from starlette.responses import StreamingResponse
 
 from echoai.cli.utils.logger import get_logger
 from echoai.server.constants import CHAT_PENDING_TTL, REDIS_URL, CHAT_PENDING_REDIS_KEY
-from echoai.server.handlers.exception_handler import (
+from echoai.server.handler.exception_handler import (
     request_validation_exception_handler,
     service_exception_handler,
 )
-from echoai.server.models.chat import ChatChunkResponse, ChatRequest, ChatResponse
-from echoai.server.models.exception import ServiceException
-from echoai.server.models.response import ServerSentEvent, result_response
+from echoai.server.model.chat import ChatChunkResponse, ChatRequest, ChatResponse
+from echoai.server.model.exception import ServiceException
+from echoai.server.model.response import ServerSentEvent, result_response
 from echoai.server.utils.snowflake import Snowflake
 from echoai.server.utils.validator import validate_uuid4
 
@@ -61,7 +61,9 @@ app = FastAPI()
 app.add_exception_handler(ServiceException, service_exception_handler)
 app.add_exception_handler(RequestValidationError, request_validation_exception_handler)
 
-# @app
+# @app.post("/chat")
+
+
 
 if __name__ == "__main__":
     import uvicorn

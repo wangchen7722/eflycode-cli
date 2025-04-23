@@ -2,7 +2,7 @@ from echoai.core.llms.llm_engine import LLMConfig
 
 from echoai.core.llms.openai_engine import OpenAIEngine
 from echoai.core.prompt.prompt_loader import PromptLoader
-from echoai.server.models.chat import ChatRequest
+from echoai.server.model.chat import ChatRequest
 
 
 class ChatService:

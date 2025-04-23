@@ -1,5 +1,7 @@
+import threading
 import time
-import anyio
+
+from echoai.server.constants import SNOWFLAKE_DATACENTER_ID, SNOWFLAKE_WORKER_ID
 
 class Snowflake:
     """
@@ -30,7 +32,7 @@ class Snowflake:
         # 上次生成 ID 的时间戳
         self.last_timestamp = -1
         
-        self.lock = anyio.Lock()
+        self.lock = threading.Lock()
         
     def _timestamp(self) -> int:
         """
@@ -38,11 +40,11 @@ class Snowflake:
         """
         return int(time.time() * 1000)
     
-    async def generate(self) -> int:
+    def generate(self) -> int:
         """
         生成雪花ID
         """
-        async with self.lock:
+        with self.lock:
             timestamp = self._timestamp()
 
             # 1. 同一毫秒内再次调用
@@ -75,4 +77,13 @@ class Snowflake:
                 self.sequence
             )
             return sid
-        
+
+snowflake = Snowflake(
+    datacenter_id=SNOWFLAKE_DATACENTER_ID,
+    worker_id=SNOWFLAKE_WORKER_ID,
+)
+
+def generate_snowflake_id():
+    if snowflake is None:
+        raise Exception("snowflake is not initialized")
+    return snowflake.generate()

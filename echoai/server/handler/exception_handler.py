@@ -2,8 +2,8 @@ from fastapi import Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from echoai.server.models.exception import ServiceException
-from echoai.server.models.response import ResultResponse
+from echoai.server.model.exception import ServiceException
+from echoai.server.model.response import ResultResponse
 
 
 async def service_exception_handler(request: Request, exception: ServiceException):

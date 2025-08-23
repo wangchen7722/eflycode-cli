@@ -102,9 +102,11 @@ class McpConnection:
         )
         read_stream, write_stream = transport
         # 创建并打开 session
-        self._session = await self._exit_stack.enter_async_context(ClientSession(read_stream, write_stream))
+        self._session = await self._exit_stack.enter_async_context(
+            ClientSession(read_stream, write_stream)
+        )
         # NOTE: 此时还未初始化完成
-        
+
     async def _connect_to_sse_server(self):
         """Connect to a SSE server."""
         transport = await self._exit_stack.enter_async_context(
@@ -112,7 +114,9 @@ class McpConnection:
         )
         read_stream, write_stream = transport
         # 创建并打开 session
-        self._session = await self._exit_stack.enter_async_context(ClientSession(read_stream, write_stream))
+        self._session = await self._exit_stack.enter_async_context(
+            ClientSession(read_stream, write_stream)
+        )
 
     async def _initialize(self):
         """Initialize the MCP connection."""
@@ -156,10 +160,12 @@ class McpConnection:
     async def call_tool(self, name: str, arguments: dict) -> mcp_types.CallToolResult:
         """Call a tool."""
         return await self._session.call_tool(name, arguments)
-    
+
     def call_tool_sync(self, name: str, arguments: dict) -> mcp_types.CallToolResult:
         """Call a tool synchronously."""
-        future = asyncio.run_coroutine_threadsafe(self.call_tool(name, arguments), McpHub.get_instance()._background_loop)
+        future = asyncio.run_coroutine_threadsafe(
+            self.call_tool(name, arguments), McpHub.get_instance()._background_loop
+        )
         return future.result()
 
     async def read_resource(self, uri: str) -> mcp_types.ReadResourceResult:
@@ -192,7 +198,7 @@ class McpHub:
         """Initialize the MCP manager."""
         self._lock = None
         self._task_group: Optional[TaskGroup] = None
-        
+
         # 以下为后台服务相关属性
         self._server_thread: Optional[threading.Thread] = None
         self._background_loop: Optional[asyncio.AbstractEventLoop] = None
@@ -288,10 +294,12 @@ class McpHub:
                     connection = conn
                     break
         return connection
-    
+
     def get_mcp_connection(self, server_name: str) -> Optional[McpConnection]:
         """Get a MCP connection."""
-        future = asyncio.run_coroutine_threadsafe(self._get_mcp_connection(server_name), self._background_loop)
+        future = asyncio.run_coroutine_threadsafe(
+            self._get_mcp_connection(server_name), self._background_loop
+        )
         return future.result()
 
     async def _add_mcp_connection(
@@ -406,12 +414,16 @@ class McpHub:
         logger.info("shutting down MCP servers...")
         await self._remove_all_connections()
         logger.info("MCP servers shutdown.")
-        
+
     def launch_mcp_servers(self):
         """Launch MCP servers in a background thread.
         This method will block until the initialization is complete.
         """
-        if self._server_thread is not None and self._server_thread.is_alive() and self._server_initialize_event.is_set():
+        if (
+            self._server_thread is not None
+            and self._server_thread.is_alive()
+            and self._server_initialize_event.is_set()
+        ):
             return
         self._server_initialize_event.clear()
         self._server_shutdown_event.clear()
@@ -430,10 +442,9 @@ class McpHub:
         self._server_thread.start()
         # 阻塞等待 MCP 服务器初始化完成
         self._server_initialize_event.wait()
-        
+
     def shutdown_mcp_servers(self):
-        """Shutdown the MCP servers service, send the shutdown signal and wait for the background thread to exit.
-        """
+        """Shutdown the MCP servers service, send the shutdown signal and wait for the background thread to exit."""
         self._server_shutdown_event.set()
         if self._background_loop is not None:
             self._background_loop.call_soon_threadsafe(self._background_loop.stop)
@@ -443,7 +454,8 @@ class McpHub:
         self._server_initialize_event.clear()
         self._background_loop = None
         self._server_thread = None
-    
+
+
 if __name__ == "__main__":
     hub = McpHub.get_instance()
     try:

@@ -1,4 +1,0 @@
-CREATE TABLE conversation (
-    id BIGINT UNSIGNED NOT NULL PRIMARY KEY,
-    
-)

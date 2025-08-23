@@ -2,9 +2,9 @@ import os
 
 from dotenv import load_dotenv
 
-from echoai.agents import Developer
-from echoai.llms import LLMConfig
-from echoai.llms import OpenAIEngine
+from echo.agents import Developer
+from echo.llms import LLMConfig
+from echo.llms import OpenAIEngine
 
 
 load_dotenv()

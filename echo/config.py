@@ -3,6 +3,7 @@ import fnmatch
 from typing import Optional, List
 from pathlib import Path
 from pydantic import BaseModel, Field
+from enum import Enum
 
 
 class IgnoreManager:
@@ -155,3 +156,129 @@ class GlobalConfig:
 def get_global_config() -> GlobalConfig:
     """获取全局配置实例的便捷函数"""
     return GlobalConfig.get_instance()
+
+
+# ==================== Agent配置相关 ====================
+
+class MemoryType(Enum):
+    """记忆类型枚举"""
+    
+    SHORT_TERM = "short_term"
+    """短期记忆：在当前对话有用的临时信息"""
+    
+    LONG_TERM = "long_term"
+    """长期记忆：存储重要的持久化信息，可长期保存，用于积累知识和经验"""
+    
+    WORKING = "working"
+    """工作记忆：存储当前任务相关的活跃信息，容量有限但访问速度快"""
+    
+    EPISODIC = "episodic"
+    """情节记忆：存储特定事件、对话和经历的详细上下文信息"""
+    
+    SEMANTIC = "semantic"
+    """语义记忆：存储抽象概念、知识结构和事实性信息，支持推理和理解"""
+
+
+class MemoryImportance(Enum):
+    """记忆重要性枚举"""
+    # 关键
+    CRITICAL = 5
+    # 高
+    HIGH = 4
+    # 中等
+    MEDIUM = 3
+    # 低
+    LOW = 2
+    # 最低
+    MINIMAL = 1
+
+
+class CompressionStrategy(Enum):
+    """压缩策略枚举"""
+    # 摘要压缩
+    SUMMARY = "summary"
+    # 关键信息提取
+    KEY_EXTRACTION = "key_extraction"
+    # 滑动窗口
+    SLIDING_WINDOW = "sliding_window"
+    # 混合策略
+    HYBRID = "hybrid"
+
+
+class TokenCalculationStrategy(Enum):
+    """Token计算策略枚举"""
+    
+    # 估算策略
+    ESTIMATE = "estimate"
+    """估算策略：基于字符数的简单估算方法"""
+    
+    # Tokenizer策略
+    TOKENIZER = "tokenizer"
+    """Tokenizer策略：使用HuggingFace tokenizers直接计算token数"""
+
+
+class RetrievalStrategy(Enum):
+    """检索策略枚举"""
+    # 语义相似度
+    SEMANTIC = "semantic"
+    # 关键词匹配
+    KEYWORD = "keyword"
+    # 时间相关
+    TEMPORAL = "temporal"
+    # 混合策略
+    HYBRID = "hybrid"
+    # 相关性评分
+    RELEVANCE = "relevance"
+
+
+class MemoryConfig(BaseModel):
+    """记忆管理配置"""
+    
+    short_term_capacity: int = Field(default=50, description="短期记忆容量限制，控制可存储的短期记忆数量")
+    working_memory_capacity: int = Field(default=10, description="工作记忆容量限制，控制当前活跃的工作记忆数量")
+    long_term_capacity: int = Field(default=1000, description="长期记忆容量限制，控制可存储的长期记忆数量")
+    short_term_ttl_hours: int = Field(default=24, description="短期记忆生存时间（小时），超过此时间的短期记忆将被清理")
+    working_memory_ttl_minutes: int = Field(default=30, description="工作记忆生存时间（分钟），超过此时间的工作记忆将被清理")
+    
+    long_term_importance_threshold: MemoryImportance = Field(default=MemoryImportance.MEDIUM, description="长期记忆重要性阈值，只有达到此重要性级别的记忆才会被转为长期记忆")
+    enable_forgetting: bool = Field(default=True, description="是否启用遗忘机制，控制记忆是否会随时间衰减")
+    forgetting_curve_factor: float = Field(default=0.1, description="遗忘曲线因子，控制记忆衰减的速度，值越大衰减越快")
+    min_access_for_retention: int = Field(default=2, description="保留记忆的最小访问次数，访问次数低于此值的记忆更容易被遗忘")
+    storage_path: str = Field(default="./memory_storage", description="记忆存储路径，用于持久化存储记忆数据")
+    enable_persistence: bool = Field(default=True, description="是否启用持久化存储，控制记忆是否保存到磁盘")
+    similarity_threshold: float = Field(default=0.7, description="相似度阈值，用于记忆检索时的相似度匹配")
+    max_retrieval_results: int = Field(default=10, description="最大检索结果数量，限制单次记忆检索返回的结果数量")
+
+
+class CompressionConfig(BaseModel):
+    """上下文压缩配置"""
+    
+    strategy: CompressionStrategy = Field(default=CompressionStrategy.HYBRID, description="压缩策略，决定使用哪种方式压缩对话历史")
+    max_tokens: int = Field(default=4000, description="最大token数量，压缩后的内容不应超过此限制")
+    compression_ratio: float = Field(default=0.3, description="压缩比例，目标压缩后内容与原内容的比例")
+    preserve_recent_messages: int = Field(default=5, description="保留最近消息数量，最新的N条消息将被完整保留不压缩")
+    min_messages_to_compress: int = Field(default=10, description="最少压缩消息数量，只有当消息数量超过此值时才进行压缩")
+    
+    summary_max_tokens: int = Field(default=500, description="摘要最大token数量，使用摘要压缩时生成摘要的最大长度")
+    
+    # Token计算相关配置
+    token_calculation_strategy: TokenCalculationStrategy = Field(default=TokenCalculationStrategy.ESTIMATE, description="Token计算策略，决定使用哪种方式计算token数量")
+    api_base_url: Optional[str] = Field(default=None, description="Token计算API的基础URL，使用API策略时需要")
+    api_key: Optional[str] = Field(default=None, description="Token计算API的密钥，使用API策略时需要")
+    model_name: str = Field(default="gpt-3.5-turbo", description="模型名称，用于API和Transformers策略的token计算")
+    tokenizer_cache_dir: Optional[str] = Field(default=None, description="Tokenizer缓存目录，使用Transformers策略时的缓存路径")
+
+
+class RetrievalConfig(BaseModel):
+    """上下文检索配置"""
+    
+    strategy: RetrievalStrategy = Field(default=RetrievalStrategy.HYBRID, description="检索策略，决定使用哪种方式检索相关上下文")
+    max_results: int = Field(default=10, description="最大检索结果数量，单次检索返回的最大结果数")
+    similarity_threshold: float = Field(default=0.7, description="相似度阈值，只有相似度超过此值的内容才会被检索")
+    time_window_hours: int = Field(default=24, description="时间窗口（小时），限制检索内容的时间范围")
+    keyword_weight: float = Field(default=0.3, description="关键词权重，在混合检索策略中关键词匹配的权重")
+    
+    semantic_weight: float = Field(default=0.5, description="语义权重，在混合检索策略中语义相似度的权重")
+    temporal_weight: float = Field(default=0.2, description="时间权重，在混合检索策略中时间相关性的权重")
+    min_content_length: int = Field(default=10, description="最小内容长度，内容长度小于此值的消息将被过滤")
+    enable_fuzzy_match: bool = Field(default=True, description="是否启用模糊匹配，允许部分匹配的关键词检索")

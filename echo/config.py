@@ -9,7 +9,7 @@ from enum import Enum
 class IgnoreManager:
     """文件忽略管理器"""
     
-    def __init__(self, ignore_config: 'EchoIgnoreConfig'):
+    def __init__(self, ignore_config: "EchoIgnoreConfig"):
         self.ignore_config = ignore_config
     
     def load_ignore_patterns(self, base_path: str = ".") -> List[str]:
@@ -28,11 +28,11 @@ class IgnoreManager:
         
         if ignore_file_path.exists() and ignore_file_path.is_file():
             try:
-                with open(ignore_file_path, 'r', encoding='utf-8') as f:
+                with open(ignore_file_path, "r", encoding="utf-8") as f:
                     for line in f:
                         line = line.strip()
                         # 跳过空行和注释行
-                        if line and not line.startswith('#'):
+                        if line and not line.startswith("#"):
                             patterns.append(line)
             except Exception as e:
                 # 如果读取失败，只使用默认模式
@@ -55,7 +55,7 @@ class IgnoreManager:
         # 检查文件名和路径的各个部分
         for pattern in patterns:
             # 去除模式末尾的斜杠（用于目录匹配）
-            clean_pattern = pattern.rstrip('/')
+            clean_pattern = pattern.rstrip("/")
             
             # 检查完整路径
             if fnmatch.fnmatch(str(path_obj), pattern) or fnmatch.fnmatch(str(path_obj), clean_pattern):
@@ -71,7 +71,7 @@ class IgnoreManager:
                     return True
                     
             # 特殊处理目录模式（以/结尾）
-            if pattern.endswith('/') and path_obj.is_dir():
+            if pattern.endswith("/") and path_obj.is_dir():
                 if fnmatch.fnmatch(path_obj.name, clean_pattern):
                     return True
         
@@ -102,17 +102,17 @@ class EchoIgnoreConfig(BaseModel):
 class GlobalConfig:
     """全局配置管理器"""
     
-    _instance: Optional['GlobalConfig'] = None
+    _instance: Optional["GlobalConfig"] = None
     _vector_db_config: Optional[VectorDBConfig] = None
     _echo_ignore_config: Optional[EchoIgnoreConfig] = None
     
-    def __new__(cls) -> 'GlobalConfig':
+    def __new__(cls) -> "GlobalConfig":
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
     
     @classmethod
-    def get_instance(cls) -> 'GlobalConfig':
+    def get_instance(cls) -> "GlobalConfig":
         """获取全局配置实例"""
         if cls._instance is None:
             cls._instance = cls()
@@ -201,8 +201,8 @@ class CompressionStrategy(Enum):
     KEY_EXTRACTION = "key_extraction"
     # 滑动窗口
     SLIDING_WINDOW = "sliding_window"
-    # 混合策略
-    HYBRID = "hybrid"
+    # 压缩器链
+    CHAIN = "chain"
 
 
 class TokenCalculationStrategy(Enum):
@@ -253,13 +253,20 @@ class MemoryConfig(BaseModel):
 class CompressionConfig(BaseModel):
     """上下文压缩配置"""
     
-    strategy: CompressionStrategy = Field(default=CompressionStrategy.HYBRID, description="压缩策略，决定使用哪种方式压缩对话历史")
-    max_tokens: int = Field(default=4000, description="最大token数量，压缩后的内容不应超过此限制")
+    strategy: CompressionStrategy = Field(default=CompressionStrategy.CHAIN, description="压缩策略，决定使用哪种方式压缩对话历史")
     compression_ratio: float = Field(default=0.3, description="压缩比例，目标压缩后内容与原内容的比例")
     preserve_recent_messages: int = Field(default=5, description="保留最近消息数量，最新的N条消息将被完整保留不压缩")
-    min_messages_to_compress: int = Field(default=10, description="最少压缩消息数量，只有当消息数量超过此值时才进行压缩")
+    
+    # 基于上下文长度的压缩触发配置
+    max_context_length: int = Field(default=32000, description="模型支持的最大上下文长度")
+    context_usage_threshold: float = Field(default=0.8, description="上下文使用阈值，当当前上下文长度超过最大上下文长度的此比例时触发压缩")
+    target_context_length_ratio: float = Field(default=0.6, description="目标上下文长度比例，压缩后的上下文长度应为最大上下文长度的此比例")
     
     summary_max_tokens: int = Field(default=500, description="摘要最大token数量，使用摘要压缩时生成摘要的最大长度")
+    
+    # 压缩器链配置
+    chain_compressor_types: List[str] = Field(default=["key_extraction", "sliding_window"], description="压缩器链中使用的压缩器类型列表")
+    chain_selection_strategy: str = Field(default="best_ratio", description="压缩器链的结果选择策略：best_ratio, best_score, most_messages")
     
     # Token计算相关配置
     token_calculation_strategy: TokenCalculationStrategy = Field(default=TokenCalculationStrategy.ESTIMATE, description="Token计算策略，决定使用哪种方式计算token数量")
@@ -267,6 +274,16 @@ class CompressionConfig(BaseModel):
     api_key: Optional[str] = Field(default=None, description="Token计算API的密钥，使用API策略时需要")
     model_name: str = Field(default="gpt-3.5-turbo", description="模型名称，用于API和Transformers策略的token计算")
     tokenizer_cache_dir: Optional[str] = Field(default=None, description="Tokenizer缓存目录，使用Transformers策略时的缓存路径")
+    
+    @property
+    def compression_trigger_length(self) -> int:
+        """计算触发压缩的上下文长度阈值"""
+        return int(self.max_context_length * self.context_usage_threshold)
+    
+    @property
+    def target_context_length(self) -> int:
+        """计算压缩后的目标上下文长度"""
+        return int(self.max_context_length * self.target_context_length_ratio)
 
 
 class RetrievalConfig(BaseModel):

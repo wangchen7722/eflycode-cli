@@ -17,16 +17,8 @@ from echo.config import CompressionConfig
 
 
 class CompressionResult(BaseModel):
-    """压缩结果
-
-    压缩器对消息列表进行压缩后的结果数据结构，包含:
-    - 压缩后的消息列表
-    - 原始消息数量
-    - 压缩后消息数量
-    - 压缩比率
-    - 保留的token数量
-    - 元数据信息
-    """
+    """压缩器对消息列表进行压缩后的结果数据结构"""
+    
     compressed_messages: List[Message] = Field(description="压缩后的消息列表")
     """压缩后得到的消息列表，包含所有经过压缩处理的消息"""
 

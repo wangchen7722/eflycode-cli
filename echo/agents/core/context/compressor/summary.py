@@ -55,9 +55,7 @@ class SummaryCompressor(BaseCompressor):
         summary = self._generate_summary(messages_to_compress)
         
         # 构建压缩后的消息列表
-        compressed_messages = [
-            {"role": "system", "content": f"对话历史摘要：{summary}"}
-        ] + recent_messages
+        compressed_messages = self._merge_summary_with_messages(summary, recent_messages)
         
         original_tokens = self._calculate_messages_tokens(messages)
         compressed_tokens = self._calculate_messages_tokens(compressed_messages)
@@ -108,3 +106,33 @@ class SummaryCompressor(BaseCompressor):
         except Exception as e:
             logger.error(f"摘要生成失败: {e}")
             return "对话历史摘要（生成失败，保留原始信息）"
+    
+    def _merge_summary_with_messages(self, summary: str, recent_messages: List[Message]) -> List[Message]:
+        """将摘要与最近消息合并，智能处理系统消息
+        
+        Args:
+            summary: 生成的对话摘要
+            recent_messages: 最近的消息列表
+            
+        Returns:
+            合并后的消息列表
+        """
+        if not recent_messages:
+            return [{"role": "system", "content": f"对话历史摘要：{summary}"}]
+        
+        # 检查第一条消息是否为系统消息
+        first_message = recent_messages[0]
+        if first_message.get("role") == "system":
+            # 如果存在系统消息，将摘要附加到现有系统消息后
+            existing_content = first_message.get("content", "")
+            merged_content = f"{existing_content}\n\n对话历史摘要：{summary}"
+            
+            merged_messages = [
+                {"role": "system", "content": merged_content}
+            ] + recent_messages[1:]
+            return merged_messages
+        else:
+            # 如果没有系统消息，在开头添加摘要系统消息
+            return [
+                {"role": "system", "content": f"对话历史摘要：{summary}"}
+            ] + recent_messages

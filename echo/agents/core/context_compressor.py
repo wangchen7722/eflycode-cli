@@ -17,6 +17,8 @@ from echo.llms.llm_engine import LLMEngine
 from echo.utils.logger import get_logger
 from echo.config import CompressionStrategy, CompressionConfig, TokenCalculationStrategy
 from pydantic import BaseModel, Field
+from echo.agents.core.context.compressor.sliding_window import SlidingWindowCompressor
+from echo.agents.core.token_calculator import TokenCalculator, EstimateTokenCalculator, APITokenCalculator, HAS_TRANSFORMERS, TransformersTokenCalculator
 
 logger = get_logger()
 
@@ -339,6 +341,28 @@ class ContextCompressor:
             return SlidingWindowCompressor(self.config, token_calculator)
         elif self.config.strategy == CompressionStrategy.KEY_EXTRACTION:
             return KeyExtractionCompressor(self.config, token_calculator)
+        elif self.config.strategy == CompressionStrategy.CHAIN:
+            from echo.agents.core.context.compressor.chain import CompressorChain, CompressorChainConfig, CompressorType
+            
+            # 将配置中的字符串转换为CompressorType枚举
+            compressor_types = []
+            for type_str in self.config.chain_compressor_types:
+                try:
+                    compressor_type = CompressorType(type_str)
+                    compressor_types.append(compressor_type)
+                except ValueError:
+                    logger.warning(f"未知的压缩器类型: {type_str}")
+            
+            if not compressor_types:
+                logger.warning("没有有效的压缩器类型，使用默认配置")
+                compressor_types = [CompressorType.KEY_EXTRACTION, CompressorType.SLIDING_WINDOW]
+            
+            chain_config = CompressorChainConfig(
+                compressor_types=compressor_types,
+                selection_strategy=self.config.chain_selection_strategy
+            )
+            
+            return CompressorChain(self.config, token_calculator, chain_config, self.llm_engine)
         else:  # HYBRID
             return HybridCompressor(self.config, token_calculator, self.llm_engine)
     

@@ -4,17 +4,14 @@ from loguru import logger
 import sys
 
 
-
-
-
 def get_logger(
-    name: Optional[str] = None,
-    log_dir: Optional[str] = None,
-    log_level: str = "INFO",
-    max_bytes: int = 10 * 1024 * 1024,  # 10MB
-    backup_count: int = 5,
-    console_output: bool = True,
-    log_format: str = "{time:YYYY-MM-DD HH:mm:ss} | {level} | {name} | {message}"
+        name: Optional[str] = None,
+        log_dir: Optional[str] = None,
+        log_level: str = "INFO",
+        max_bytes: int = 10 * 1024 * 1024,  # 10MB
+        backup_count: int = 5,
+        console_output: bool = True,
+        log_format: str = "{time:YYYY-MM-DD HH:mm:ss} | {level} | {name} | {message}"
 ) -> logger.__class__:
     """获取日志记录器
 
@@ -45,13 +42,13 @@ def get_logger(
 
 
 def setup_logger(
-    name: str,
-    log_dir: Optional[str] = None,
-    log_level: str = "INFO",
-    max_bytes: int = 10 * 1024 * 1024,  # 10MB
-    backup_count: int = 5,
-    console_output: bool = True,
-    log_format: str = "{time:YYYY-MM-DD HH:mm:ss} | {level} | {name} | {message}"
+        name: str,
+        log_dir: Optional[str] = None,
+        log_level: str = "INFO",
+        max_bytes: int = 10 * 1024 * 1024,  # 10MB
+        backup_count: int = 5,
+        console_output: bool = True,
+        log_format: str = "{time:YYYY-MM-DD HH:mm:ss} | {level} | {name} | {message}"
 ) -> logger.__class__:
     """配置日志记录器
 
@@ -69,10 +66,10 @@ def setup_logger(
     """
     # 创建一个新的logger实例
     new_logger = logger.bind(name=name)
-    
+
     # 移除默认的handler
     new_logger.remove()
-    
+
     # 确定日志目录的绝对路径
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     if log_dir is None:
@@ -115,4 +112,3 @@ def setup_logger(
     )
 
     return new_logger
-

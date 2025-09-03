@@ -1,17 +1,8 @@
 from typing import Optional
 
-from echo.tools.code_tool import ListCodeDefinitionsTool
-from echo.tools.command_tool import ExecuteCommandTool
-from echo.tools.file_tool import (
-    CreateFileTool,
-    EditFileTool,
-    InsertFileTool,
-    ListFilesTool,
-    ReadFileTool,
-    SearchFilesTool,
-)
-from echo.agents.agent import Agent
+from echo.agents.core.agent import Agent
 from echo.llms.llm_engine import LLMEngine
+from echo.tools import ReadFileTool, CreateFileTool, EditFileTool, SearchFilesTool, ListFilesTool, ExecuteCommandTool, ListCodeDefinitionsTool
 
 
 class Developer(Agent):
@@ -29,7 +20,7 @@ class Developer(Agent):
     ):
         developer_tools = [
             # 文件操作工具
-            ReadFileTool(), CreateFileTool(), EditFileTool(), InsertFileTool(), SearchFilesTool(), ListFilesTool(),
+            ReadFileTool(), CreateFileTool(), EditFileTool(), SearchFilesTool(), ListFilesTool(),
             # 执行命令工具
             ExecuteCommandTool(),
             # 代码分析工具

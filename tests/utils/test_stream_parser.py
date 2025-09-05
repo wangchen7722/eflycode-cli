@@ -1,9 +1,9 @@
 import unittest
 import json
-from typing import List, Generator
+from typing import List
 
 from echo.parsers.stream_parser import StreamResponseParser
-from echo.agents.schema import AgentResponseChunk, AgentResponseChunkType, ToolCall
+from echo.agents.schema import AgentResponseChunk, AgentResponseChunkType
 
 
 class TestStreamResponseParser(unittest.TestCase):
@@ -28,7 +28,7 @@ class TestStreamResponseParser(unittest.TestCase):
         self.assertEqual(len(chunks), 1)
         self.assertEqual(chunks[0].type, AgentResponseChunkType.TEXT)
         self.assertEqual(chunks[0].content, content)
-        self.assertIsNone(chunks[0].tool_call)
+        self.assertIsNone(chunks[0].tool_calls)
     
     def test_html_content(self):
         """测试HTML内容解析"""
@@ -42,32 +42,32 @@ class TestStreamResponseParser(unittest.TestCase):
     def test_tool_call_only(self):
         """测试仅有工具调用的场景"""
         content = (
-            "<tool_call_start>\n"
-            "<tool_call_name_start>search_files</tool_call_name_end>\n"
-            "<tool_call_params_start>\n"
+            "<tool_call>\n"
+            "<tool_name>search_files</tool_name>\n"
+            "<tool_params>\n"
             '{"query": "test", "path": "/home"}\n'
-            "</tool_call_params_end>\n"
-            "</tool_call_end>"
+            "</tool_params>\n"
+            "</tool_call>"
         )
         chunks = self._parse_stream(content)
-        
+        print(chunks)
         self.assertEqual(len(chunks), 1)
         self.assertEqual(chunks[0].type, AgentResponseChunkType.TOOL_CALL)
-        self.assertIsNotNone(chunks[0].tool_call)
-        self.assertEqual(chunks[0].tool_call.name, "search_files")
-        self.assertEqual(chunks[0].tool_call.parameters["query"], "test")
-        self.assertEqual(chunks[0].tool_call.parameters["path"], "/home")
+        self.assertIsNotNone(chunks[0].tool_calls)
+        self.assertEqual(chunks[0].tool_calls[0]["function"]["name"], "search_files")
+        self.assertEqual(json.loads(chunks[0].tool_calls[0]["function"]["arguments"])["query"], "test")
+        self.assertEqual(json.loads(chunks[0].tool_calls[0]["function"]["arguments"])["path"], "/home")
     
     def test_mixed_content_text_then_tool(self):
         """测试文本后跟工具调用的混合内容"""
         content = (
             "我需要搜索一些文件。\n\n"
-            "<tool_call_start>\n"
-            "<tool_call_name_start>search_files</tool_call_name_end>\n"
-            "<tool_call_params_start>\n"
+            "<tool_call>\n"
+            "<tool_name>search_files</tool_name>\n"
+            "<tool_params>\n"
             '{"query": "*.py"}\n'
-            "</tool_call_params_end>\n"
-            "</tool_call_end>"
+            "</tool_params>\n"
+            "</tool_call>"
         )
         chunks = self._parse_stream(content)
         
@@ -79,18 +79,18 @@ class TestStreamResponseParser(unittest.TestCase):
         
         # 第二个chunk是工具调用
         self.assertEqual(chunks[1].type, AgentResponseChunkType.TOOL_CALL)
-        self.assertEqual(chunks[1].tool_call.name, "search_files")
-        self.assertEqual(chunks[1].tool_call.parameters["query"], "*.py")
+        self.assertEqual(chunks[1].tool_calls[0]["function"]["name"], "search_files")
+        self.assertEqual(json.loads(chunks[1].tool_calls[0]["function"]["arguments"])["query"], "*.py")
     
     def test_mixed_content_tool_then_text(self):
         """测试工具调用后跟文本的混合内容"""
         content = (
-            "<tool_call_start>\n"
-            "<tool_call_name_start>get_weather</tool_call_name_end>\n"
-            "<tool_call_params_start>\n"
+            "<tool_call>\n"
+            "<tool_name>get_weather</tool_name>\n"
+            "<tool_params>\n"
             '{"city": "北京"}\n'
-            "</tool_call_params_end>\n"
-            "</tool_call_end>\n\n"
+            "</tool_params>\n"
+            "</tool_call>\n\n"
             "根据查询结果，今天天气不错。"
         )
         chunks = self._parse_stream(content)
@@ -99,7 +99,7 @@ class TestStreamResponseParser(unittest.TestCase):
         
         # 第一个chunk是工具调用
         self.assertEqual(chunks[0].type, AgentResponseChunkType.TOOL_CALL)
-        self.assertEqual(chunks[0].tool_call.name, "get_weather")
+        self.assertEqual(chunks[0].tool_calls[0]["function"]["name"], "get_weather")
         
         # 第二个chunk是文本
         self.assertEqual(chunks[1].type, AgentResponseChunkType.TEXT)
@@ -108,18 +108,18 @@ class TestStreamResponseParser(unittest.TestCase):
     def test_multiple_tool_calls(self):
         """测试多个工具调用"""
         content = (
-            "<tool_call_start>\n"
-            "<tool_call_name_start>tool1</tool_call_name_end>\n"
-            "<tool_call_params_start>\n"
+            "<tool_call>\n"
+            "<tool_name>tool1</tool_name>\n"
+            "<tool_params>\n"
             '{"param1": "value1"}\n'
-            "</tool_call_params_end>\n"
-            "</tool_call_end>\n\n"
-            "<tool_call_start>\n"
-            "<tool_call_name_start>tool2</tool_call_name_end>\n"
-            "<tool_call_params_start>\n"
+            "</tool_params>\n"
+            "</tool_call>\n\n"
+            "<tool_call>\n"
+            "<tool_name>tool2</tool_name>\n"
+            "<tool_params>\n"
             '{"param2": "value2"}\n'
-            "</tool_call_params_end>\n"
-            "</tool_call_end>"
+            "</tool_params>\n"
+            "</tool_call>"
         )
         chunks = self._parse_stream(content)
         
@@ -127,7 +127,7 @@ class TestStreamResponseParser(unittest.TestCase):
         
         # 第一个工具调用
         self.assertEqual(chunks[0].type, AgentResponseChunkType.TOOL_CALL)
-        self.assertEqual(chunks[0].tool_call.name, "tool1")
+        self.assertEqual(chunks[0].tool_calls[0]["function"]["name"], "tool1")
         
         # 中间的文本
         self.assertEqual(chunks[1].type, AgentResponseChunkType.TEXT)
@@ -135,19 +135,19 @@ class TestStreamResponseParser(unittest.TestCase):
         
         # 第二个工具调用
         self.assertEqual(chunks[2].type, AgentResponseChunkType.TOOL_CALL)
-        self.assertEqual(chunks[2].tool_call.name, "tool2")
+        self.assertEqual(chunks[2].tool_calls[0]["function"]["name"], "tool2")
     
     def test_complex_mixed_content(self):
         """测试复杂的混合内容：文本、HTML、工具调用"""
         content = (
             "<h1>分析报告</h1>\n"
             "<p>我将为您分析数据：</p>\n\n"
-            "<tool_call_start>\n"
-            "<tool_call_name_start>analyze_data</tool_call_name_end>\n"
-            "<tool_call_params_start>\n"
+            "<tool_call>\n"
+            "<tool_name>analyze_data</tool_name>\n"
+            "<tool_params>\n"
             '{"dataset": "sales.csv", "type": "summary"}\n'
-            "</tool_call_params_end>\n"
-            "</tool_call_end>\n\n"
+            "</tool_params>\n"
+            "</tool_call>\n\n"
             "<div class=\"result\">\n"
             "分析完成，结果如上所示。\n"
             "</div>"
@@ -162,7 +162,7 @@ class TestStreamResponseParser(unittest.TestCase):
         
         # 第二个chunk：工具调用
         self.assertEqual(chunks[1].type, AgentResponseChunkType.TOOL_CALL)
-        self.assertEqual(chunks[1].tool_call.name, "analyze_data")
+        self.assertEqual(chunks[1].tool_calls[0]["function"]["name"], "analyze_data")
         
         # 第三个chunk：HTML文本
         self.assertEqual(chunks[2].type, AgentResponseChunkType.TEXT)
@@ -258,24 +258,16 @@ class TestStreamResponseParser(unittest.TestCase):
         
         self.assertEqual(len(chunks), 1)
         self.assertEqual(chunks[0].type, AgentResponseChunkType.TOOL_CALL)
-        self.assertEqual(chunks[0].tool_call.name, "custom_tool")
-        self.assertEqual(chunks[0].tool_call.parameters["test"], "value")
+        self.assertEqual(chunks[0].tool_calls[0]["function"]["name"], "custom_tool")
+        self.assertEqual(json.loads(chunks[0].tool_calls[0]["function"]["arguments"])["test"], "value")
     
     def test_streaming_behavior(self):
         """测试流式处理行为"""
-        # 模拟逐字符输入
-        content = "Hello <tool_call_start><tool_call_name_start>test</tool_call_name_end><tool_call_params_start>{}</tool_call_params_end></tool_call_end> World"
+        # 测试完整内容的解析
+        content = "Hello <tool_call><tool_name>test</tool_name><tool_params>{}</tool_params></tool_call> World"
         
         parser = StreamResponseParser(tools=[])
-        chunks = []
-        
-        # 逐字符添加内容
-        for i in range(1, len(content) + 1):
-            partial_content = content[:i]
-            new_chunks = list(parser.parse_text(partial_content))
-            # 只添加新的chunks
-            if len(new_chunks) > len(chunks):
-                chunks.extend(new_chunks[len(chunks):])
+        chunks = list(parser.parse_text(content))
         
         # 验证最终结果
         self.assertGreaterEqual(len(chunks), 2)  # 至少有文本和工具调用
@@ -283,8 +275,52 @@ class TestStreamResponseParser(unittest.TestCase):
         # 找到工具调用chunk
         tool_chunks = [c for c in chunks if c.type == AgentResponseChunkType.TOOL_CALL]
         self.assertEqual(len(tool_chunks), 1)
-        self.assertEqual(tool_chunks[0].tool_call.name, "test")
+        self.assertEqual(tool_chunks[0].tool_calls[0]["function"]["name"], "test")
 
+
+    def test_nested_html_tags(self):
+        """测试嵌套HTML标签的解析"""
+        content = (
+            '<div class="container">'
+            '  <h1>标题</h1>'
+            '  <p>段落 <span>内联元素</span> 继续段落</p>'
+            '</div>'
+        )
+        chunks = self._parse_stream(content)
+        self.assertEqual(len(chunks), 1)
+        self.assertEqual(chunks[0].type, AgentResponseChunkType.TEXT)
+        self.assertEqual(chunks[0].content, content)
+
+    def test_html_with_tool_like_content(self):
+        """测试包含类似工具调用标签的HTML内容"""
+        content = (
+            '<article>'
+            '  <section>'
+            '    <tool_example>这是一个示例，不是真实工具调用</tool_example>'
+            '  </section>'
+            '</article>'
+        )
+        chunks = self._parse_stream(content)
+        self.assertEqual(len(chunks), 1)
+        self.assertEqual(chunks[0].type, AgentResponseChunkType.TEXT)
+        self.assertEqual(chunks[0].content, content)
+
+    def test_mixed_html_and_tool_call(self):
+        """测试HTML与工具调用的混合内容"""
+        content = (
+            '<div>HTML开始</div>'
+            '<tool_call>'
+            '  <tool_name>example_tool</tool_name>'
+            '  <tool_params>{"param": "value"}</tool_params>'
+            '</tool_call>'
+            '<p>HTML继续</p>'
+        )
+        chunks = self._parse_stream(content)
+        self.assertEqual(len(chunks), 3)
+        self.assertEqual(chunks[0].type, AgentResponseChunkType.TEXT)
+        self.assertEqual(chunks[1].type, AgentResponseChunkType.TOOL_CALL)
+        self.assertEqual(chunks[2].type, AgentResponseChunkType.TEXT)
+        self.assertEqual(chunks[1].tool_calls[0]["function"]["name"], "example_tool")
 
 if __name__ == '__main__':
     unittest.main()

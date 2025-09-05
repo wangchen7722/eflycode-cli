@@ -6,11 +6,16 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "colorama>=0.4.6",
+    "jinja2>=3.1.6",
     "loguru>=0.7.3",
     "prompt-toolkit>=3.0.52",
+    "pydantic>=2.11.7",
     "python-dotenv>=1.1.1",
     "rich>=14.1.0",
-    "textual>=6.1.0",
+    "tree-sitter>=0.25.1",
+    "tree-sitter-language-pack>=0.9.0",
+    "tree-sitter-languages>=1.10.2",
+    "typing-extensions>=4.15.0",
     "wcwidth>=0.2.13",
 ]
 
@@ -18,3 +23,8 @@ dependencies = [
 [[tool.uv.index]]
 url = "https://pypi.tuna.tsinghua.edu.cn/simple"
 default = true
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.2",
+]

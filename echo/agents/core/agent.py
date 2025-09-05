@@ -1,8 +1,6 @@
 import json
 import logging
 from typing import (
-    Any,
-    Dict,
     Generator,
     List,
     Optional,
@@ -10,7 +8,6 @@ from typing import (
     overload,
     Literal,
 )
-from datetime import datetime
 
 from echo.utils.logger import get_logger
 from echo.llms.llm_engine import LLMEngine
@@ -25,7 +22,7 @@ from echo.agents.schema import (
 from echo.config import (
     CompressionConfig,
     RetrievalConfig,
-    MemoryConfig, MemoryType, MemoryImportance, GlobalConfig
+    MemoryConfig, GlobalConfig
 )
 
 logger: logging.Logger = get_logger()

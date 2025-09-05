@@ -11,8 +11,8 @@ import sys
 from typing import Optional
 from dotenv import load_dotenv
 
-from echo.llms.openai_engine import OpenAIEngine
-from echo.llms.llm_engine import LLMConfig
+from echo.llm.openai_engine import OpenAIEngine
+from echo.llm.llm_engine import LLMConfig
 from echo.ui import ConsoleUI
 
 # 加载 .env 文件中的环境变量
@@ -61,7 +61,7 @@ def create_agent(agent_type: str, llm_engine: OpenAIEngine) -> Optional[object]:
         智能体实例 如果类型不支持则返回None
     """
     if agent_type == "developer":
-        from echo.agents import Developer
+        from echo.agent import Developer
         return Developer(llm_engine=llm_engine)
     else:
         return None

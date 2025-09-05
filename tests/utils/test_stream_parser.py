@@ -294,11 +294,11 @@ class TestStreamResponseParser(unittest.TestCase):
     def test_html_with_tool_like_content(self):
         """测试包含类似工具调用标签的HTML内容"""
         content = (
-            '<article>'
-            '  <section>'
-            '    <tool_example>这是一个示例，不是真实工具调用</tool_example>'
-            '  </section>'
-            '</article>'
+            "<article>"
+            "  <section>"
+            "    <tool_example>这是一个示例，不是真实工具调用</tool_example>"
+            "  </section>"
+            "</article>"
         )
         chunks = self._parse_stream(content)
         self.assertEqual(len(chunks), 1)
@@ -308,12 +308,12 @@ class TestStreamResponseParser(unittest.TestCase):
     def test_mixed_html_and_tool_call(self):
         """测试HTML与工具调用的混合内容"""
         content = (
-            '<div>HTML开始</div>'
-            '<tool_call>'
-            '  <tool_name>example_tool</tool_name>'
-            '  <tool_params>{"param": "value"}</tool_params>'
-            '</tool_call>'
-            '<p>HTML继续</p>'
+            "<div>HTML开始</div>"
+            "<tool_call>"
+            "  <tool_name>example_tool</tool_name>"
+            "  <tool_params>{\"param\": \"value\"}</tool_params>"
+            "</tool_call>"
+            "<p>HTML继续</p>"
         )
         chunks = self._parse_stream(content)
         self.assertEqual(len(chunks), 3)
@@ -321,6 +321,46 @@ class TestStreamResponseParser(unittest.TestCase):
         self.assertEqual(chunks[1].type, AgentResponseChunkType.TOOL_CALL)
         self.assertEqual(chunks[2].type, AgentResponseChunkType.TEXT)
         self.assertEqual(chunks[1].tool_calls[0]["function"]["name"], "example_tool")
+
+    def test_custom_tags(self):
+        """测试自定义标签格式的工具调用解析"""
+        # 使用自定义标签格式创建解析器
+        custom_parser = StreamResponseParser(
+            tools=[],
+            tool_call_start="[CALL]",
+            tool_call_end="[/CALL]",
+            tool_name_start="[NAME]",
+            tool_name_end="[/NAME]",
+            params_start="[PARAMS]",
+            params_end="[/PARAMS]"
+        )
+        
+        # 测试使用自定义标签的工具调用
+        content = (
+            "这是一些文本内容。"
+            "[CALL]"
+            "[NAME]search_files[/NAME]"
+            "[PARAMS]{\"query\": \"test\", \"path\": \"/home\"}[/PARAMS]"
+            "[/CALL]"
+            "这是更多文本内容。"
+        )
+        
+        chunks = []
+        for chunk in custom_parser.parse_text(content):
+            chunks.append(chunk)
+        
+        # 验证解析结果
+        self.assertEqual(len(chunks), 3)
+        self.assertEqual(chunks[0].type, AgentResponseChunkType.TEXT)
+        self.assertEqual(chunks[0].content, "这是一些文本内容。")
+        
+        self.assertEqual(chunks[1].type, AgentResponseChunkType.TOOL_CALL)
+        self.assertIsNotNone(chunks[1].tool_calls)
+        self.assertEqual(len(chunks[1].tool_calls), 1)
+        self.assertEqual(chunks[1].tool_calls[0]["function"]["name"], "search_files")
+        
+        self.assertEqual(chunks[2].type, AgentResponseChunkType.TEXT)
+        self.assertEqual(chunks[2].content, "这是更多文本内容。")
 
 if __name__ == '__main__':
     unittest.main()

@@ -11,7 +11,7 @@ import sys
 from typing import Optional
 from dotenv import load_dotenv
 
-from echo.agent.core.agent import Agent
+from echo.agent.core.agent import ConversationAgent
 from echo.llm.openai_engine import OpenAIEngine
 from echo.llm.llm_engine import LLMConfig
 from echo.ui import ConsoleUI
@@ -68,7 +68,7 @@ def create_agent(agent_type: str, llm_engine: OpenAIEngine) -> Optional[object]:
         return None
 
 
-def interactive_mode(agent: Agent) -> None:
+def interactive_mode(agent: ConversationAgent) -> None:
     """交互模式
     
     在此模式下 用户可以持续与智能体进行对话

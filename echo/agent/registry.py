@@ -1,14 +1,14 @@
 from typing import Dict, Type, Optional, Any
 
 from echo.llm.llm_engine import LLMEngine
-from echo.agent.core.agent import Agent
+from echo.agent.core.agent import ConversationAgent
 
 
 class AgentRegistry:
     """Agent注册中心"""
     
     _instance: Optional["AgentRegistry"] = None
-    _agents: Dict[str, Type[Agent]] = {}
+    _agents: Dict[str, Type[ConversationAgent]] = {}
     
     def __new__(cls) -> "AgentRegistry":
         if cls._instance is None:
@@ -28,7 +28,7 @@ class AgentRegistry:
         Raises:
             ValueError: 当Agent名称已存在时
         """
-        def decorator(agent_class: Type[Agent]) -> Type[Agent]:
+        def decorator(agent_class: Type[ConversationAgent]) -> Type[ConversationAgent]:
             # 确定Agent名称
             agent_name = name
             if agent_name is None:
@@ -43,7 +43,7 @@ class AgentRegistry:
                 )
             
             # 验证是否为Agent的子类
-            if not issubclass(agent_class, Agent):
+            if not issubclass(agent_class, ConversationAgent):
                 raise TypeError(f"类 {agent_class.__name__} 必须继承自 Agent")
             
             # 注册Agent
@@ -57,7 +57,7 @@ class AgentRegistry:
         return decorator
     
     @classmethod
-    def get_agent_class(cls, name: str) -> Type[Agent]:
+    def get_agent_class(cls, name: str) -> Type[ConversationAgent]:
         """根据名称获取Agent类
         
         Args:
@@ -77,7 +77,7 @@ class AgentRegistry:
         return cls._agents[name]
     
     @classmethod
-    def list_agents(cls) -> Dict[str, Type[Agent]]:
+    def list_agents(cls) -> Dict[str, Type[ConversationAgent]]:
         """列出所有已注册的Agent
         
         Returns:
@@ -91,7 +91,7 @@ class AgentRegistry:
         agent_type: str, 
         llm_engine: LLMEngine, 
         **kwargs: Any
-    ) -> Agent:
+    ) -> ConversationAgent:
         """创建指定类型的Agent实例
         
         Args:

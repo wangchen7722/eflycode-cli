@@ -1,5 +1,6 @@
 import json
 import logging
+from abc import abstractmethod
 from typing import (
     Generator,
     List,
@@ -8,7 +9,6 @@ from typing import (
     Literal,
 )
 
-from echo.parser import stream_parser
 from echo.util.logger import get_logger
 from echo.util.system import get_system_info
 from echo.llm.llm_engine import LLMEngine
@@ -25,50 +25,16 @@ from echo.config import GlobalConfig
 
 logger: logging.Logger = get_logger()
 
-class Agent:
+
+class BaseAgent:
     """基础智能体类"""
 
     ROLE = "base"
-    DESCRIPTION = "一个通用对话智能助手"
+    DESCRIPTION = "所有智能体的基类，仅用来定义接口，没有任何功能。"
 
-    def __init__(
-            self,
-            llm_engine: LLMEngine,
-            name: Optional[str] = None,
-            description: Optional[str] = None,
-            system_prompt: Optional[str] = None,
-            tools: Optional[Sequence[BaseTool]] = None,
-            **kwargs,
-    ):
-        """初始化智能体
-        Args:
-            name: 智能体名称
-            llm_engine: 语言模型引擎
-            description: 智能体描述
-            system_prompt: 系统提示词
-            tools: 初始工具字典
-            **kwargs: 其他参数
-        """
+    def __init__(self, name: Optional[str] = None, description: Optional[str] = None):
         self._name = name or self.ROLE
         self._description = description or self.DESCRIPTION
-        self._system_prompt = system_prompt
-        self.llm_engine = llm_engine
-        self.kwargs = kwargs
-
-        # 获取全局配置
-        self._global_config = GlobalConfig.get_instance()
-        self._history_messages: List[Message] = []
-        self._history_messages_limit = 10
-
-        self._tools = tools or []
-        self._tool_map = {tool.name: tool for tool in self._tools}
-
-        self.stream_parser = StreamResponseParser(self._tools)
-
-    @property
-    def tools(self) -> Sequence[BaseTool]:
-        """获取工具字典"""
-        return self._tools
 
     @property
     def role(self):
@@ -81,6 +47,93 @@ class Agent:
     @property
     def description(self):
         return self.DESCRIPTION.strip()
+
+    @abstractmethod
+    def run(self, content: str, stream: bool = True) -> AgentResponse:
+        """运行智能体"""
+        pass
+
+
+class ToolCallAgent(BaseAgent):
+    """工具调用智能体类"""
+
+    ROLE = "tool_call"
+    DESCRIPTION = "所有工具调用智能体的基类，仅用来定义接口，没有任何功能。"
+
+    def __init__(self, name: Optional[str] = None, description: Optional[str] = None, tools: Optional[Sequence[BaseTool]] = None):
+        super().__init__(name=name, description=description)
+        self._tools = tools or []
+        self._tool_map = {tool.name: tool for tool in self._tools}
+
+    @property
+    def tools(self) -> Sequence[BaseTool]:
+        """获取工具字典"""
+        return self._tools
+
+    def execute_tool(self, tool_call: ToolCall) -> str:
+        """执行工具调用
+
+        Args:
+            tool_call: 工具调用
+        """
+        tool_name = tool_call["function"]["name"]
+        tool_call_arguments = json.loads(tool_call["function"]["arguments"])
+        tool = self._tool_map.get(tool_name, None)
+        if not tool:
+            return PromptLoader.get_instance().render_template(
+                "tool_call/tool_call_not_found.prompt",
+                tool_name=tool_name,
+                tools=self._tool_map,
+            )
+        try:
+            tool_response = tool.run(**tool_call_arguments)
+            return PromptLoader.get_instance().render_template(
+                "tool_call/tool_call_succeeded.prompt",
+                tool_name=tool_name,
+                tool_response=tool_response,
+            )
+        except Exception as e:
+            return PromptLoader.get_instance().render_template(
+                "tool_call/tool_call_failed.prompt",
+                tool_name=tool_name,
+                tool_response=str(e),
+            )
+
+
+class ConversationAgent(ToolCallAgent):
+
+    ROLE = "base"
+    DESCRIPTION = "一个通用对话智能助手"
+
+    def __init__(
+        self,
+        llm_engine: LLMEngine,
+        system_prompt: Optional[str] = None,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        tools: Optional[Sequence[BaseTool]] = None,
+        **kwargs,
+    ):
+        """初始化智能体
+        Args:
+            llm_engine: 语言模型引擎
+            system_prompt: 系统提示词
+            name: 智能体名称
+            description: 智能体描述
+            tools: 初始工具字典
+            **kwargs: 其他参数
+        """
+        super().__init__(name=name, description=description, tools=tools, **kwargs)
+        self._system_prompt = system_prompt
+        self.llm_engine = llm_engine
+        self.kwargs = kwargs
+
+        # 获取全局配置
+        self._global_config = GlobalConfig.get_instance()
+        self._history_messages: List[Message] = []
+        self._history_messages_limit = 10
+
+        self.stream_parser = StreamResponseParser(self._tools)
 
     @property
     def system_prompt(self) -> str:
@@ -187,21 +240,3 @@ class Agent:
     def stream(self, content: str) -> Generator[AgentResponseChunk, None, None]:
         return self._do_run(content, stream=True)
 
-    def execute_tool(self, tool_call: ToolCall) -> str:
-        """执行工具调用
-
-        Args:
-            tool_call: 工具调用
-        """
-        tool_name = tool_call["function"]["name"]
-        tool_call_arguments = json.loads(tool_call["function"]["arguments"])
-        tool = self._tool_map.get(tool_name, None)
-        if not tool:
-            return f"未找到工具：{tool_name}"
-        try:
-            tool_response = tool.run(**tool_call_arguments)
-
-            return f"This is system-generated message.\nThe result of tool call ({tool_name}) is shown below:\n{tool_response}"
-        except Exception as e:
-
-            return f"工具调用失败：{e}"

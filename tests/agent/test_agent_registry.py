@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import Mock
 
-from echo.agent.core.agent import Agent
+from echo.agent.core.agent import ConversationAgent
 from echo.agent.registry import (
     register_agent,
     create_agent,
@@ -31,40 +31,40 @@ class TestAgentRegistry(unittest.TestCase):
     def test_register_agent_decorator(self):
         """测试Agent注册装饰器"""
         @register_agent("test_agent")
-        class TestAgent(Agent):
+        class TestConversationAgent(ConversationAgent):
             ROLE = "test"
             DESCRIPTION = "测试Agent"
         
         # 验证Agent已注册
         agents = list_agents()
         self.assertIn("test_agent", agents)
-        self.assertEqual(agents["test_agent"], TestAgent)
+        self.assertEqual(agents["test_agent"], TestConversationAgent)
         
         # 验证类添加了注册信息
-        self.assertEqual(TestAgent._registry_name, "test_agent")
+        self.assertEqual(TestConversationAgent._registry_name, "test_agent")
     
     def test_register_agent_with_default_name(self):
         """测试使用默认名称注册Agent"""
         @register_agent()
-        class DefaultAgent(Agent):
+        class DefaultConversationAgent(ConversationAgent):
             ROLE = "default"
             DESCRIPTION = "默认Agent"
         
         # 验证使用ROLE作为默认名称
         agents = list_agents()
         self.assertIn("default", agents)
-        self.assertEqual(agents["default"], DefaultAgent)
+        self.assertEqual(agents["default"], DefaultConversationAgent)
     
     def test_register_agent_duplicate_name_error(self):
         """测试重复注册相同名称的Agent会报错"""
         @register_agent("duplicate")
-        class FirstAgent(Agent):
+        class FirstConversationAgent(ConversationAgent):
             pass
         
         # 尝试注册相同名称的Agent应该抛出ValueError
         with self.assertRaises(ValueError) as context:
             @register_agent("duplicate")
-            class SecondAgent(Agent):
+            class SecondConversationAgent(ConversationAgent):
                 pass
         
         self.assertIn("Agent名称 'duplicate' 已存在", str(context.exception))
@@ -81,12 +81,12 @@ class TestAgentRegistry(unittest.TestCase):
     def test_get_agent_class(self):
         """测试获取Agent类"""
         @register_agent("get_test")
-        class GetTestAgent(Agent):
+        class GetTestConversationAgent(ConversationAgent):
             pass
         
         # 测试成功获取
         agent_class = get_agent_class("get_test")
-        self.assertEqual(agent_class, GetTestAgent)
+        self.assertEqual(agent_class, GetTestConversationAgent)
         
         # 测试获取不存在的Agent
         with self.assertRaises(KeyError) as context:
@@ -97,7 +97,7 @@ class TestAgentRegistry(unittest.TestCase):
     def test_create_agent(self):
         """测试创建Agent实例"""
         @register_agent("create_test")
-        class CreateTestAgent(Agent):
+        class CreateTestConversationAgent(ConversationAgent):
             ROLE = "create_test"
             DESCRIPTION = "创建测试Agent"
         
@@ -105,14 +105,14 @@ class TestAgentRegistry(unittest.TestCase):
         agent = create_agent("create_test", self.mock_llm_engine)
         
         # 验证实例类型和属性
-        self.assertIsInstance(agent, CreateTestAgent)
+        self.assertIsInstance(agent, CreateTestConversationAgent)
         self.assertEqual(agent.llm_engine, self.mock_llm_engine)
         self.assertEqual(agent._name, "create_test")
     
     def test_create_agent_with_kwargs(self):
         """测试使用额外参数创建Agent实例"""
         @register_agent("kwargs_test")
-        class KwargsTestAgent(Agent):
+        class KwargsTestConversationAgent(ConversationAgent):
             pass
         
         # 使用额外参数创建Agent
@@ -137,11 +137,11 @@ class TestAgentRegistry(unittest.TestCase):
     def test_list_agents(self):
         """测试列出所有已注册的Agent"""
         @register_agent("list_test1")
-        class ListTest1Agent(Agent):
+        class ListTest1ConversationAgent(ConversationAgent):
             pass
         
         @register_agent("list_test2")
-        class ListTest2Agent(Agent):
+        class ListTest2ConversationAgent(ConversationAgent):
             pass
         
         agents = list_agents()
@@ -153,8 +153,8 @@ class TestAgentRegistry(unittest.TestCase):
         self.assertEqual(len(agents), 2)
         self.assertIn("list_test1", agents)
         self.assertIn("list_test2", agents)
-        self.assertEqual(agents["list_test1"], ListTest1Agent)
-        self.assertEqual(agents["list_test2"], ListTest2Agent)
+        self.assertEqual(agents["list_test1"], ListTest1ConversationAgent)
+        self.assertEqual(agents["list_test2"], ListTest2ConversationAgent)
     
     def test_registry_singleton(self):
         """测试AgentRegistry是单例模式"""

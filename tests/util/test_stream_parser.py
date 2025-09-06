@@ -241,8 +241,8 @@ class TestStreamResponseParser(unittest.TestCase):
             tool_call_end="[/tool_call]",
             tool_name_start="[tool_name]",
             tool_name_end="[/tool_name]",
-            params_start="[parameters]",
-            params_end="[/parameters]"
+            tool_params_start="[parameters]",
+            tool_params_end="[/parameters]"
         )
         
         content = (
@@ -331,8 +331,8 @@ class TestStreamResponseParser(unittest.TestCase):
             tool_call_end="[/CALL]",
             tool_name_start="[NAME]",
             tool_name_end="[/NAME]",
-            params_start="[PARAMS]",
-            params_end="[/PARAMS]"
+            tool_params_start="[PARAMS]",
+            tool_params_end="[/PARAMS]"
         )
         
         # 测试使用自定义标签的工具调用

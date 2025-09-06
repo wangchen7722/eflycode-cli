@@ -1,0 +1,3 @@
+This is system-generated message.
+The result of tool call {{ tool_name }} is shown below:
+{{ tool_response }}

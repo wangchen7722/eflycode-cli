@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from threading import local
 
 from echo.schema.schema import Usage
-from echo.agent.core.agent import Agent
+from echo.agent.core.agent import ConversationAgent
 from echo.schema.schema import AgentResponse
 
 
@@ -378,7 +378,7 @@ def demo_proxy_pattern():
         
         # 创建使用TaskDrivenMixin的Agent
         print("\n创建任务驱动的开发者Agent:")
-        class TaskDrivenDeveloper(TaskDrivenMixin, Agent):
+        class TaskDrivenDeveloper(TaskDrivenMixin, ConversationAgent):
             ROLE = "task_driven_developer"
             DESCRIPTION = "使用任务驱动Mixin的开发者Agent"
         

@@ -26,7 +26,7 @@ class Developer(Agent):
             # 执行命令工具
             ExecuteCommandTool(),
             # 代码分析工具
-            ListCodeDefinitionsTool()
+            # ListCodeDefinitionsTool()
         ]
         super().__init__(
             name=name,

@@ -23,8 +23,8 @@ class StreamResponseParser(ResponseParser):
             tool_call_end: str = "</tool_call>",
             tool_name_start: str = "<tool_name>",
             tool_name_end: str = "</tool_name>",
-            params_start: str = "<tool_params>",
-            params_end: str = "</tool_params>",
+            tool_params_start: str = "<tool_params>",
+            tool_params_end: str = "</tool_params>",
     ):
         """
         初始化解析器
@@ -35,8 +35,8 @@ class StreamResponseParser(ResponseParser):
             tool_call_end: 工具调用结束标签
             tool_name_start: 工具名开始标签
             tool_name_end: 工具名结束标签
-            params_start: 参数开始标签
-            params_end: 参数结束标签
+            tool_params_start: 参数开始标签
+            tool_params_end: 参数结束标签
         """
         super().__init__(tools)
 
@@ -45,8 +45,8 @@ class StreamResponseParser(ResponseParser):
         self.tool_call_end = tool_call_end
         self.tool_name_start = tool_name_start
         self.tool_name_end = tool_name_end
-        self.params_start = params_start
-        self.params_end = params_end
+        self.tool_params_start = tool_params_start
+        self.tool_params_end = tool_params_end
 
         # 预计算候选标签（在设置标签属性后）
         self._build_candidate_tags()
@@ -64,8 +64,8 @@ class StreamResponseParser(ResponseParser):
             self.tool_name_start: self.tool_name_start,
             self.tool_name_end: self.tool_name_end,
             # 参数标签
-            self.params_start: self.params_start,
-            self.params_end: self.params_end,
+            self.tool_params_start: self.tool_params_start,
+            self.tool_params_end: self.tool_params_end, 
         }
 
     def _reset_state(self):
@@ -222,7 +222,7 @@ class StreamResponseParser(ResponseParser):
             self, char: str
     ) -> Generator[AgentResponseChunk, None, None]:
         """处理参数状态"""
-        if char == self.params_end[0]:  # 检查参数结束标签的第一个字符
+        if char == self.tool_params_end[0]:  # 检查参数结束标签的第一个字符
             self.tag_buffer = char
             self.tag_context = "PARAMS"
             self.state = self.STATE_POTENTIAL_TAG
@@ -296,9 +296,9 @@ class StreamResponseParser(ResponseParser):
         elif self.tag_context == "TOOL_NAME":
             return [self.tool_name_end]
         elif self.tag_context == "TOOL_AFTER_NAME":
-            return [self.params_start, self.tool_call_end]
+            return [self.tool_params_start, self.tool_call_end]
         elif self.tag_context == "PARAMS":
-            return [self.params_end]
+            return [self.tool_params_end]
         elif self.tag_context == "TOOL_AFTER_PARAMS":
             return [self.tool_call_end]
         return list(self.candidate_tags.keys())
@@ -344,7 +344,7 @@ class StreamResponseParser(ResponseParser):
             self.tag_context = "TOOL_AFTER_NAME"
             self.state = self.STATE_TEXT
             # 不立即输出，等到工具调用结束时再输出
-        elif matched_tag == self.params_start:
+        elif matched_tag == self.tool_params_start:
             # 参数开始
             self.tag_context = "PARAMS"
             self.state = self.STATE_PARAMS
@@ -352,7 +352,7 @@ class StreamResponseParser(ResponseParser):
             if self.tool_call:
                 self.tool_call["content"] += matched_tag
             # 不立即输出，等到工具调用结束时再输出
-        elif matched_tag == self.params_end:
+        elif matched_tag == self.tool_params_end:
             # 参数结束
             if self.tool_call:
                 try:

@@ -58,7 +58,9 @@ class PromptLoader:
         self.env = Environment(
             loader=ChoiceLoader(loaders),
             trim_blocks=True,
-            lstrip_blocks=True
+            lstrip_blocks=True,
+            keep_trailing_newline=True,
+            autoescape=False
         )
 
     def render_template(self, template_path: str, **kwargs) -> str:

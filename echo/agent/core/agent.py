@@ -8,6 +8,7 @@ from typing import (
     Literal,
 )
 
+from echo.parser import stream_parser
 from echo.util.logger import get_logger
 from echo.util.system import get_system_info
 from echo.llm.llm_engine import LLMEngine
@@ -23,24 +24,6 @@ from echo.config import GlobalConfig
 
 
 logger: logging.Logger = get_logger()
-
-
-def agent_stream_response_parser(
-        tools: Sequence[BaseTool],
-        chat_completion_chunk_stream_generator: Generator[ChatCompletionChunk, None, None],
-) -> Generator[AgentResponseChunk, None, None]:
-    """使用StateMachineStreamParser解析流式响应中的工具调用
-    
-    Args:
-        tools: 可用的工具列表
-        chat_completion_chunk_stream_generator: 聊天完成块的流式生成器
-        
-    Yields:
-        AgentResponseChunk: 解析后的响应块
-    """
-    parser = StreamResponseParser(tools)
-    yield from parser.parse_stream(chat_completion_chunk_stream_generator)
-
 
 class Agent:
     """基础智能体类"""
@@ -80,6 +63,8 @@ class Agent:
         self._tools = tools or []
         self._tool_map = {tool.name: tool for tool in self._tools}
 
+        self.stream_parser = StreamResponseParser(self._tools)
+
     @property
     def tools(self) -> Sequence[BaseTool]:
         """获取工具字典"""
@@ -104,11 +89,12 @@ class Agent:
             return self._system_prompt
         system_info = get_system_info()
         return PromptLoader.get_instance().render_template(
-            f"{self.role}/system.prompt",
+            f"{self.role}/v1/system.prompt",
             name=self.name,
             role=self.role,
-            tools=self.tools,
+            tools=self._tool_map,
             system_info=system_info,
+            stream_parser=self.stream_parser,
         )
 
     def _compose_messages(self, content: str) -> List[Message]:
@@ -140,7 +126,7 @@ class Agent:
         response_content = ""
         last_chunk: Optional[AgentResponseChunk] = None
         buffer = ""
-        for chunk in agent_stream_response_parser(self.tools, response):
+        for chunk in self.stream_parser.parse_stream(response):
             if chunk.content:
                 response_content += chunk.content
             if last_chunk is None:

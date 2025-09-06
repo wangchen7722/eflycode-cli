@@ -1,9 +1,8 @@
 from enum import Enum
-from typing import Optional, Sequence, List, Dict, Any, Literal, Required
+from typing import Optional, Sequence, List
 from pydantic import BaseModel
-from typing_extensions import TypedDict
 
-from echo.llm.schema import ToolCall, Usage
+from echo.schema.llm import ToolCall, Usage, Message
 
 
 class AgentResponseChunkType(Enum):
@@ -45,6 +44,7 @@ class AgentResponse(BaseModel):
     """大模型调用的返回结果类，包含完整的响应内容和元数据信息
 
     Attributes:
+        messages (List[Message]): 智能体请求消息列表
         content (Optional[str]): 完整的响应文本内容
             示例: "这是完整的响应文本"
         finish_reason (Optional[str]): 响应结束的原因
@@ -54,26 +54,8 @@ class AgentResponse(BaseModel):
         usage (Usage): 完整响应的token使用统计
             示例: {"prompt_tokens": 100, "completion_tokens": 200, "total_tokens": 300}
     """
-
+    messages: List[Message]
     content: Optional[str]
     finish_reason: Optional[str]
     tool_calls: Optional[List[ToolCall]]
     usage: Optional[Usage]
-
-
-class AgentMessageParserResult(TypedDict, total=False):
-    """工具调用解析结果
-    
-    Attributes:
-        type (Literal["message", "tool_call"]): 结果类型
-        content (str): 消息内容
-        tool_call_name (Optional[str]): 工具名称
-        tool_call_arguments (Optional[Dict[str, Any]]): 工具参数
-        partial (bool): 是否为部分解析结果
-    """
-
-    partial: Required[bool]
-    type: Required[Literal["message", "tool_call"]]
-    content: Required[Optional[str]]
-    tool_call_name: Required[Optional[str]]
-    tool_call_arguments: Required[Optional[Dict[str, Any]]]

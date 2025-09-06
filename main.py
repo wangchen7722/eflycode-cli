@@ -11,6 +11,7 @@ import sys
 from typing import Optional
 from dotenv import load_dotenv
 
+from echo.agent.core.agent import Agent
 from echo.llm.openai_engine import OpenAIEngine
 from echo.llm.llm_engine import LLMConfig
 from echo.ui import ConsoleUI
@@ -61,13 +62,13 @@ def create_agent(agent_type: str, llm_engine: OpenAIEngine) -> Optional[object]:
         智能体实例 如果类型不支持则返回None
     """
     if agent_type == "developer":
-        from echo.agent import Developer
+        from echo.agent.developer import Developer
         return Developer(llm_engine=llm_engine)
     else:
         return None
 
 
-def interactive_mode(agent) -> None:
+def interactive_mode(agent: Agent) -> None:
     """交互模式
     
     在此模式下 用户可以持续与智能体进行对话
@@ -98,7 +99,7 @@ def interactive_mode(agent) -> None:
             
             try:
                 # 使用流式响应
-                response_stream = agent.run(user_input, stream=True)
+                response_stream = agent.stream(user_input)
                 
                 ui.info("\n[bold green]智能体回复:[/bold green]")
                 full_response = ""
@@ -112,9 +113,9 @@ def interactive_mode(agent) -> None:
                     # 显示工具调用信息
                     if chunk.tool_calls:
                         for tool_call in chunk.tool_calls:
-                            ui.info(f"\n[yellow]执行工具: {tool_call.function.name}[/yellow]")
-                            if tool_call.function.arguments:
-                                ui.info(f"[dim]参数: {tool_call.function.arguments}[/dim]")
+                            ui.info(f"\n[yellow]执行工具: {tool_call['function']['name']}[/yellow]")
+                            if tool_call["function"]["arguments"]:
+                                ui.info(f"[dim]参数: {tool_call['function']['arguments']}[/dim]")
                 
                 ui.info("\n")
                 ui.flush()

@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
-from typing import Generator, Optional, Sequence, Dict, Any, List
+from typing import Generator, Optional, Sequence, List
 from echo.tool.base_tool import BaseTool
-from echo.llm.schema import ChatCompletionChunk
-from echo.parser.schema import AgentResponseChunk
+from echo.schema.llm import ChatCompletionChunk
+from echo.schema.agent import AgentResponseChunk
 
 
 class ResponseParser(ABC):

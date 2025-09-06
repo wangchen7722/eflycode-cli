@@ -3,7 +3,7 @@ import json
 from typing import List
 
 from echo.parser.stream_parser import StreamResponseParser
-from echo.parser.schema import AgentResponseChunk, AgentResponseChunkType
+from echo.schema.agent import AgentResponseChunk, AgentResponseChunkType
 
 
 class TestStreamResponseParser(unittest.TestCase):

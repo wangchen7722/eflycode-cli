@@ -5,7 +5,7 @@ import os
 import tempfile
 import shutil
 from echo.tool.file.file_tool import CreateFileTool
-from echo.tool.schema import ToolParameterError, ToolExecutionError
+from echo.schema.tool import ToolParameterError, ToolExecutionError
 
 def test_create_file_tool():
     """测试CreateFileTool的功能"""

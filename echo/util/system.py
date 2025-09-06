@@ -23,8 +23,7 @@ def get_system_info():
         "default_shell": default_shell,
         "work_dir": Path.cwd().as_posix(),
         "current_time": current_time.strftime("%Y-%m-%d %H:%M:%S"),
-        "timezone": f"UTC{timezone_offset:+d}",
-    }
+        "timezone": f"UTC{timezone_offset:+d}",    }
     return system_info
 
 

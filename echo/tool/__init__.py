@@ -1,5 +1,5 @@
 from .base_tool import BaseTool
-from .schema import ToolError, ToolParameterError, ToolExecutionError
+from echo.schema.tool import ToolError, ToolParameterError, ToolExecutionError
 from .file import (
     ListFilesTool,
     ReadFileTool,

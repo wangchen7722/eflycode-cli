@@ -4,7 +4,6 @@
 import os
 import tempfile
 import unittest
-from unittest.mock import patch
 
 from echo.tool.file.file_tool import EditFileTool
 from echo.tool.base_tool import ToolParameterError

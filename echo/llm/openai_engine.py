@@ -8,7 +8,7 @@ import httpx
 
 from echo.util.logger import get_logger
 from echo.llm.llm_engine import LLMConfig, LLMEngine, build_generate_config
-from echo.llm.schema import ChatCompletion, ChatCompletionChunk, Message
+from echo.schema.llm import ChatCompletion, ChatCompletionChunk, Message
 
 logger: logging.Logger = get_logger(os.path.splitext(os.path.basename(__file__))[0])
 

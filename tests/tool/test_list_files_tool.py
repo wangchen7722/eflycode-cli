@@ -11,7 +11,7 @@ import unittest
 from pathlib import Path
 
 from echo.tool.file.file_tool import ListFilesTool
-from echo.tool.schema import ToolParameterError
+from echo.schema.tool import ToolParameterError
 
 
 class TestListFilesTool(unittest.TestCase):

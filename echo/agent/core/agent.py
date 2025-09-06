@@ -5,30 +5,27 @@ from typing import (
     List,
     Optional,
     Sequence,
-    overload,
     Literal,
 )
 
 from echo.util.logger import get_logger
+from echo.util.system import get_system_info
 from echo.llm.llm_engine import LLMEngine
-from echo.llm.schema import ChatCompletionChunk, Message, ToolCall
+from echo.schema.llm import ChatCompletionChunk, Message, ToolCall
 from echo.prompt.prompt_loader import PromptLoader
 from echo.tool.base_tool import BaseTool
 from echo.parser.stream_parser import StreamResponseParser
-from echo.parser.schema import (
+from echo.schema.agent import (
     AgentResponseChunk,
     AgentResponse,
 )
-from echo.config import (
-    CompressionConfig,
-    RetrievalConfig,
-    MemoryConfig, GlobalConfig
-)
+from echo.config import GlobalConfig
+
 
 logger: logging.Logger = get_logger()
 
 
-def agent_message_stream_parser(
+def agent_stream_response_parser(
         tools: Sequence[BaseTool],
         chat_completion_chunk_stream_generator: Generator[ChatCompletionChunk, None, None],
 ) -> Generator[AgentResponseChunk, None, None]:
@@ -56,15 +53,8 @@ class Agent:
             llm_engine: LLMEngine,
             name: Optional[str] = None,
             description: Optional[str] = None,
-            tools: Optional[Sequence[BaseTool]] = None,
             system_prompt: Optional[str] = None,
-            # 新增的企业级功能配置
-            compression_config: Optional[CompressionConfig] = None,
-            retrieval_config: Optional[RetrievalConfig] = None,
-            memory_config: Optional[MemoryConfig] = None,
-            enable_context_compression: bool = True,
-            enable_context_retrieval: bool = True,
-            enable_memory_management: bool = True,
+            tools: Optional[Sequence[BaseTool]] = None,
             **kwargs,
     ):
         """初始化智能体
@@ -72,13 +62,8 @@ class Agent:
             name: 智能体名称
             llm_engine: 语言模型引擎
             description: 智能体描述
+            system_prompt: 系统提示词
             tools: 初始工具字典
-            compression_config: 上下文压缩配置
-            retrieval_config: 上下文检索配置
-            memory_config: 记忆管理配置
-            enable_context_compression: 是否启用上下文压缩
-            enable_context_retrieval: 是否启用上下文检索
-            enable_memory_management: 是否启用记忆管理
             **kwargs: 其他参数
         """
         self._name = name or self.ROLE
@@ -112,38 +97,28 @@ class Agent:
     def description(self):
         return self.DESCRIPTION.strip()
 
+    @property
     def system_prompt(self) -> str:
         """渲染系统提示词"""
         if self._system_prompt:
             return self._system_prompt
-        # system_info = get_system_info()
-        # workspace_info = get_workspace_info(system_info["work_dir"])
+        system_info = get_system_info()
         return PromptLoader.get_instance().render_template(
             f"{self.role}/system.prompt",
             name=self.name,
             role=self.role,
             tools=self.tools,
-            # system_info=system_info,
-            # workspace=workspace_info
+            system_info=system_info,
         )
 
-    # def retrieve_memories(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
-    #     """检索相关记忆
-    #
-    #     Args:
-    #         query: 查询文本
-    #         top_k: 返回结果数量
-    #
-    #     Returns:
-    #         List[MemoryItem]: 相关记忆列表
-    #     """
-    #     if self.memory.is_empty():
-    #         return []
-    #
-    #     # 从短期和长期记忆中检索
-    #     agent_memories = self.memory.search_memory(query, top_k=10)
-    #
-    #     return [memory.to_message() for memory in agent_memories]
+    def _compose_messages(self, content: str) -> List[Message]:
+        """构建消息列表"""
+        messages = [
+            {"role": "system", "content": self.system_prompt},
+        ]
+        messages.extend(self._history_messages)
+        messages.append({"role": "user", "content": content})
+        return messages
 
     def _run_no_stream(
             self, messages: List[Message], **kwargs
@@ -165,7 +140,7 @@ class Agent:
         response_content = ""
         last_chunk: Optional[AgentResponseChunk] = None
         buffer = ""
-        for chunk in agent_message_stream_parser(self.tools, response):
+        for chunk in agent_stream_response_parser(self.tools, response):
             if chunk.content:
                 response_content += chunk.content
             if last_chunk is None:
@@ -199,45 +174,32 @@ class Agent:
         self._history_messages.append(
             {"role": "assistant", "content": response_content}
         )
-        # logger.debug(f"{self.name}: {response_content}")
-        # logger.debug(
-        #     json.dumps({
-        #         "messages": messages,
-        #         "response": response_content,
-        #     })
-        # )
 
-    @overload
-    def run(self, content: str, stream: Literal[False] = False) -> AgentResponse:
-        ...
-
-    @overload
-    def run(self, content: str, stream: Literal[True]) -> Generator[AgentResponseChunk, None, None]:
-        ...
-
-    def run(self, content: str, stream: bool = False) -> AgentResponse | Generator[AgentResponseChunk, None, None]:
+    def _do_run(self, content: str, stream: Literal[True, False] = False) -> AgentResponse | Generator[AgentResponseChunk, None, None]:
         """运行智能体，处理用户输入并生成响应
 
         Args:
             content: 用户输入的消息
             stream: 是否流式输出
-            context: 额外的上下文信息
 
         Returns:
             AgentResponse: 智能体的响应结果
         """
 
         # 构建消息列表
-        messages = self._history_messages.copy()
-
-        messages.append({"role": "user", "content": content})
-        self._history_messages.append({"role": "user", "content": content})
+        messages = self._compose_messages(content)
 
         if stream:
             response = self._run_stream(messages, stream_interval=5)
         else:
             response = self._run_no_stream(messages)
         return response
+
+    def chat(self, content: str) -> AgentResponse:
+        return self._do_run(content, stream=False)
+
+    def stream(self, content: str) -> Generator[AgentResponseChunk, None, None]:
+        return self._do_run(content, stream=True)
 
     def execute_tool(self, tool_call: ToolCall) -> str:
         """执行工具调用

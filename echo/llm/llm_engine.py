@@ -5,7 +5,7 @@ from typing import Any, Dict, Generator, List, Literal, NotRequired, Optional, o
 from typing_extensions import TypedDict
 
 from echo.util.logger import get_logger
-from echo.llm.schema import ChatCompletion, ChatCompletionChunk, Message
+from echo.schema.llm import ChatCompletion, ChatCompletionChunk, Message
 
 
 class LLMConfig(TypedDict):

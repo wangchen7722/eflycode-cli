@@ -28,6 +28,6 @@ def run_agent_interactive(agent: Any) -> None:
 
 
 if __name__ == "__main__":
-    from echo.agent import Developer
+    from echo.agent.developer import Developer
     llm_engine = create_llm_engine()
     run_agent_interactive(Developer(llm_engine=llm_engine))

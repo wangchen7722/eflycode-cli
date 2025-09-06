@@ -2,8 +2,8 @@ import json
 import uuid
 from typing import Generator, Optional, Sequence, List, Dict, Any
 from echo.tool.base_tool import BaseTool
-from echo.llm.schema import ChatCompletionChunk, ToolCall
-from echo.parser.schema import AgentResponseChunk, AgentResponseChunkType
+from echo.schema.llm import ChatCompletionChunk, ToolCall
+from echo.schema.agent import AgentResponseChunk, AgentResponseChunkType
 from echo.parser.base_parser import ResponseParser
 
 

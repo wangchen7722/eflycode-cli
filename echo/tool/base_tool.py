@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional
 
-from echo.tool.schema import (
+from echo.schema.tool import (
     ToolCallSchema,
     ToolExecutionError, ToolFunctionParametersSchema,
     ToolParameterError, ToolSchema,

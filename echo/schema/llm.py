@@ -23,7 +23,7 @@ class ToolCallFunction(BaseModel):
         arguments: 工具函数的参数，通常为JSON格式的字符串
     """
     name: str
-    arguments: str
+    arguments: Dict[str, Any]
 
 
 class ToolCall(BaseModel):
@@ -113,7 +113,7 @@ class StreamChoice(BaseModel):
     """
     index: int
     delta: Message
-    finish_reason: Optional[str]
+    finish_reason: Optional[str] = None
 
 
 class ChatCompletionChunk(BaseModel):

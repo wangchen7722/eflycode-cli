@@ -1,6 +1,7 @@
 import sys
 import threading
 import os
+import time
 from typing import List, Literal, Optional, Sequence, Dict
 
 from colorama import Fore, Style as ColorStyle
@@ -28,6 +29,7 @@ from prompt_toolkit.widgets import TextArea, Frame
 from prompt_toolkit.keys import Keys
 from prompt_toolkit.filters import Condition
 from .colors import PTK_STYLE
+from .base_ui import BaseUI
 
 ECHOAI_BANNER = """
   _____     _                _    ___ 
@@ -37,7 +39,7 @@ ECHOAI_BANNER = """
  |_____\___|_| |_|\___/  /_/   \_\___|
 """
 
-class ConsoleUI:
+class ConsoleUI(BaseUI):
     """终端用户界面类 处理用户输入输出和UI展示"""
 
     _instance = None
@@ -66,6 +68,7 @@ class ConsoleUI:
         """显示欢迎信息"""
         self.clear()
         with self._lock:
+            # 直接使用 print, 避免 Rich 格式化
             print(Fore.BLUE + ECHOAI_BANNER + ColorStyle.RESET_ALL)
 
     def flush(self) -> None:
@@ -78,11 +81,11 @@ class ConsoleUI:
         with self._lock:
             self.console.clear()
 
-    def acquire_user_input(self, text: str = "", choices: Optional[List[str]] = None) -> str:
+    def acquire_user_input(self, text: str = "请输入内容…", choices: Optional[List[str]] = None) -> str:
         """获取用户输入
 
         Args:
-            text: 输入提示文本
+            text: 输入框占位符文本
             choices: 可选的备选项列表 若提供则启用自动补全
 
         Returns:
@@ -106,8 +109,9 @@ class ConsoleUI:
 
         @bindings.add(Keys.Enter)
         def _handle_enter(event: KeyPressEvent):
-            result[0] = event.current_buffer.text
-            event.app.exit()
+            if event.current_buffer.text:
+                result[0] = event.current_buffer.text
+                event.app.exit()
 
         @bindings.add(Keys.Escape, Keys.Enter)
         def _handle_alt_enter(event: KeyPressEvent):
@@ -130,10 +134,11 @@ class ConsoleUI:
         def show_placeholder():
             return textarea.text == ""
 
+        placeholder_text = text
         placeholder = ConditionalContainer(
             Window(
                 content=FormattedTextControl(
-                    text=[("class:placeholder", "请输入内容…")],
+                    text=[("class:placeholder", placeholder_text)],
                     show_cursor=True,
                 ),
                 height=1,
@@ -427,6 +432,15 @@ class ConsoleUI:
         if cancelled[0]:
             return ""
         return result if result is not None else ""
+
+    def print(self, text: str) -> None:
+        """打印文本到控制台
+        
+        Args:
+            text: 要打印的文本内容
+        """
+        with self._lock:
+            self.console.print(text)
 
     @classmethod
     def get_instance(cls) -> "ConsoleUI":

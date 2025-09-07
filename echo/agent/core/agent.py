@@ -9,16 +9,20 @@ from typing import (
     Literal,
 )
 
+from echo.ui.console import ConsoleUI
 from echo.util.logger import get_logger
 from echo.util.system import get_system_info
 from echo.llm.llm_engine import LLMEngine
 from echo.schema.llm import ChatCompletionChunk, Message, ToolCall
+from echo.schema.tool import ToolError
 from echo.prompt.prompt_loader import PromptLoader
 from echo.tool.base_tool import BaseTool
 from echo.parser.stream_parser import StreamResponseParser
 from echo.schema.agent import (
     AgentResponseChunk,
+    AgentResponseChunkType,
     AgentResponse,
+    ToolCallResponse
 )
 from echo.config import GlobalConfig
 
@@ -70,33 +74,54 @@ class ToolCallAgent(BaseAgent):
         """获取工具字典"""
         return self._tools
 
-    def execute_tool(self, tool_call: ToolCall) -> str:
+    def execute_tool(self, tool_call: ToolCall) -> ToolCallResponse:
         """执行工具调用
 
         Args:
             tool_call: 工具调用
         """
-        tool_name = tool_call["function"]["name"]
-        tool_call_arguments = json.loads(tool_call["function"]["arguments"])
+        tool_name = tool_call.function.name
+        tool_call_arguments = tool_call.function.arguments
         tool = self._tool_map.get(tool_name, None)
         if not tool:
-            return PromptLoader.get_instance().render_template(
+            tool_call_response_message = PromptLoader.get_instance().render_template(
                 "tool_call/tool_call_not_found.prompt",
                 tool_name=tool_name,
                 tools=self._tool_map,
             )
+            return ToolCallResponse(
+                tool_name=tool_name,
+                arguments=tool_call_arguments,
+                success=False,
+                result=f"工具 {tool_name} 不存在",
+                message=tool_call_response_message,
+            )
         try:
             tool_response = tool.run(**tool_call_arguments)
-            return PromptLoader.get_instance().render_template(
+            tool_call_response_message = PromptLoader.get_instance().render_template(
                 "tool_call/tool_call_succeeded.prompt",
                 tool_name=tool_name,
                 tool_response=tool_response,
             )
-        except Exception as e:
-            return PromptLoader.get_instance().render_template(
+            return ToolCallResponse(
+                tool_name=tool_name,
+                arguments=tool_call_arguments,
+                success=True,
+                result=tool_response,
+                message=tool_call_response_message,
+            )
+        except ToolError as e:
+            tool_call_response_message = PromptLoader.get_instance().render_template(
                 "tool_call/tool_call_failed.prompt",
                 tool_name=tool_name,
                 tool_response=str(e),
+            )
+            return ToolCallResponse(
+                tool_name=tool_name,
+                arguments=tool_call_arguments,
+                success=False,
+                result=str(e),
+                message=tool_call_response_message,
             )
 
 
@@ -150,25 +175,25 @@ class ConversationAgent(ToolCallAgent):
             stream_parser=self.stream_parser,
         )
 
-    def _compose_messages(self, content: str) -> List[Message]:
+    def _compose_messages(self) -> List[Message]:
         """构建消息列表"""
         messages = [
-            {"role": "system", "content": self.system_prompt},
+            Message(role="system", content=self.system_prompt),
         ]
         messages.extend(self._history_messages)
-        messages.append({"role": "user", "content": content})
         return messages
 
     def _run_no_stream(
             self, messages: List[Message], **kwargs
     ) -> AgentResponse:
         response = self.llm_engine.generate(messages=messages, stream=False, **kwargs)
-        self._history_messages.append(response["choices"][0]["message"])
+        self._history_messages.append(response.choices[0].message)
         return AgentResponse(
-            content=response["choices"][0]["message"].get("content", None),
-            finish_reason=response["choices"][0]["finish_reason"],
-            tool_calls=response["choices"][0]["message"].get("tool_calls", None),
-            usage=response["usage"],
+            messages=messages,
+            content=response.choices[0].message.content,
+            finish_reason=response.choices[0].finish_reason,
+            tool_calls=response.choices[0].message.tool_calls,
+            usage=response.usage,
         )
 
     def _run_stream(
@@ -210,9 +235,7 @@ class ConversationAgent(ToolCallAgent):
                     buffer = ""
                 yield chunk
             last_chunk = chunk
-        self._history_messages.append(
-            {"role": "assistant", "content": response_content}
-        )
+        self._history_messages.append(Message(role="assistant", content=response_content))
 
     def _do_run(self, content: str, stream: Literal[True, False] = False) -> AgentResponse | Generator[AgentResponseChunk, None, None]:
         """运行智能体，处理用户输入并生成响应
@@ -224,9 +247,11 @@ class ConversationAgent(ToolCallAgent):
         Returns:
             AgentResponse: 智能体的响应结果
         """
+        user_message = Message(role="user", content=content)
+        self._history_messages.append(user_message)
 
         # 构建消息列表
-        messages = self._compose_messages(content)
+        messages = self._compose_messages()
 
         if stream:
             response = self._run_stream(messages, stream_interval=5)
@@ -240,3 +265,73 @@ class ConversationAgent(ToolCallAgent):
     def stream(self, content: str) -> Generator[AgentResponseChunk, None, None]:
         return self._do_run(content, stream=True)
 
+class InteractiveConversationAgent(ConversationAgent):
+
+    def __init__(
+        self,
+        ui: ConsoleUI,
+        llm_engine: LLMEngine,
+        system_prompt: Optional[str] = None,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        tools: Optional[Sequence[BaseTool]] = None,
+        **kwargs,
+    ):
+        super().__init__(
+            llm_engine=llm_engine,
+            system_prompt=system_prompt,
+            name=name,
+            description=description,
+            tools=tools,
+            **kwargs,
+        )
+        self._ui = ui
+
+    @property
+    def ui(self) -> ConsoleUI:
+        """获取UI实例"""
+        return self._ui
+
+    def interactive_chat(self) -> None:
+        """交互式聊天"""
+        conversation_count = 0
+        user_input = None
+        while True:
+            try:
+                if user_input is None:
+                    user_input = self.ui.acquire_user_input()
+                if not user_input:
+                    continue
+
+                streaming_response = self.stream(user_input)
+                user_input = None
+                has_tool_call = False
+
+                for chunk in streaming_response:
+                    if has_tool_call:
+                        continue
+                    if chunk.type == AgentResponseChunkType.TEXT:
+                        if chunk.content:
+                            self.ui.print(chunk.content.strip())
+                    elif chunk.type == AgentResponseChunkType.TOOL_CALL:
+                        if chunk.tool_calls is None or len(chunk.tool_calls) == 0:
+                            raise RuntimeError("工具调用不能为空")
+                        tool_call = chunk.tool_calls[0]
+                        tool_name = tool_call.function.name
+                        tool_args = tool_call.function.arguments
+                        tool_call_display = self._tool_map[tool_name].display(**tool_args)
+                        self.ui.panel([tool_name], tool_call_display, color="blue")
+                        tool_call_response = self.execute_tool(tool_call)
+                        if tool_call_response.success:
+                            self.ui.panel([tool_name], tool_call_response.result, color="green")
+                        else:
+                            self.ui.panel([tool_name], tool_call_response.result, color="red")
+                        user_input = tool_call_response.message
+                        has_tool_call = True
+
+                conversation_count += 1
+            except KeyboardInterrupt:
+                break
+            except RuntimeError as e:
+                self.ui.error(f"运行时错误: {str(e)}")
+                continue

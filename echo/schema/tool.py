@@ -1,18 +1,19 @@
 from typing import Any, Dict, Optional, Literal, List
+from typing_extensions import TypedDict
 from pydantic import BaseModel
 
 
-class ToolFunctionParametersSchema(BaseModel):
+class ToolFunctionParametersSchema(TypedDict, total=False):
     """工具函数参数的schema定义
     
     Attributes:
         type: 参数类型
-        properties: 参数属性定义
-        required: 必需参数列表
+        description: 参数描述
+        required: 是否为必需参数
     """
     type: str
-    properties: Dict[str, Dict[str, Any]]
-    required: Optional[List[str]]
+    description: str
+    required: bool
 
 
 class ToolFunctionSchema(BaseModel):
@@ -25,7 +26,7 @@ class ToolFunctionSchema(BaseModel):
     """
     name: str
     description: str
-    parameters: ToolFunctionParametersSchema
+    parameters: Dict[str, ToolFunctionParametersSchema]
 
 
 class ToolSchema(BaseModel):

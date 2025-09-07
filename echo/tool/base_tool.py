@@ -99,7 +99,7 @@ class BaseTool(ABC):
 
     @property
     @abstractmethod
-    def parameters(self) -> ToolFunctionParametersSchema:
+    def parameters(self) -> Dict[str, ToolFunctionParametersSchema]:
         """工具参数"""
         pass
 
@@ -107,42 +107,6 @@ class BaseTool(ABC):
     def examples(self) -> Optional[Dict[str, ToolCallSchema]]:
         """工具示例"""
         return None
-
-    @property
-    def raw_parameters(self) -> ToolFunctionParametersSchema:
-        """获取工具参数"""
-        return self.parameters
-
-    @property
-    def formatted_parameters(self) -> Dict[str, Any]:
-        """获取格式化的工具参数"""
-        required = self.parameters["required"] or []
-        return {
-            param_name: {
-                "type": param_schema["type"],
-                "description": "\n".join(
-                    [
-                        line.strip()
-                        for line in param_schema.get("description", "")
-                        .strip()
-                        .split("\n")
-                    ]
-                ),
-                "required": param_name in required,
-            }
-            for param_name, param_schema in self.parameters["properties"].items()
-        }
-
-    @property
-    def formatted_examples(self) -> Dict[str, ToolCallSchema]:
-        return (
-            {
-                example_name.strip(): example_tool_call
-                for example_name, example_tool_call in self.examples.items()
-            }
-            if self.examples
-            else {}
-        )
 
     @property
     def schema(self) -> ToolSchema:
@@ -161,9 +125,9 @@ class BaseTool(ABC):
         try:
             typed_params = {}
             for param_name, param_value in parameters.items():
-                if param_name in self.formatted_parameters:
+                if param_name in self.parameters:
                     typed_params[param_name] = convert_data(
-                        param_value, self.formatted_parameters[param_name]
+                        param_value, self.parameters[param_name]
                     )
             return typed_params
         except Exception as e:

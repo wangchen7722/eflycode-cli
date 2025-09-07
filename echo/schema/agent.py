@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Optional, Sequence, List
+from typing import Any, Optional, Sequence, List, Dict
 from pydantic import BaseModel
 
 from echo.schema.llm import ToolCall, Usage, Message
@@ -59,3 +59,18 @@ class AgentResponse(BaseModel):
     finish_reason: Optional[str]
     tool_calls: Optional[List[ToolCall]]
     usage: Optional[Usage]
+
+
+class ToolCallResponse(BaseModel):
+    """工具调用响应类，用于表示工具调用的执行结果
+
+    Attributes:
+        tool_name (str): 工具名称
+        arguments (Dict[str, Any]): 工具调用的参数
+        response (str): 工具执行的响应结果
+    """
+    tool_name: str
+    arguments: Dict[str, Any]
+    success: bool
+    result: str
+    message: str

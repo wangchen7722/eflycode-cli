@@ -97,9 +97,9 @@ class StreamResponseParser(ResponseParser):
         for chunk in chat_completion_chunk_stream:
             if chunk is None:
                 continue
-            last_usage = chunk.get("usage", None)
-            last_finish_reason = chunk["choices"][0].get("finish_reason", None)
-            chunk_content = chunk["choices"][0]["delta"].get("content", "")
+            last_usage = chunk.usage
+            last_finish_reason = chunk.choices[0].finish_reason
+            chunk_content = chunk.choices[0].delta.content
 
             for char in chunk_content:
                 yield from self._process_character(char)
@@ -381,7 +381,7 @@ class StreamResponseParser(ResponseParser):
                             type="function",
                             function={
                                 "name": self.tool_call["name"],
-                                "arguments": json.dumps(self.tool_call["arguments"]),
+                                "arguments": self.tool_call["arguments"],
                             },
                         )
                     ],
@@ -437,7 +437,7 @@ class StreamResponseParser(ResponseParser):
                         type="function",
                         function={
                             "name": self.tool_call["name"],
-                            "arguments": json.dumps(self.tool_call["arguments"]),
+                            "arguments": self.tool_call["arguments"],
                         },
                     )
                 ],
@@ -462,7 +462,7 @@ class StreamResponseParser(ResponseParser):
                         type="function",
                         function={
                             "name": self.tool_call["name"],
-                            "arguments": json.dumps(self.tool_call["arguments"]),
+                            "arguments": self.tool_call["arguments"],
                         },
                     )
                 ],

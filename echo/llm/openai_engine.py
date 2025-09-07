@@ -42,7 +42,7 @@ class OpenAIEngine(LLMEngine):
 
     def _generate_non_stream(
             self,
-            request_data: Dict[str, Any]
+            request_data: Dict[str, Any],
     ) -> ChatCompletion:
         """非流式生成回复
 
@@ -54,7 +54,7 @@ class OpenAIEngine(LLMEngine):
             ChatCompletion对象
         """
         response = self._client.post(
-            "/v1/chat/completions",
+            "/chat/completions",
             json=request_data
         )
         response.raise_for_status()
@@ -62,12 +62,11 @@ class OpenAIEngine(LLMEngine):
 
     def _generate_stream(
             self,
-            request_data: Dict[str, Any]
+            request_data: List[Message],
     ) -> Generator[ChatCompletionChunk, None, None]:
         """流式生成回复
 
         Args:
-            messages: 消息列表
             request_data: 请求数据
 
         Returns:
@@ -129,7 +128,10 @@ class OpenAIEngine(LLMEngine):
         generate_config = build_generate_config(self.llm_config, **kwargs)
         request_data = {
             "model": self.model,
-            "messages": messages,
+            "messages": [
+                message.model_dump()
+                for message in messages
+            ],
             "stream": stream,
             **generate_config
         }

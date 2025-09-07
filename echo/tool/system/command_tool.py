@@ -12,15 +12,15 @@ class ExecuteCommandTool(BaseTool):
     @property
     def name(self) -> str:
         return "execute_command"
-    
+
     @property
     def type(self) -> str:
         return "function"
-    
+
     @property
     def is_approval(self) -> bool:
         return True
-    
+
     @property
     def description(self) -> str:
         return """
@@ -31,30 +31,30 @@ class ExecuteCommandTool(BaseTool):
     IMPORTANT: You MUST avoid using text-based search commands like `grep` or `find`. Instead, use file-system_related tool calls.
     IMPORTANT: Prefer to using the provided tools over commands. For example, if you need to create a file, use the create_file tool instead of executing a command like `touch file.txt`.
     """
-    
+
     def display(self, **kwargs) -> str:
         return "执行命令"
-    
+
     @property
     def parameters(self):
         return {
-            "type": "object",
-            "properties": {
-                "command": {
-                    "type": "string",
-                    "description": "The CLI command to execute. This should be valid for the current operating system. Ensure the command is properly formatted and does not contain any harmful instructions.",
-                },
-                "cwd": {
-                    "type": "string",
-                    "description": f"The working directory to execute the command in default ({os.getcwd()}).",
-                },
-                "timeout": {
-                    "type": "integer",
-                    "description": "The maximum time in seconds to wait for the command to complete. If the command takes longer than this time, the execution will be stopped and an error will be returned.",
-                },
+            "command": {
+                "type": "string",
+                "description": "The CLI command to execute. This should be valid for the current operating system. Ensure the command is properly formatted and does not contain any harmful instructions.",
+                "required": True,
             },
-            "required": ["command"],
+            "cwd": {
+                "type": "string",
+                "description": f"The working directory to execute the command in default ({os.getcwd()}).",
+                "required": False,
+            },
+            "timeout": {
+                "type": "integer",
+                "description": "The maximum time in seconds to wait for the command to complete. If the command takes longer than this time, the execution will be stopped and an error will be returned.",
+                "required": False,
+            },
         }
+
     @property
     def examples(self):
         return {
@@ -63,18 +63,20 @@ class ExecuteCommandTool(BaseTool):
                 "name": self.name,
                 "arguments": {
                     "command": "npm start",
-                }
+                },
             },
             "Requesting to execute pip install -r requirements.txt": {
                 "type": self.type,
                 "name": self.name,
                 "arguments": {
                     "command": "pip install -r requirements.txt",
-                }
-            }
+                },
+            },
         }
 
-    def do_run(self, command: str, cwd: Optional[str] = None, timeout: Optional[int] = None) -> str:
+    def do_run(
+        self, command: str, cwd: Optional[str] = None, timeout: Optional[int] = None
+    ) -> str:
         """执行命令"""
         if cwd:
             work_dir = os.path.abspath(cwd)
@@ -92,7 +94,7 @@ class ExecuteCommandTool(BaseTool):
                 text=True,  # 以文本模式处理输出
                 timeout=timeout,  # 设置超时时间
                 check=True,  # 若命令返回非零退出码，则引发 CalledProcessError 异常
-                shell=True  # 使用 shell 执行命令
+                shell=True,  # 使用 shell 执行命令
             )
             output = ""
             code = process.returncode
@@ -112,7 +114,11 @@ class ExecuteCommandTool(BaseTool):
             # 判断是否是超时异常，如果是一个常驻程序，那么可以忽略这个异常
             stdout = e.stdout
             stderr = e.stderr
-            return f"Error: Command execution timed out after {timeout} seconds\n" + f"stdout:\n{stdout}\n" + f"stderr:\n{stderr}"
+            return (
+                f"Error: Command execution timed out after {timeout} seconds\n"
+                + f"stdout:\n{stdout}\n"
+                + f"stderr:\n{stderr}"
+            )
         except subprocess.CalledProcessError as e:
             output = ""
             code = e.returncode

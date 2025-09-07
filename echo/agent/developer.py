@@ -1,13 +1,13 @@
 from typing import Optional
 
-from echo.agent.core.agent import ConversationAgent
+from echo.agent.core.agent import ConversationAgent, InteractiveConversationAgent
 from echo.agent.registry import register_agent
 from echo.llm.llm_engine import LLMEngine
 from echo.tool import ReadFileTool, CreateFileTool, EditFileTool, SearchFilesTool, ListFilesTool, ExecuteCommandTool, ListCodeDefinitionsTool
 
 
 @register_agent("developer")
-class Developer(ConversationAgent):
+class Developer(InteractiveConversationAgent):
     ROLE = "developer"
     DESCRIPTION = """
     一名技术精湛的软件开发者，精通多种编程语言、开发框架、设计模式以及最佳实践。

@@ -1,32 +1,55 @@
-from typing import Any, Dict, Optional, Literal, List, Required
-from typing_extensions import TypedDict
+from typing import Any, Dict, Optional, Literal, List
+from pydantic import BaseModel
 
 
-class ToolFunctionParametersSchema(TypedDict, total=False):
-    """工具函数参数的schema定义"""
-    type: Required[str]
-    properties: Required[Dict[str, Dict[str, Any]]]
-    required: Required[Optional[List[str]]]
+class ToolFunctionParametersSchema(BaseModel):
+    """工具函数参数的schema定义
+    
+    Attributes:
+        type: 参数类型
+        properties: 参数属性定义
+        required: 必需参数列表
+    """
+    type: str
+    properties: Dict[str, Dict[str, Any]]
+    required: Optional[List[str]]
 
 
-class ToolFunctionSchema(TypedDict, total=False):
-    """工具函数的schema定义"""
-    name: Required[str]
-    description: Required[str]
-    parameters: Required[ToolFunctionParametersSchema]
+class ToolFunctionSchema(BaseModel):
+    """工具函数的schema定义
+    
+    Attributes:
+        name: 工具函数名称
+        description: 工具函数描述
+        parameters: 工具函数参数schema
+    """
+    name: str
+    description: str
+    parameters: ToolFunctionParametersSchema
 
 
-class ToolSchema(TypedDict, total=False):
-    """工具的schema定义"""
-    type: Required[Literal["function"]]
-    function: Required[ToolFunctionSchema]
+class ToolSchema(BaseModel):
+    """工具的schema定义
+    
+    Attributes:
+        type: 工具类型
+        function: 工具函数schema
+    """
+    type: Literal["function"]
+    function: ToolFunctionSchema
 
 
-class ToolCallSchema(TypedDict, total=False):
-    """工具的schema定义"""
-    type: Required[Literal["function", "memory"]]
-    name: Required[str]
-    arguments: Required[Dict[str, Any]]
+class ToolCallSchema(BaseModel):
+    """工具调用的schema定义
+    
+    Attributes:
+        type: 调用类型
+        name: 工具名称
+        arguments: 调用参数
+    """
+    type: Literal["function", "memory"]
+    name: str
+    arguments: Dict[str, Any]
 
 
 class ToolError(Exception):

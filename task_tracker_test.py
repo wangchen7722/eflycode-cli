@@ -1,138 +1,16 @@
 #!/usr/bin/env python3
-"""Token消耗统计系统示例"""
+"""任务追踪系统示例"""
 
 import json
 from typing import Dict, List, Optional, Any
-from dataclasses import dataclass, field
 from datetime import datetime
 from contextlib import contextmanager
 from threading import local
 
-from echo.schema.schema import Usage
+from echo.schema.llm import Usage
+from echo.schema.agent import AgentResponse
+from echo.schema.task import ConversationTask, ConversationMessage
 from echo.agent.core.agent import ConversationAgent
-from echo.schema.schema import AgentResponse
-
-
-def add_usage(base_usage: Usage, new_usage: Usage) -> Usage:
-    """合并两个Usage统计
-    
-    Args:
-        base_usage: 基础使用统计
-        new_usage: 新的使用统计
-        
-    Returns:
-        Usage: 合并后的使用统计
-    """
-    return {
-        "prompt_tokens": base_usage.get("prompt_tokens", 0) + new_usage.get("prompt_tokens", 0),
-        "completion_tokens": base_usage.get("completion_tokens", 0) + new_usage.get("completion_tokens", 0),
-        "total_tokens": base_usage.get("total_tokens", 0) + new_usage.get("total_tokens", 0)
-    }
-
-
-@dataclass
-class ConversationRecord:
-    """对话记录，支持RAG和复杂交互场景"""
-    timestamp: datetime
-    role: str  # "user", "assistant", "system", "tool"
-    
-    # 基础内容
-    response: Optional[AgentResponse] = None  # 对于assistant角色
-    user_content: Optional[str] = None  # 对于user角色
-    
-    # RAG相关上下文
-    retrieved_documents: Optional[List[Dict[str, Any]]] = None  # 检索到的文档
-    context_sources: Optional[List[str]] = None  # 上下文来源
-    
-    # 工具调用详情
-    tool_execution_details: Optional[Dict[str, Any]] = None  # 工具执行的详细信息
-    
-    # 元数据
-    metadata: Optional[Dict[str, Any]] = None  # 额外的元数据信息
-    
-    def to_dict(self) -> Dict[str, Any]:
-        """转换为字典格式"""
-        base_dict = {
-            "timestamp": self.timestamp.isoformat(),
-            "role": self.role,
-        }
-        
-        if self.role == "assistant" and self.response:
-            base_dict.update({
-                "content": self.response.content,
-                "finish_reason": self.response.finish_reason,
-                "tool_calls": [{
-                    "id": tc.get("id"),
-                    "function": tc.get("function", {})
-                } for tc in self.response.tool_calls] if self.response.tool_calls else None,
-                "usage": self.response.usage
-            })
-        else:
-            base_dict.update({
-                "content": self.user_content,
-                "finish_reason": None,
-                "tool_calls": None,
-                "usage": None
-            })
-        
-        # 添加RAG和上下文信息（仅在存在时）
-        if self.retrieved_documents:
-            base_dict["retrieved_documents"] = self.retrieved_documents
-        if self.context_sources:
-            base_dict["context_sources"] = self.context_sources
-        if self.tool_execution_details:
-            base_dict["tool_execution_details"] = self.tool_execution_details
-        if self.metadata:
-            base_dict["metadata"] = self.metadata
-            
-        return base_dict
-
-
-@dataclass
-class TaskSession:
-    """任务会话记录"""
-    task_id: str
-    task_name: str
-    start_time: datetime = field(default_factory=datetime.now)
-    end_time: Optional[datetime] = None
-    total_usage: Usage = field(default_factory=lambda: {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0})
-    conversations: List[ConversationRecord] = field(default_factory=list)
-    iterations: int = 0
-    
-    def add_conversation(self, record: ConversationRecord) -> None:
-        """添加对话记录"""
-        self.conversations.append(record)
-        # 只有assistant角色的响应才有token使用统计
-        if record.role == "assistant" and record.response and record.response.usage:
-            self.total_usage = add_usage(self.total_usage, record.response.usage)
-    
-    def add_iteration(self) -> None:
-        """增加迭代次数"""
-        self.iterations += 1
-    
-    def finish(self) -> None:
-        """结束任务会话"""
-        self.end_time = datetime.now()
-    
-    def get_duration(self) -> Optional[float]:
-        """获取任务持续时间（秒）"""
-        if self.end_time:
-            return (self.end_time - self.start_time).total_seconds()
-        return None
-    
-    def to_dict(self) -> Dict[str, Any]:
-        """转换为字典格式"""
-        return {
-            "task_id": self.task_id,
-            "task_name": self.task_name,
-            "start_time": self.start_time.isoformat(),
-            "end_time": self.end_time.isoformat() if self.end_time else None,
-            "duration_seconds": self.get_duration(),
-            "total_usage": self.total_usage,
-            "iterations": self.iterations,
-            "conversation_count": len(self.conversations),
-            "conversations": [conv.to_dict() for conv in self.conversations]
-        }
 
 
 class TaskTracker:
@@ -148,23 +26,23 @@ class TaskTracker:
     """
     
     def __init__(self):
-        self._sessions: Dict[str, TaskSession] = {}
-        self._current_session: Optional[TaskSession] = None
+        self._sessions: Dict[str, ConversationTask] = {}
+        self._current_session: Optional[ConversationTask] = None
         self._thread_local = local()
     
-    def start_task(self, task_id: str, task_name: str) -> TaskSession:
+    def start_task(self, task_id: str, task_name: str) -> ConversationTask:
         """开始一个新任务"""
-        session = TaskSession(task_id=task_id, task_name=task_name)
+        session = ConversationTask(task_id=task_id, task_name=task_name)
         self._sessions[task_id] = session
         self._current_session = session
         self._thread_local.current_session = session
         return session
     
-    def get_current_session(self) -> Optional[TaskSession]:
+    def get_current_session(self) -> Optional[ConversationTask]:
         """获取当前会话"""
         return getattr(self._thread_local, "current_session", self._current_session)
     
-    def finish_task(self, task_id: str) -> Optional[TaskSession]:
+    def finish_task(self, task_id: str) -> Optional[ConversationTask]:
         """结束任务"""
         session = self._sessions.get(task_id)
         if session:
@@ -174,81 +52,55 @@ class TaskTracker:
                 self._thread_local.current_session = None
         return session
     
-    def get_session(self, task_id: str) -> Optional[TaskSession]:
+    def get_session(self, task_id: str) -> Optional[ConversationTask]:
         """获取指定任务的会话"""
         return self._sessions.get(task_id)
     
-    def get_all_sessions(self) -> Dict[str, TaskSession]:
+    def get_all_sessions(self) -> Dict[str, ConversationTask]:
         """获取所有会话"""
         return self._sessions.copy()
-    
-    def record_conversation(
-        self, 
-        role: str, 
-        response: Optional[AgentResponse] = None,
-        user_content: Optional[str] = None
-    ) -> None:
-        """记录对话"""
-        session = self.get_current_session()
-        if session:
-            record = ConversationRecord(
-                timestamp=datetime.now(),
-                role=role,
-                response=response if role == "assistant" else None,
-                user_content=user_content if role == "user" else None
-            )
-            session.add_conversation(record)
     
     def record_user_input(
         self, 
         content: str, 
-        context_sources: Optional[List[str]] = None,
         metadata: Optional[Dict[str, Any]] = None
     ) -> None:
         """记录用户输入
         
         Args:
             content: 用户输入内容
-            context_sources: 上下文来源，如文件路径、URL等
             metadata: 额外的元数据
         """
-        record = ConversationRecord(
+        record = ConversationMessage(
             timestamp=datetime.now(),
             role="user",
-            user_content=content,
-            context_sources=context_sources,
+            content=content,
             metadata=metadata
         )
         session = self.get_current_session()
         if session:
-            session.add_conversation(record)
+            session.record(record)
     
     def record_assistant_response(
         self, 
         response: AgentResponse,
-        retrieved_documents: Optional[List[Dict[str, Any]]] = None,
-        tool_execution_details: Optional[Dict[str, Any]] = None,
         metadata: Optional[Dict[str, Any]] = None
     ) -> None:
         """记录助手响应
         
         Args:
-            response: Agent响应
-            retrieved_documents: RAG检索到的文档
-            tool_execution_details: 工具执行详情
+            response: Agent响应，包含工具调用、检索文档等详细信息
             metadata: 额外的元数据
         """
-        record = ConversationRecord(
+        record = ConversationMessage(
             timestamp=datetime.now(),
             role="assistant",
             response=response,
-            retrieved_documents=retrieved_documents,
-            tool_execution_details=tool_execution_details,
             metadata=metadata
         )
         session = self.get_current_session()
         if session:
-            session.add_conversation(record)
+            session.record(record)
     
     def record_rag_context(
         self,
@@ -263,32 +115,73 @@ class TaskTracker:
             retrieved_documents: 检索到的文档
             sources: 文档来源
         """
-        record = ConversationRecord(
+        record = ConversationMessage(
             timestamp=datetime.now(),
             role="system",
-            user_content=f"RAG检索: {query}",
-            retrieved_documents=retrieved_documents,
-            context_sources=sources,
-            metadata={"type": "rag_retrieval", "query": query}
+            content=f"RAG检索: {query}",
+            metadata={"type": "rag_retrieval", "query": query, "retrieved_documents": retrieved_documents, "context_sources": sources}
         )
         session = self.get_current_session()
         if session:
-            session.add_conversation(record)
+            session.record(record)
     
     def add_iteration(self) -> None:
         """增加当前任务的迭代次数"""
         session = self.get_current_session()
         if session:
-            session.add_iteration()
+            session.iteration()
     
     def export_session_report(self, task_id: str) -> Optional[Dict[str, Any]]:
         """导出任务会话报告"""
         session = self.get_session(task_id)
-        return session.to_dict() if session else None
+        if session:
+            return {
+                "task_id": session.task_id,
+                "task_name": session.task_name,
+                "start_time": session.start_time.isoformat(),
+                "end_time": session.end_time.isoformat() if session.end_time else None,
+                "duration_seconds": session.get_duration(),
+                "total_usage": session.total_usage,
+                "iterations": session.iterations,
+                "conversation_count": len(session.records),
+                "conversations": [self._record_to_dict(record) for record in session.records]
+            }
+        return None
+    
+    def _record_to_dict(self, record: ConversationMessage) -> Dict[str, Any]:
+        """将ConversationMessage转换为字典格式"""
+        result = {
+            "timestamp": record.timestamp.isoformat(),
+            "role": record.role,
+        }
+        
+        if record.role == "assistant" and record.response:
+            result.update({
+                "content": record.response.content,
+                "finish_reason": record.response.finish_reason,
+                "tool_calls": [{
+                    "id": tc.get("id"),
+                    "function": tc.get("function", {})
+                } for tc in record.response.tool_calls] if record.response.tool_calls else None,
+                "usage": record.response.usage
+            })
+        else:
+            result.update({
+                "content": record.content,
+                "finish_reason": None,
+                "tool_calls": None,
+                "usage": None
+            })
+        
+        # 添加元数据信息
+        if record.metadata:
+            result["metadata"] = record.metadata
+            
+        return result
     
     def export_all_reports(self) -> Dict[str, Dict[str, Any]]:
         """导出所有任务报告"""
-        return {task_id: session.to_dict() for task_id, session in self._sessions.items()}
+        return {task_id: self.export_session_report(task_id) for task_id, session in self._sessions.items() if self.export_session_report(task_id)}
 
 
 # 全局任务追踪器实例
@@ -447,7 +340,6 @@ def demo_proxy_pattern():
                         # 记录带RAG上下文的响应
                         task_tracker.record_assistant_response(
                             mock_response,
-                            retrieved_documents=mock_documents,
                             metadata={"rag_enabled": True, "retrieval_method": "semantic_search"}
                         )
                     else:

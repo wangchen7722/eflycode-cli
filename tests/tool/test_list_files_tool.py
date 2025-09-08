@@ -96,7 +96,7 @@ data/
     def test_list_files_recursive(self):
         """测试递归列出文件"""
         result = self.tool.do_run(self.test_dir, recursive=True, apply_ignore=False)
-        
+        print(result)
         self.assertIn("成功递归查看", result)
         self.assertIn("最大深度2", result)
         

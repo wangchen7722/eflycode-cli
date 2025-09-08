@@ -33,6 +33,13 @@ def {{ tool_name }}(
     {% for param_name, param_schema in tool.parameters.items() %}
     - {{ param_name }}: {{ "(required)" if param_schema.required else "(optional)" }} {{ param_schema.description }}{{ " default is " ~ param_schema.default if param_schema.default is defined else "" }}
     {% endfor %}
+
+    {% if tool.examples %}
+    Examples:
+    {% for example_name, example in tool.examples.items() %}
+    - {{ example_name }}: {{ example }}
+    {% endfor %}
+    {% endif %}
     """
     ...
 

@@ -13,7 +13,7 @@ from echo.ui.console import ConsoleUI
 from echo.util.logger import get_logger
 from echo.util.system import get_system_info
 from echo.llm.llm_engine import LLMEngine
-from echo.schema.llm import ChatCompletionChunk, Message, ToolCall
+from echo.schema.llm import Message, ToolCall
 from echo.schema.tool import ToolError
 from echo.prompt.prompt_loader import PromptLoader
 from echo.tool.base_tool import BaseTool
@@ -25,7 +25,6 @@ from echo.schema.agent import (
     ToolCallResponse
 )
 from echo.config import GlobalConfig
-
 
 logger: logging.Logger = get_logger()
 
@@ -64,7 +63,8 @@ class ToolCallAgent(BaseAgent):
     ROLE = "tool_call"
     DESCRIPTION = "所有工具调用智能体的基类，仅用来定义接口，没有任何功能。"
 
-    def __init__(self, name: Optional[str] = None, description: Optional[str] = None, tools: Optional[Sequence[BaseTool]] = None):
+    def __init__(self, name: Optional[str] = None, description: Optional[str] = None,
+                 tools: Optional[Sequence[BaseTool]] = None):
         super().__init__(name=name, description=description)
         self._tools = tools or []
         self._tool_map = {tool.name: tool for tool in self._tools}
@@ -126,18 +126,17 @@ class ToolCallAgent(BaseAgent):
 
 
 class ConversationAgent(ToolCallAgent):
-
     ROLE = "base"
     DESCRIPTION = "一个通用对话智能助手"
 
     def __init__(
-        self,
-        llm_engine: LLMEngine,
-        system_prompt: Optional[str] = None,
-        name: Optional[str] = None,
-        description: Optional[str] = None,
-        tools: Optional[Sequence[BaseTool]] = None,
-        **kwargs,
+            self,
+            llm_engine: LLMEngine,
+            system_prompt: Optional[str] = None,
+            name: Optional[str] = None,
+            description: Optional[str] = None,
+            tools: Optional[Sequence[BaseTool]] = None,
+            **kwargs,
     ):
         """初始化智能体
         Args:
@@ -167,7 +166,7 @@ class ConversationAgent(ToolCallAgent):
             return self._system_prompt
         system_info = get_system_info()
         return PromptLoader.get_instance().render_template(
-            f"{self.role}/v1/system.prompt",
+            f"{self.role}/system.prompt",
             name=self.name,
             role=self.role,
             tools=self._tool_map,
@@ -204,40 +203,46 @@ class ConversationAgent(ToolCallAgent):
         response_content = ""
         last_chunk: Optional[AgentResponseChunk] = None
         buffer = ""
-        for chunk in self.stream_parser.parse_stream(response):
-            if chunk.content:
-                response_content += chunk.content
-            if last_chunk is None:
-                # 第一个块
+        
+        try:
+            for chunk in self.stream_parser.parse_stream(response):
+                if chunk.content:
+                    response_content += chunk.content
+                if last_chunk is None:
+                    # 第一个块
+                    last_chunk = chunk
+                if chunk.type == last_chunk.type:
+                    # 合并连续的文本块
+                    buffer += chunk.content
+                    if len(buffer) >= stream_interval:
+                        yield AgentResponseChunk(
+                            type=chunk.type,
+                            content=buffer,
+                            finish_reason=chunk.finish_reason,
+                            tool_calls=chunk.tool_calls,
+                            usage=chunk.usage,
+                        )
+                        buffer = ""
+                else:
+                    # 输出上一个块
+                    if buffer:
+                        yield AgentResponseChunk(
+                            type=last_chunk.type,
+                            content=buffer,
+                            finish_reason=last_chunk.finish_reason,
+                            tool_calls=last_chunk.tool_calls,
+                            usage=last_chunk.usage,
+                        )
+                        buffer = ""
+                    yield chunk
                 last_chunk = chunk
-            if chunk.type == last_chunk.type:
-                # 合并连续的文本块
-                buffer += chunk.content
-                if len(buffer) >= stream_interval:
-                    yield AgentResponseChunk(
-                        type=chunk.type,
-                        content=buffer,
-                        finish_reason=chunk.finish_reason,
-                        tool_calls=chunk.tool_calls,
-                        usage=chunk.usage,
-                    )
-                    buffer = ""
-            else:
-                # 输出上一个块
-                if buffer:
-                    yield AgentResponseChunk(
-                        type=last_chunk.type,
-                        content=buffer,
-                        finish_reason=last_chunk.finish_reason,
-                        tool_calls=last_chunk.tool_calls,
-                        usage=last_chunk.usage,
-                    )
-                    buffer = ""
-                yield chunk
-            last_chunk = chunk
-        self._history_messages.append(Message(role="assistant", content=response_content))
+        finally:
+            # 确保无论生成器是否被提前终止，都会记录消息历史
+            if response_content:
+                self._history_messages.append(Message(role="assistant", content=response_content))
 
-    def _do_run(self, content: str, stream: Literal[True, False] = False) -> AgentResponse | Generator[AgentResponseChunk, None, None]:
+    def _do_run(self, content: str, stream: Literal[True, False] = False) -> AgentResponse | Generator[
+        AgentResponseChunk, None, None]:
         """运行智能体，处理用户输入并生成响应
 
         Args:
@@ -265,17 +270,18 @@ class ConversationAgent(ToolCallAgent):
     def stream(self, content: str) -> Generator[AgentResponseChunk, None, None]:
         return self._do_run(content, stream=True)
 
+
 class InteractiveConversationAgent(ConversationAgent):
 
     def __init__(
-        self,
-        ui: ConsoleUI,
-        llm_engine: LLMEngine,
-        system_prompt: Optional[str] = None,
-        name: Optional[str] = None,
-        description: Optional[str] = None,
-        tools: Optional[Sequence[BaseTool]] = None,
-        **kwargs,
+            self,
+            ui: ConsoleUI,
+            llm_engine: LLMEngine,
+            system_prompt: Optional[str] = None,
+            name: Optional[str] = None,
+            description: Optional[str] = None,
+            tools: Optional[Sequence[BaseTool]] = None,
+            **kwargs,
     ):
         super().__init__(
             llm_engine=llm_engine,
@@ -305,14 +311,13 @@ class InteractiveConversationAgent(ConversationAgent):
 
                 streaming_response = self.stream(user_input)
                 user_input = None
-                has_tool_call = False
 
                 for chunk in streaming_response:
-                    if has_tool_call:
-                        continue
+                    self.ui.print(chunk.model_dump_json())
                     if chunk.type == AgentResponseChunkType.TEXT:
-                        if chunk.content:
-                            self.ui.print(chunk.content.strip())
+                        # if chunk.content:
+                        #     self.ui.print(chunk.content.strip())
+                        continue
                     elif chunk.type == AgentResponseChunkType.TOOL_CALL:
                         if chunk.tool_calls is None or len(chunk.tool_calls) == 0:
                             raise RuntimeError("工具调用不能为空")
@@ -320,14 +325,17 @@ class InteractiveConversationAgent(ConversationAgent):
                         tool_name = tool_call.function.name
                         tool_args = tool_call.function.arguments
                         tool_call_display = self._tool_map[tool_name].display(**tool_args)
-                        self.ui.panel([tool_name], tool_call_display, color="blue")
+                        # self.ui.panel([tool_name], tool_call_display, color="blue")
                         tool_call_response = self.execute_tool(tool_call)
-                        if tool_call_response.success:
-                            self.ui.panel([tool_name], tool_call_response.result, color="green")
-                        else:
-                            self.ui.panel([tool_name], tool_call_response.result, color="red")
+                        # if tool_call_response.success:
+                        #     self.ui.panel([tool_name], tool_call_response.result, color="green")
+                        # else:
+                        #     self.ui.panel([tool_name], tool_call_response.result, color="red")
                         user_input = tool_call_response.message
-                        has_tool_call = True
+                        # break
+                    elif chunk.type == AgentResponseChunkType.DONE:
+                        if chunk.metadata is not None and "raw_content" in chunk.metadata:
+                            self.ui.print(chunk.metadata["raw_content"])
 
                 conversation_count += 1
             except KeyboardInterrupt:

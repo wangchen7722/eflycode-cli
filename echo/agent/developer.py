@@ -1,9 +1,11 @@
 from typing import Optional
 
-from echo.agent.core.agent import ConversationAgent, InteractiveConversationAgent
+from echo.agent.core.agent import InteractiveConversationAgent
 from echo.agent.registry import register_agent
 from echo.llm.llm_engine import LLMEngine
-from echo.tool import ReadFileTool, CreateFileTool, EditFileTool, SearchFilesTool, ListFilesTool, ExecuteCommandTool, ListCodeDefinitionsTool
+from echo.prompt import PromptLoader
+from echo.tool import FILE_TOOL_GROUP, ExecuteCommandTool, ListCodeDefinitionsTool
+from echo.util.system import get_system_info
 
 
 @register_agent("developer")
@@ -22,7 +24,7 @@ class Developer(InteractiveConversationAgent):
     ):
         developer_tools = [
             # 文件操作工具
-            ReadFileTool(), CreateFileTool(), EditFileTool(), SearchFilesTool(), ListFilesTool(),
+            *FILE_TOOL_GROUP,
             # 执行命令工具
             ExecuteCommandTool(),
             # 代码分析工具
@@ -35,3 +37,19 @@ class Developer(InteractiveConversationAgent):
             tools=developer_tools,
             **kwargs,
         )
+
+    @property
+    def system_prompt(self) -> str:
+        """渲染系统提示词"""
+        if self._system_prompt:
+            return self._system_prompt
+        system_info = get_system_info()
+        return PromptLoader.get_instance().render_template(
+            f"{self.role}/v1/system.prompt",
+            name=self.name,
+            role=self.role,
+            tools=self._tool_map,
+            system_info=system_info,
+            stream_parser=self.stream_parser,
+        )
+

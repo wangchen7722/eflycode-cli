@@ -31,6 +31,7 @@ class AgentResponseChunk(BaseModel):
             示例: [{"name": "search", "arguments": {"query": "搜索内容"}}]
         usage (Usage): 当前chunk的token使用统计
             示例: {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30}
+        metadata (Optional[Dict[str, Any]]): 响应的元数据信息
     """
 
     type: AgentResponseChunkType
@@ -38,6 +39,7 @@ class AgentResponseChunk(BaseModel):
     finish_reason: Optional[str]
     tool_calls: Optional[Sequence[ToolCall]]
     usage: Optional[Usage]
+    metadata: Optional[Dict[str, Any]] = None
 
 
 class AgentResponse(BaseModel):
@@ -53,12 +55,14 @@ class AgentResponse(BaseModel):
             示例: [{"name": "search", "arguments": {"query": "搜索内容"}}]
         usage (Usage): 完整响应的token使用统计
             示例: {"prompt_tokens": 100, "completion_tokens": 200, "total_tokens": 300}
+        metadata (Optional[Dict[str, Any]]): 响应的元数据信息
     """
     messages: List[Message]
     content: Optional[str]
     finish_reason: Optional[str]
     tool_calls: Optional[List[ToolCall]]
     usage: Optional[Usage]
+    metadata: Optional[Dict[str, Any]] = None
 
 
 class ToolCallResponse(BaseModel):

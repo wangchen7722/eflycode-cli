@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 
 from echo.agent.developer import Developer
+from echo.agent.trae import TraeBuilder
 from echo.ui.console import ConsoleUI
 from main import create_llm_engine
 

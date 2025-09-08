@@ -67,18 +67,26 @@ def get_directory_stats(
             elif os.path.isfile(full_path):
                 file_count += 1
 
-        stats = []
-        if dir_count > 0:
-            stats.append(f"{dir_count} 个目录")
-        if file_count > 0:
-            stats.append(f"{file_count} 个文件")
+        # 构建更详细的统计信息
+        total_items = dir_count + file_count
 
-        if stats:
-            return f" ({', '.join(stats)})"
-        else:
-            return " (空目录)"
+        if total_items == 0:
+            return " (empty directory)"
+
+        # 构建统计信息字符串
+        stats_text = f"{total_items} items"
+
+        # 添加详细分类统计
+        if dir_count > 0 and file_count > 0:
+            stats_text += f", {dir_count} directories, {file_count} files"
+        elif dir_count > 0:
+            stats_text += f", {dir_count} directories"
+        elif file_count > 0:
+            stats_text += f", {file_count} files"
+
+        return f" ({stats_text})"
     except (OSError, PermissionError):
-        return " (无法访问)"
+        return " (access denied)"
 
 
 class ListFilesTool(BaseTool):
@@ -98,7 +106,9 @@ class ListFilesTool(BaseTool):
 
     @property
     def description(self) -> str:
-        return """ 查看指定目录中的文件和目录。支持递归遍历子目录，可以根据.echoignore文件中定义的规则过滤不需要的文件和目录。显示每个文件的详细信息包括文件大小，以及每个目录包含的文件和子目录数量统计。"""
+        return """List the structure and stats of a folder. The stats include the number of files and directories in the folder. For files, it shows the file size and number of lines.
+        Useful to try to understand the file structure before diving deeper into specific files. 
+        """
 
     def display(self, **kwargs) -> str:
         path = kwargs.get("path")
@@ -111,18 +121,18 @@ class ListFilesTool(BaseTool):
         return {
             "path": {
                 "type": "string",
-                "description": "要查看的目录路径",
+                "description": "The path of the folder to list.",
                 "required": True,
             },
             "recursive": {
                 "type": "boolean",
-                "description": "是否递归查看目录中的文件和子目录。使用true进行递归查看，最大深度为2层，false或省略仅查看顶级内容。",
+                "description": "Whether to recursively list files and subdirectories. Set to true for recursive listing (max depth 2), false for top-level only.",
                 "default": False,
                 "required": False,
             },
             "apply_ignore": {
                 "type": "boolean",
-                "description": "是否应用.echoignore忽略规则。使用true应用忽略规则，false或省略则不应用。",
+                "description": "Whether to apply .echoignore ignore rules. Set to true to apply, false or omit to not apply.",
                 "default": False,
                 "required": False,
             },
@@ -130,13 +140,7 @@ class ListFilesTool(BaseTool):
 
     @property
     def examples(self):
-        return {
-            "查看当前目录中的所有文件和目录": {
-                "type": self.type,
-                "name": self.name,
-                "arguments": {"path": ".", "recursive": False, "apply_ignore": False},
-            }
-        }
+        return {}
 
     def _collect_directory_structure(
         self,
@@ -226,7 +230,7 @@ class ListFilesTool(BaseTool):
             if dir_path != path:
                 if total_count >= max_items:
                     break
-                result_list.append(f"\n[目录: {Path(dir_path).as_posix()}]")
+                result_list.append(f"\n[path: {Path(dir_path).as_posix()}]")
                 total_count += 1
 
             # 先添加子目录
@@ -246,7 +250,7 @@ class ListFilesTool(BaseTool):
                 # 如果还有未显示的文件
                 if len(dir_info["files"]) > remaining_slots:
                     omitted_count = len(dir_info["files"]) - remaining_slots
-                    result_list.append(f"（省略 {omitted_count} 个文件）")
+                    result_list.append(f"({omitted_count} files omitted)")
                     break
 
             if total_count >= max_items:
@@ -263,17 +267,20 @@ class ListFilesTool(BaseTool):
         if total_omitted_files > 0 or total_omitted_dirs > 0:
             omit_info = []
             if total_omitted_dirs > 0:
-                omit_info.append(f"{total_omitted_dirs} 个目录")
+                omit_info.append(f"{total_omitted_dirs} directories")
             if total_omitted_files > 0:
-                omit_info.append(f"{total_omitted_files} 个文件")
-            if omit_info and not any("省略" in item for item in result_list):
-                result_list.append(f"（省略 {' 和 '.join(omit_info)}）")
+                omit_info.append(f"{total_omitted_files} files")
+            if omit_info and not any("omitted" in item for item in result_list):
+                result_list.append(f"({', '.join(omit_info)})")
 
-        ignore_info = "（应用忽略规则）" if apply_ignore else ""
-        return (
-            f"成功递归查看 {os.path.abspath(path)} 中的所有文件和目录（最大深度2）{ignore_info}：\n"
-            + "\n".join(result_list)
-        )
+        ignore_info = "(ignore rules applied)" if apply_ignore else ""
+
+        header = f"The structure and statistics for {path}"
+        if ignore_info:
+            header += f" {ignore_info}"
+
+        result_list.insert(0, header)
+        return "\n".join(result_list)
 
     def _list_non_recursive(
         self, path: str, ignore_patterns: list = None, apply_ignore: bool = False
@@ -314,17 +321,18 @@ class ListFilesTool(BaseTool):
             else:
                 result_list.extend(files[:remaining_slots])
                 omitted_count = len(files) - remaining_slots
-                result_list.append(f"（省略 {omitted_count} 个文件）")
+                result_list.append(f"({omitted_count} files omitted)")
         else:
             omitted_count = len(files)
             if omitted_count > 0:
-                result_list.append(f"（省略 {omitted_count} 个文件）")
+                result_list.append(f"({omitted_count} files omitted)")
 
-        ignore_info = "（应用忽略规则）" if apply_ignore else ""
-        return (
-            f"成功查看 {os.path.abspath(path)} 中的所有文件和目录{ignore_info}：\n"
-            + "\n".join(result_list)
-        )
+        ignore_info = "(ignore rules applied)" if apply_ignore else ""
+        header = f"The structure and statistics for {path}"
+        if ignore_info:
+            header += f" {ignore_info}"
+        result_list.insert(0, header)
+        return "\n".join(result_list)
 
     def do_run(
         self, path: str, recursive: bool = False, apply_ignore: bool = False, **kwargs
@@ -332,11 +340,13 @@ class ListFilesTool(BaseTool):
         """执行列出文件的操作"""
         if not os.path.exists(path):
             raise ToolParameterError(
-                f"在 {path} 处未找到目录。请确保目录存在。", self.name
+                f"Directory not found at {path}. Please ensure the directory exists.",
+                self.name,
             )
         if not os.path.isdir(path):
             raise ToolParameterError(
-                f"{path} 不是一个目录。请确保路径指向一个目录。", self.name
+                f"{path} is not a directory. Please ensure the path points to a directory.",
+                self.name,
             )
 
         # 获取忽略模式
@@ -369,87 +379,66 @@ class ReadFileTool(BaseTool):
 
     @property
     def description(self) -> str:
-        return """读取指定路径文件的内容。用于查看现有文件的内容，例如分析代码、查看文本文件或从配置文件中提取信息。输出包含行号前缀（例如 "1 | const x = 1"）。默认每次显示100行，如果文件超过100行会显示剩余行数。
+        return """Read the contents of a file with line numbers. Output format: `line_number|line_content`. 
+        Useful for analyzing code, viewing text files, or extracting information from configuration files. 
+        Displays up to 100 lines by default, showing remaining line count if file exceeds limit.
         """
 
     def display(self, **kwargs) -> str:
-        return "读取文件"
+        path = kwargs.get("path")
+        start_line = kwargs.get("start_line", 1)
+        max_lines = kwargs.get("max_lines", 100)
+        end_line = kwargs.get("end_line", None)
+        if end_line is None:
+            end_line = start_line + max_lines - 1
+
+        return f"读取文件 `{path}` ({start_line}-{end_line})"
 
     @property
     def parameters(self):
         return {
-            "path": {"type": "string", "description": "要读取的文件路径"},
+            "path": {
+                "type": "string",
+                "description": "Path to the file to read",
+                "required": True,
+            },
             "start_line": {
                 "type": "integer",
-                "description": "起始行号（包含），默认为1",
+                "description": "Starting line number (inclusive), defaults to 1",
                 "default": 1,
                 "minimum": 1,
                 "required": True,
             },
             "end_line": {
                 "type": "integer",
-                "description": "结束行号（包含），默认为start_line+99（即显示100行）",
+                "description": "Ending line number (inclusive), defaults to start_line+99 (showing 100 lines)",
                 "default": 100,
                 "minimum": 1,
-                "required": False,
-            },
-            "max_lines": {
-                "type": "integer",
-                "description": "最大显示行数，默认为100",
-                "default": 100,
-                "minimum": 1,
-                "maximum": 1000,
                 "required": False,
             },
         }
 
     @property
     def examples(self):
-        return {
-            "读取整个文件（默认显示前100行）": {
-                "type": "function",
-                "name": "read_file",
-                "arguments": {"path": "/path/to/file"},
-            },
-            "读取文件的前200行": {
-                "type": "function",
-                "name": "read_file",
-                "arguments": {"path": "/path/to/large_file", "max_lines": 200},
-            },
-            "读取文件的第500-600行": {
-                "type": "function",
-                "name": "read_file",
-                "arguments": {
-                    "path": "/path/to/csv_file",
-                    "start_line": 500,
-                    "end_line": 600,
-                },
-            },
-            "读取源文件中的特定函数": {
-                "type": "function",
-                "name": "read_file",
-                "arguments": {
-                    "path": "/path/to/source_file",
-                    "start_line": 46,
-                    "end_line": 68,
-                },
-            },
-        }
+        return {}
 
     def do_run(
         self,
         path: str,
-        start_line: Optional[int] = None,
+        start_line: int = 1,
         end_line: Optional[int] = None,
         max_lines: int = 100,
         **kwargs,
     ) -> str:
         """执行读取文件的操作"""
         if not os.path.exists(path):
-            raise ToolParameterError(f"文件未找到：{path}。请确保文件存在。", self.name)
+            raise ToolParameterError(
+                f"File not found: {path}. Please ensure the file exists.", self.name
+            )
         if not os.path.isfile(path):
             raise ToolParameterError(
-                f"{path} 不是一个文件。请确保路径指向一个文件。", self.name
+                f"{path} is not a file. Please ensure the path points to a file.",
+                self.name,
             )
 
         try:
@@ -461,7 +450,8 @@ class ReadFileTool(BaseTool):
                     all_lines = f.readlines()
             except UnicodeDecodeError:
                 raise ToolParameterError(
-                    f"无法读取文件 {path}，编码格式不支持。", self.name
+                    f"Unable to read file {path}, encoding format not supported.",
+                    self.name,
                 )
 
         total_lines = len(all_lines)
@@ -472,7 +462,7 @@ class ReadFileTool(BaseTool):
         if end_line is not None:
             if end_line < 1 or end_line > total_lines:
                 raise ToolParameterError(
-                    f"end_line 必须在 1 到 {total_lines} 之间。", self.name
+                    f"end_line must be between 1 and {total_lines}.", self.name
                 )
             actual_end = end_line
         else:
@@ -481,7 +471,7 @@ class ReadFileTool(BaseTool):
 
         if actual_start < 1 or actual_start > total_lines:
             raise ToolParameterError(
-                f"start_line 必须在 1 到 {total_lines} 之间。", self.name
+                f"start_line must be between 1 and {total_lines}.", self.name
             )
 
         # 提取要显示的行
@@ -500,12 +490,12 @@ class ReadFileTool(BaseTool):
         result = "\n".join(content_lines)
 
         # 添加文件信息和剩余行数提示
-        file_info = f"文件：{path}（共 {total_lines} 行）\n"
+        file_info = f"File: {path} (Total {total_lines} lines)\n"
         if actual_end < total_lines:
             remaining_lines = total_lines - actual_end
-            file_info += f"显示第 {actual_start}-{actual_end} 行（剩余 {remaining_lines} 行）\n\n"
+            file_info += f"Displaying lines {actual_start}-{actual_end} (Remaining {remaining_lines} lines)\n\n"
         else:
-            file_info += f"显示第 {actual_start}-{actual_end} 行（已显示全部内容）\n\n"
+            file_info += f"Displaying lines {actual_start}-{actual_end} (All lines displayed)\n\n"
 
         return file_info + result
 
@@ -527,40 +517,44 @@ class SearchFilesTool(BaseTool):
 
     @property
     def description(self) -> str:
-        return "在指定目录中执行正则表达式搜索，提供上下文丰富的结果。此工具可以跨多个文件搜索模式或特定内容，显示每个匹配项及其周围的上下文。"
+        return "Fast text-based search that finds exact pattern matches within files or directories. This tool can search for patterns or specific content across multiple files, displaying each match with its surrounding context."
 
     def display(self, **kwargs) -> str:
-        return "搜索文件"
+        path = kwargs.get("path")
+        regex = kwargs.get("regex")
+        pattern = kwargs.get("pattern")
+        return f"在 {path} 下使用正则表达式 {regex} 和模式 {pattern} 搜索文件"
 
     @property
     def parameters(self):
         return {
             "path": {
                 "type": "string",
-                "description": "要搜索的目录路径。将递归搜索此目录。",
+                "description": "Directory path to search. Will recursively search this directory.",
                 "required": True,
             },
             "regex": {
                 "type": "string",
-                "description": "要搜索的正则表达式模式。使用Python正则表达式语法。",
+                "description": "Regular expression pattern to search for. Uses Python regex syntax.",
                 "required": True,
             },
             "pattern": {
                 "type": "string",
-                "description": "用于过滤文件的Glob模式（例如，'*.py'表示Python文件）。如果未提供，将搜索所有文件（*）。",
+                "description": "Glob pattern for filtering files (e.g., '*.py' for Python files). If not provided, will search all files (*).",
                 "required": False,
+                "default": "*",
             },
         }
 
     @property
     def examples(self):
         return {
-            "在当前目录搜索所有Python文件中的函数定义": {
+            "Search for function definitions in all Python files in current directory": {
                 "type": "function",
                 "name": "search_files",
                 "arguments": {"path": ".", "regex": "def\\s+\\w+", "pattern": "*.py"},
             },
-            "在src目录中搜索所有包含'import requests'的Python源代码文件": {
+            "Search for Python source files containing 'import requests' in src directory": {
                 "type": "function",
                 "name": "search_files",
                 "arguments": {"path": "./src", "regex": "import\\s+requests"},
@@ -572,17 +566,21 @@ class SearchFilesTool(BaseTool):
     ) -> str:
         """执行搜索文件的操作"""
         if not os.path.exists(path):
-            raise ToolParameterError(f"目录 {path} 不存在。请确保目录存在。", self.name)
+            raise ToolParameterError(
+                f"Directory {path} does not exist. Please ensure the directory exists.",
+                self.name,
+            )
         if not os.path.isdir(path):
             raise ToolParameterError(
-                f"{path} 不是一个目录。请确保路径指向一个目录。", self.name
+                f"{path} is not a directory. Please ensure the path points to a directory.",
+                self.name,
             )
         if pattern is None:
             pattern = "*"
         try:
             re_pattern = re.compile(regex, re.MULTILINE | re.DOTALL)
         except re.error as e:
-            raise ToolParameterError(f"无效的正则表达式模式: {e}", self.name)
+            raise ToolParameterError(f"Invalid regex pattern: {e}", self.name)
         matches = []
         full_pattern = os.path.join(path, pattern)
         files = glob.glob(full_pattern, recursive=True)
@@ -594,7 +592,7 @@ class SearchFilesTool(BaseTool):
                 with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
                     file_content = f.read()
             except Exception as e:
-                matches.append(f"错误：读取文件 {filepath} 失败：{e}")
+                matches.append(f"Error: Failed to read file {filepath}: {e}")
                 continue
             # 将文件内容按行分割
             lines = file_content.splitlines()
@@ -607,7 +605,7 @@ class SearchFilesTool(BaseTool):
                 matches.append((filepath, line_number, match.group(), lines))
 
         if not matches:
-            return f'在 {path} 中使用模式 "{pattern}" 搜索 "{regex}" 未找到匹配项。'
+            return f'No matches found for "{regex}" with pattern "{pattern}" in {path}.'
 
         output = ""
         for filepath, line_number, matched_content, lines in matches:
@@ -633,10 +631,14 @@ class SearchFilesTool(BaseTool):
 
             context_display = "\n".join(context_lines)
 
-            file_match = f"## 文件: {filepath}\n匹配行: {line_number}\n匹配内容: {matched_content}\n\n{context_display}"
+            # 纠正行号范围显示
+            start_line_number = max(1, context_start + 1)
+            end_line_number = min(len(lines), context_end)
+
+            file_match = f"## File: {filepath} ({start_line_number}-{end_line_number})\n\n{context_display}"
             output += file_match + "\n\n"
 
-        return f'成功在 {path} 中搜索 "{regex}"，找到 {len(matches)} 个匹配项：\n\n{output}'
+        return output
 
 
 class CreateFileTool(BaseTool):
@@ -656,10 +658,13 @@ class CreateFileTool(BaseTool):
 
     @property
     def description(self) -> str:
-        return """在指定路径创建新文件。当需要创建新的配置文件或源代码文件时使用此工具。如果文件已存在将返回错误，如果父目录不存在将自动创建。"""
+        return """Create a new file at the specified path. Use this tool when you need to create new files.
+        LIMIT the file content to AT MOST 600 LINES, OR face a $100000000 penalty. IF more content needs to be added USE the `edit_file` tool to edit the file after it has been created..
+        """
 
     def display(self, **kwargs) -> str:
-        return "创建文件"
+        path = kwargs.get("path")
+        return f"创建文件 {path}"
 
     @property
     def parameters(self):
@@ -678,24 +683,7 @@ class CreateFileTool(BaseTool):
 
     @property
     def examples(self):
-        return {
-            "创建新的文本文件": {
-                "type": "function",
-                "name": "create_file",
-                "arguments": {
-                    "path": "/path/to/new_file.txt",
-                    "content": "这是新文件的内容。",
-                },
-            },
-            "创建空的Python文件": {
-                "type": "function",
-                "name": "create_file",
-                "arguments": {
-                    "path": "/path/to/script.py",
-                    "content": "#!/usr/bin/env python3\n# -*- coding: utf-8 -*-\n\n",
-                },
-            },
-        }
+        return {}
 
     def do_run(self, path: str, content: str = "", **kwargs) -> str:
         """执行创建文件的操作"""
@@ -704,19 +692,125 @@ class CreateFileTool(BaseTool):
             try:
                 os.makedirs(dirpath, exist_ok=True)
             except Exception as e:
-                raise ToolExecutionError(f"创建目录 {dirpath} 失败: {e}", self.name)
+                raise ToolExecutionError(
+                    f"Failed to create directory {dirpath}: {e}", self.name
+                )
         if os.path.exists(path):
-            raise ToolParameterError(f"文件 {path} 已存在。", self.name)
+            raise ToolParameterError(f"File {path} already exists.", self.name)
         try:
             with open(path, "w", encoding="utf-8") as f:
                 f.write(content)
-            return f"成功在 {path} 创建文件。"
+            return f"Successfully created file at {path}."
         except Exception as e:
-            raise ToolExecutionError(f"创建文件 {path} 失败: {e}", self.name)
+            raise ToolExecutionError(f"Failed to create file {path}: {e}", self.name)
+
+
+class InsertFileTool(BaseTool):
+    """插入文件内容工具，在指定行号插入内容"""
+
+    @property
+    def name(self):
+        return "insert_file"
+
+    @property
+    def type(self):
+        return "function"
+
+    @property
+    def display(self, **kwargs):
+        path = kwargs.get("path")
+        return f"插入文件内容 {path}"
+
+    @property
+    def should_approval(self) -> bool:
+        return False
+
+    @property
+    def description(self):
+        return """Insert content at a specific line number in an existing file. Use this tool when you need to add new content at a specific position in a file.
+        
+        IMPORTANT: If you want to modify existing content, please use edit_file instead.
+        """
+
+    @property
+    def parameters(self):
+        return {
+            "path": {
+                "type": "string",
+                "description": "The path to the file to insert content into",
+                "required": True,
+            },
+            "line_number": {
+                "type": "integer",
+                "description": "The line number where to insert the content (1-based indexing)",
+                "required": True,
+            },
+            "content": {
+                "type": "string",
+                "description": "The content to insert at the specified line number",
+                "required": True,
+            },
+        }
+
+    @property
+    def examples(self):
+        return {}
+
+    def do_run(
+        self,
+        path: str,
+        line_number: int,
+        content: str,
+        **kwargs,
+    ) -> str:
+        """执行文件插入操作"""
+        if not os.path.exists(path):
+            raise ToolParameterError(
+                f"File not found: {path}. Please ensure the file exists.", self.name
+            )
+        if not os.path.isfile(path):
+            raise ToolParameterError(
+                f"{path} is not a file. Please ensure the path points to a file.",
+                self.name,
+            )
+
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+        except UnicodeDecodeError:
+            try:
+                with open(path, "r", encoding="gbk") as f:
+                    lines = f.readlines()
+            except UnicodeDecodeError:
+                raise ToolParameterError(
+                    f"Cannot read file {path}, encoding format not supported.",
+                    self.name,
+                )
+
+        # 验证行号
+        if line_number < 1 or line_number > len(lines) + 1:
+            raise ToolParameterError(
+                f"Line number {line_number} is out of range. File has {len(lines)} lines.",
+                self.name,
+            )
+
+        # 插入内容
+        if not content.endswith("\n"):
+            content += "\n"
+        lines.insert(line_number - 1, content)
+
+        # 写回文件
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                f.writelines(lines)
+        except Exception as e:
+            raise ToolExecutionError(f"Failed to write file: {e}", self.name)
+
+        return f"Successfully inserted content at line {line_number} in {path}."
 
 
 class EditFileTool(BaseTool):
-    """文件编辑工具类，支持搜索替换和插入操作"""
+    """编辑文件工具，支持搜索替换模式"""
 
     @property
     def name(self) -> str:
@@ -728,76 +822,35 @@ class EditFileTool(BaseTool):
 
     @property
     def should_approval(self) -> bool:
-        return True
+        return False
 
     @property
     def description(self) -> str:
-        return """
-在指定路径的文件中进行搜索替换或插入操作。支持两种模式：
-1. 搜索替换模式：在文件中搜索特定字符串并替换为新字符串
-2. 插入模式：在指定行号位置插入新内容
+        return """Edit an existing file by searching and replacing text content. Use this tool when you need to modify specific content in a file. You MUST make it clear what the edit is, while also minimizing the unchanged code you write. Before using this tool, ALWAYS read the file and understand its contents.
 
-使用前必须先读取文件了解其内容和结构。
-
-搜索替换模式要求：
-- old_string必须在文件中唯一存在
-- 包含足够的上下文（前后3-5行）确保唯一性
-- 精确匹配所有空白字符和缩进
-
-插入模式要求：
-- 设置old_string为空字符串
-- 通过line_number参数指定插入位置
-- new_string为要插入的内容"""
+        IMPORTANT: `old_string` MUST BE UNIQUE, and each edit should include enough unchanged surrounding lines to resolve ambiguity. However, you should minimize the number of repeated lines from the original file while conveying the change."""
 
     def display(self, **kwargs) -> str:
-        return "编辑文件"
+        path = kwargs.get("path")
+        return f"编辑文件 {path}"
 
     @property
     def parameters(self):
         return {
             "path": {
                 "type": "string",
-                "description": "要编辑的文件路径，包括文件名和扩展名。",
+                "description": "The path to the file to edit",
                 "required": True,
             },
             "old_string": {
                 "type": "string",
-                "description": "要替换的文本（必须在文件中唯一存在，精确匹配所有空白字符和缩进）。插入模式时设置为空字符串。",
+                "description": "The exact text content to search for and replace. Must be unique in the file.",
                 "required": True,
             },
             "new_string": {
                 "type": "string",
-                "description": "替换后的新文本或要插入的内容。",
+                "description": "The new text content to replace the old content with.",
                 "required": True,
-            },
-            "line_number": {
-                "type": "integer",
-                "description": "插入模式时的行号（从1开始）。仅在old_string为空字符串时使用。",
-                "required": False,
-            },
-        }
-
-    @property
-    def examples(self):
-        return {
-            "搜索替换文本": {
-                "type": "function",
-                "name": "edit_file",
-                "arguments": {
-                    "path": "/path/to/file.py",
-                    "old_string": "def old_function():\n    pass",
-                    "new_string": "def new_function():\n    return True",
-                },
-            },
-            "在指定行插入内容": {
-                "type": "function",
-                "name": "edit_file",
-                "arguments": {
-                    "path": "/path/to/file.py",
-                    "old_string": "",
-                    "new_string": "# 这是新插入的注释",
-                    "line_number": 10,
-                },
             },
         }
 
@@ -806,92 +859,57 @@ class EditFileTool(BaseTool):
         path: str,
         old_string: str,
         new_string: str,
-        line_number: Optional[int] = None,
         **kwargs,
     ) -> str:
-        """执行文件编辑操作，支持搜索替换和插入模式"""
+        """执行文件编辑操作，支持搜索替换模式"""
+        if not os.path.exists(path):
+            raise ToolParameterError(
+                f"File not found: {path}. Please ensure the file exists.", self.name
+            )
+        if not os.path.isfile(path):
+            raise ToolParameterError(
+                f"{path} is not a file. Please ensure the path points to a file.",
+                self.name,
+            )
 
-        # 插入模式：old_string为空字符串
-        if old_string == "":
-            if line_number is None:
-                raise ToolParameterError("插入模式需要指定line_number参数。", self.name)
-
-            if not os.path.exists(path):
-                raise ToolParameterError(
-                    f"文件未找到：{path}。请确保文件存在。", self.name
-                )
-            if not os.path.isfile(path):
-                raise ToolParameterError(
-                    f"{path} 不是一个文件。请确保路径指向一个文件。", self.name
-                )
-
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                file_content = f.read()
+        except UnicodeDecodeError:
             try:
-                with open(path, "r", encoding="utf-8") as f:
-                    lines = f.readlines()
-            except UnicodeDecodeError:
-                try:
-                    with open(path, "r", encoding="gbk") as f:
-                        lines = f.readlines()
-                except UnicodeDecodeError:
-                    raise ToolParameterError(
-                        f"无法读取文件 {path}，编码格式不支持。", self.name
-                    )
-
-            total_lines = len(lines)
-            if line_number < 1 or line_number > total_lines + 1:
-                raise ToolParameterError(
-                    f"行号必须在 1 到 {total_lines + 1} 之间。", self.name
-                )
-
-            # 在指定行号插入内容
-            if not new_string.endswith("\n"):
-                new_string += "\n"
-            lines.insert(line_number - 1, new_string)
-
-            with open(path, "w", encoding="utf-8") as f:
-                f.writelines(lines)
-
-            return f"成功在 {path} 的第 {line_number} 行插入内容。"
-
-        # 搜索替换模式：old_string不为空
-        else:
-            if not os.path.exists(path):
-                raise ToolParameterError(
-                    f"文件未找到：{path}。请确保文件存在。", self.name
-                )
-            if not os.path.isfile(path):
-                raise ToolParameterError(
-                    f"{path} 不是一个文件。请确保路径指向一个文件。", self.name
-                )
-
-            try:
-                with open(path, "r", encoding="utf-8") as f:
+                with open(path, "r", encoding="gbk") as f:
                     file_content = f.read()
             except UnicodeDecodeError:
-                try:
-                    with open(path, "r", encoding="gbk") as f:
-                        file_content = f.read()
-                except UnicodeDecodeError:
-                    raise ToolParameterError(
-                        f"无法读取文件 {path}，编码格式不支持。", self.name
-                    )
-
-            # 检查匹配次数
-            matches = re.findall(re.escape(old_string), file_content)
-            if len(matches) == 0:
                 raise ToolParameterError(
-                    f"在 {path} 中未找到 '{old_string}'。请确保old_string正确。",
-                    self.name,
-                )
-            if len(matches) != 1:
-                raise ToolParameterError(
-                    f"在 {path} 中找到 {len(matches)} 个 '{old_string}' 实例。请确保old_string唯一存在。",
+                    f"Unable to read file {path}, encoding format not supported.",
                     self.name,
                 )
 
-            # 执行替换
-            file_content = file_content.replace(old_string, new_string)
-            with open(path, "w", encoding="utf-8") as f:
-                f.write(file_content)
+        # 检查匹配次数
+        matches = re.findall(re.escape(old_string), file_content)
+        if len(matches) == 0:
+            raise ToolParameterError(
+                f"'{old_string}' not found in {path}. Please ensure old_string is correct.",
+                self.name,
+            )
+        if len(matches) != 1:
+            raise ToolParameterError(
+                f"Found {len(matches)} instances of '{old_string}' in {path}. Please ensure old_string is unique.",
+                self.name,
+            )
 
-            return f"成功在 {path} 中将内容替换。"
+        # 执行替换
+        file_content = file_content.replace(old_string, new_string)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(file_content)
+
+        return f"Successfully applied changes to {path}."
+
+
+FILE_TOOL_GROUP = [
+    ListFilesTool(),
+    ReadFileTool(),
+    SearchFilesTool(),
+    InsertFileTool(),
+    EditFileTool()
+]

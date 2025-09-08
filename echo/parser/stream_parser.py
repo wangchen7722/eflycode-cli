@@ -92,6 +92,7 @@ class StreamResponseParser(ResponseParser):
         """
         last_finish_reason = None
         last_usage = None
+        raw_content = ""
 
         # 主循环：逐个 chunk 处理
         for chunk in chat_completion_chunk_stream:
@@ -100,6 +101,7 @@ class StreamResponseParser(ResponseParser):
             last_usage = chunk.usage
             last_finish_reason = chunk.choices[0].finish_reason
             chunk_content = chunk.choices[0].delta.content
+            raw_content += chunk_content
 
             for char in chunk_content:
                 yield from self._process_character(char)
@@ -114,6 +116,9 @@ class StreamResponseParser(ResponseParser):
             finish_reason=last_finish_reason,
             tool_calls=None,
             usage=last_usage,
+            metadata={
+                "raw_content": raw_content
+            }
         )
 
     def parse_text(self, text: str) -> Generator[AgentResponseChunk, None, None]:

@@ -10,7 +10,7 @@ from typing import (
 )
 
 from echo.ui.console import ConsoleUI
-from echo.util.logger import get_logger
+from echo.util.logger import logger
 from echo.util.system import get_system_info
 from echo.llm.llm_engine import LLMEngine
 from echo.schema.llm import Message, ToolCall
@@ -26,7 +26,6 @@ from echo.schema.agent import (
 )
 from echo.config import GlobalConfig
 
-logger: logging.Logger = get_logger()
 
 
 class BaseAgent:

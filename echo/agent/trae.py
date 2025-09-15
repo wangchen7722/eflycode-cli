@@ -3,7 +3,7 @@ from typing import Optional
 from echo.agent.core.agent import ConversationAgent, InteractiveConversationAgent
 from echo.agent.registry import register_agent
 from echo.llm.llm_engine import LLMEngine
-from echo.tool import ReadFileTool, CreateFileTool, EditFileTool, SearchFilesTool, ListFilesTool, ExecuteCommandTool, ListCodeDefinitionsTool
+from echo.tool import FILE_TOOL_GROUP
 
 
 @register_agent("trae-builder")
@@ -22,9 +22,7 @@ class TraeBuilder(InteractiveConversationAgent):
     ):
         developer_tools = [
             # 文件操作工具
-            ReadFileTool(), CreateFileTool(), EditFileTool(), SearchFilesTool(), ListFilesTool(),
-            # 执行命令工具
-            ExecuteCommandTool(),
+            *FILE_TOOL_GROUP,
             # 代码分析工具
             # ListCodeDefinitionsTool()
         ]

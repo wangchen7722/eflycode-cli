@@ -4,7 +4,7 @@ from typing import Any, Dict, Generator, List, Literal, NotRequired, Optional, o
 
 from typing_extensions import TypedDict
 
-from echo.util.logger import get_logger
+from echo.util.logger import logger
 from echo.schema.llm import ChatCompletion, ChatCompletionChunk, Message
 
 
@@ -17,7 +17,6 @@ class LLMConfig(TypedDict):
     max_tokens: NotRequired[Optional[int]]
 
 
-logger: logging.Logger = get_logger(os.path.splitext(os.path.basename(__file__))[0])
 
 ALLOWED_GENERATE_CONFIG_KEYS = [
     "model",

@@ -11,3 +11,5 @@ echoai_mcp_setting.json
 research/
 .echoignore
 cache/
+
+.echo/

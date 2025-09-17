@@ -10,8 +10,9 @@ from echo.constant import (
     ECHO_PROJECT_HOME_DIR,
     ECHO_PROJECT_CONFIG_FILE,
 )
-from echo.schema.config import LoggingConfig, ModelConfig
-from echo.util.logger import configure_logging, logger
+from echo.schema.config import LoggingConfig, ModelConfig, ModelEntry
+from echo.schema.llm import LLMConfig
+from echo.util.logger import configure_logging
 
 
 class GlobalConfig:
@@ -36,6 +37,25 @@ class GlobalConfig:
             cls._instance = cls()
         return cls._instance
 
+    def get_model_config(self) -> ModelConfig:
+        """获取模型配置"""
+        if self._model_config is None:
+            raise ValueError("Model config not initialized")
+        return self._model_config
+
+    def get_default_llm_config(self) -> LLMConfig:
+        """获取默认的LLM配置"""
+        if self._model_config is None:
+            raise ValueError("Model config not initialized")
+        default_model = self._model_config.default
+        if default_model is None:
+            raise ValueError("Default model not specified in model config")
+        for entry in self._model_config.entries:
+            if entry.model == default_model:
+                return LLMConfig(**entry.model_dump())
+        raise ValueError(f"Default model {default_model} not found in model config")
+
+
     def _initialize(self) -> None:
         """初始化配置"""
         if self._initialized:
@@ -55,7 +75,10 @@ class GlobalConfig:
     def _parse_model_config(self, config: Dict[str, Any]) -> ModelConfig:
         """解析模型配置"""
         model_config = config.get("model", {})
-        return ModelConfig(**model_config)
+        return ModelConfig(
+            default=model_config.get("default", None),
+            entries=[ModelEntry(**entry) for entry in model_config.get("entries", [])],
+        )
 
     def _load_config(self) -> Dict[str, Any]:
         # 加载用户目录配置和项目级配置，其中项目级配置优先级更高

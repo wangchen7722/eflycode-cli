@@ -2,10 +2,10 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional
 
 from echo.schema.tool import (
-    ToolCallSchema,
-    ToolExecutionError, ToolFunctionParametersSchema,
-    ToolParameterError, ToolSchema,
+    ToolExecutionError,
+    ToolParameterError
 )
+from echo.schema.llm import ToolFunction, ToolFunctionParameters, ToolDefinition
 
 
 def _convert_basic_type(data, schema):
@@ -99,43 +99,36 @@ class BaseTool(ABC):
 
     @property
     @abstractmethod
-    def parameters(self) -> Dict[str, ToolFunctionParametersSchema]:
+    def parameters(self) -> ToolFunctionParameters:
         """工具参数"""
         pass
 
     @property
-    def examples(self) -> Optional[Dict[str, ToolCallSchema]]:
+    def examples(self) -> Optional[Dict[str, ToolFunction]]:
         """工具示例"""
         return None
 
     @property
-    def schema(self) -> ToolSchema:
+    def definition(self) -> ToolDefinition:
         """获取工具的schema定义"""
-        return {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.description,
-                "parameters": {
-                    "type": "object",
-                    "properties": self.parameters,
-                    "required": [
-                        param_name 
-                        for param_name, param_schema in self.parameters.items()
-                        if param_schema.get("required", False)
-                    ]
-                },
-            },
-        }
+        return ToolDefinition(
+            type="function",
+            function=ToolFunction(
+                name=self.name,
+                description=self.description,
+                parameters=self.parameters,
+            )
+        )
+        
 
     def _convert_type(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
         # 参数名 -> 参数类型
         try:
             typed_params = {}
             for param_name, param_value in parameters.items():
-                if param_name in self.parameters:
+                if param_name in self.parameters.properties:
                     typed_params[param_name] = convert_data(
-                        param_value, self.parameters[param_name]
+                        param_value, self.parameters.properties[param_name]
                     )
             return typed_params
         except Exception as e:
@@ -192,3 +185,20 @@ class BaseTool(ABC):
             str: 工具执行结果
         """
         return self.run(**kwargs)
+
+
+class ToolGroup:
+    """工具组"""
+
+    def __init__(self, name: str, description: str, tools: list[BaseTool]) -> None:
+        self.name = name
+        self.description = description
+        self.tools = tools
+
+    def list_tools(self) -> list[ToolDefinition]:
+        """获取工具组中所有工具的列表
+
+        Returns:
+            list[ToolDefinition]: 工具组中所有工具的列表
+        """
+        return [tool.definition for tool in self.tools]

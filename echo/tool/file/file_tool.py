@@ -2,9 +2,9 @@ import glob
 import os
 import re
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional
 
-from echo.tool.base_tool import BaseTool, ToolParameterError, ToolExecutionError
+from echo.tool.base_tool import BaseTool, ToolParameterError, ToolExecutionError, ToolGroup, ToolFunctionParameters
 from echo.config import GlobalConfig
 from echo.util.ignore import IgnoreManager
 
@@ -46,7 +46,6 @@ def get_directory_stats(
 ) -> str:
     """获取目录统计信息（子目录和文件数量）"""
     try:
-        config = GlobalConfig.get_instance()
         ignore_manager = IgnoreManager()
 
         dir_count = 0
@@ -118,26 +117,27 @@ class ListFilesTool(BaseTool):
         return "查看文件和目录列表"
 
     @property
-    def parameters(self):
-        return {
-            "path": {
-                "type": "string",
-                "description": "The path of the folder to list.",
-                "required": True,
+    def parameters(self) -> ToolFunctionParameters:
+        return ToolFunctionParameters(
+            type="object",
+            properties={
+                "path": {
+                    "type": "string",
+                    "description": "The path of the folder to list.",
+                },
+                "recursive": {
+                    "type": "boolean",
+                    "description": "Whether to recursively list files and subdirectories. Set to true for recursive listing (max depth 2), false for top-level only.",
+                    "default": False,
+                },
+                "apply_ignore": {
+                    "type": "boolean",
+                    "description": "Whether to apply .echoignore ignore rules. Set to true to apply, false or omit to not apply.",
+                    "default": False,
+                },
             },
-            "recursive": {
-                "type": "boolean",
-                "description": "Whether to recursively list files and subdirectories. Set to true for recursive listing (max depth 2), false for top-level only.",
-                "default": False,
-                "required": False,
-            },
-            "apply_ignore": {
-                "type": "boolean",
-                "description": "Whether to apply .echoignore ignore rules. Set to true to apply, false or omit to not apply.",
-                "default": False,
-                "required": False,
-            },
-        }
+            required=["path"],
+        )
 
     @property
     def examples(self):
@@ -161,7 +161,6 @@ class ListFilesTool(BaseTool):
         except PermissionError:
             return structure
 
-        config = GlobalConfig.get_instance()
         ignore_manager = IgnoreManager()
 
         # 当前目录的文件和子目录
@@ -393,28 +392,32 @@ class ReadFileTool(BaseTool):
         return f"读取文件 `{path}` ({start_line}-{end_line})"
 
     @property
-    def parameters(self):
-        return {
-            "path": {
-                "type": "string",
-                "description": "Path to the file to read",
-                "required": True,
+    def parameters(self) -> ToolFunctionParameters:
+        return ToolFunctionParameters(
+            type="object",
+            properties={
+                "path": {
+                    "type": "string",
+                    "description": "Path to the file to read",
+                    "required": True,
+                },
+                "start_line": {
+                    "type": "integer",
+                    "description": "Starting line number (inclusive), defaults to 1",
+                    "default": 1,
+                    "minimum": 1,
+                    "required": True,
+                },
+                "end_line": {
+                    "type": "integer",
+                    "description": "Ending line number (inclusive), defaults to start_line+99 (showing 100 lines)",
+                    "default": 100,
+                    "minimum": 1,
+                    "required": False,
+                },
             },
-            "start_line": {
-                "type": "integer",
-                "description": "Starting line number (inclusive), defaults to 1",
-                "default": 1,
-                "minimum": 1,
-                "required": True,
-            },
-            "end_line": {
-                "type": "integer",
-                "description": "Ending line number (inclusive), defaults to start_line+99 (showing 100 lines)",
-                "default": 100,
-                "minimum": 1,
-                "required": False,
-            },
-        }
+            required=["path"],
+        )
 
     @property
     def examples(self):
@@ -524,25 +527,29 @@ class SearchFilesTool(BaseTool):
         return f"在 {path} 下使用正则表达式 {regex} 和模式 {pattern} 搜索文件"
 
     @property
-    def parameters(self):
-        return {
-            "path": {
-                "type": "string",
-                "description": "Directory path to search. Will recursively search this directory.",
-                "required": True,
+    def parameters(self) -> ToolFunctionParameters:
+        return ToolFunctionParameters(
+            type="object",
+            properties={
+                "path": {
+                    "type": "string",
+                    "description": "Directory path to search. Will recursively search this directory.",
+                    "required": True,
+                },
+                "regex": {
+                    "type": "string",
+                    "description": "Regular expression pattern to search for. Uses Python regex syntax.",
+                    "required": True,
+                },
+                "pattern": {
+                    "type": "string",
+                    "description": "Glob pattern for filtering files (e.g., '*.py' for Python files). If not provided, will search all files (*).",
+                    "required": False,
+                    "default": "*",
+                },
             },
-            "regex": {
-                "type": "string",
-                "description": "Regular expression pattern to search for. Uses Python regex syntax.",
-                "required": True,
-            },
-            "pattern": {
-                "type": "string",
-                "description": "Glob pattern for filtering files (e.g., '*.py' for Python files). If not provided, will search all files (*).",
-                "required": False,
-                "default": "*",
-            },
-        }
+            required=["path", "regex"],
+        )
 
     @property
     def examples(self):
@@ -665,19 +672,23 @@ class CreateFileTool(BaseTool):
         return f"创建文件 {path}"
 
     @property
-    def parameters(self):
-        return {
-            "path": {
-                "type": "string",
-                "description": "要创建的文件路径，包括文件名和扩展名。",
-                "required": True,
+    def parameters(self) -> ToolFunctionParameters:
+        return ToolFunctionParameters(
+            type="object",
+            properties={
+                "path": {
+                    "type": "string",
+                    "description": "要创建的文件路径，包括文件名和扩展名。",
+                    "required": True,
+                },
+                "content": {
+                    "type": "string",
+                    "description": "要写入文件的内容，默认为空字符串。",
+                    "required": True,
+                },
             },
-            "content": {
-                "type": "string",
-                "description": "要写入文件的内容，默认为空字符串。",
-                "required": True,
-            },
-        }
+            required=["path", "content"],
+        )
 
     @property
     def examples(self):
@@ -731,24 +742,28 @@ class InsertFileTool(BaseTool):
         """
 
     @property
-    def parameters(self):
-        return {
-            "path": {
-                "type": "string",
-                "description": "The path to the file to insert content into",
-                "required": True,
+    def parameters(self) -> ToolFunctionParameters:
+        return ToolFunctionParameters(
+            type="object",
+            properties={
+                "path": {
+                    "type": "string",
+                    "description": "The path to the file to insert content into",
+                    "required": True,
+                },
+                "line_number": {
+                    "type": "integer",
+                    "description": "The line number where to insert the content (1-based indexing)",
+                    "required": True,
+                },
+                "content": {
+                    "type": "string",
+                    "description": "The content to insert at the specified line number",
+                    "required": True,
+                },
             },
-            "line_number": {
-                "type": "integer",
-                "description": "The line number where to insert the content (1-based indexing)",
-                "required": True,
-            },
-            "content": {
-                "type": "string",
-                "description": "The content to insert at the specified line number",
-                "required": True,
-            },
-        }
+            required=["path", "line_number", "content"],
+        )
 
     @property
     def examples(self):
@@ -834,23 +849,27 @@ class EditFileTool(BaseTool):
 
     @property
     def parameters(self):
-        return {
-            "path": {
-                "type": "string",
-                "description": "The path to the file to edit",
-                "required": True,
+        return ToolFunctionParameters(
+            type="object",
+            properties={
+                "path": {
+                    "type": "string",
+                    "description": "The path to the file to edit",
+                    "required": True,
+                },
+                "old_string": {
+                    "type": "string",
+                    "description": "The exact text content to search for and replace. Must be unique in the file.",
+                    "required": True,
+                },
+                "new_string": {
+                    "type": "string",
+                    "description": "The new text content to replace the old content with.",
+                    "required": True,
+                },  
             },
-            "old_string": {
-                "type": "string",
-                "description": "The exact text content to search for and replace. Must be unique in the file.",
-                "required": True,
-            },
-            "new_string": {
-                "type": "string",
-                "description": "The new text content to replace the old content with.",
-                "required": True,
-            },
-        }
+            required=["path", "old_string", "new_string"],
+        )
 
     def do_run(
         self,
@@ -904,10 +923,14 @@ class EditFileTool(BaseTool):
         return f"Successfully applied changes to {path}."
 
 
-FILE_TOOL_GROUP = [
-    ListFilesTool(),
-    ReadFileTool(),
-    SearchFilesTool(),
-    InsertFileTool(),
-    EditFileTool()
-]
+FILE_TOOL_GROUP = ToolGroup(
+    name="file",
+    description="文件操作工具组",
+    tools=[
+        ListFilesTool(),
+        ReadFileTool(),
+        SearchFilesTool(),
+        InsertFileTool(),
+        EditFileTool()
+    ]
+)

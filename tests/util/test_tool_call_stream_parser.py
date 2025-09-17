@@ -1,11 +1,10 @@
 import unittest
 import json
 import uuid
-from typing import Generator, List, Dict, Any
-from unittest.mock import MagicMock
+from typing import List, Dict, Any
 
-from echo.parser.tool_call_stream_parser import ToolCallStreamParser
-from echo.schema.llm import ChatCompletionChunk, StreamChoice, ToolCall, ToolFunction, Message
+from echo.parser.tool_call_parser import ToolCallStreamParser
+from echo.schema.llm import ChatCompletionChunk, StreamChoice, ToolCall, ToolDefinition, Message, ToolFunction
 
 
 class TestToolCallStreamParser(unittest.TestCase):
@@ -17,10 +16,13 @@ class TestToolCallStreamParser(unittest.TestCase):
         """
         设置测试环境
         """
-        self.mock_tool_function = ToolFunction(
-            name="my_tool",
-            description="A test tool",
-            parameters={"type": "object", "properties": {"param1": {"type": "string"}}}
+        self.mock_tool_function = ToolDefinition(
+            type="function",
+            function=ToolFunction(
+                name="my_tool",
+                description="A test tool",
+                parameters={"type": "object", "properties": {"param1": {"type": "string"}}}
+            )
         )
         self.parser = ToolCallStreamParser(tools=[self.mock_tool_function])
 

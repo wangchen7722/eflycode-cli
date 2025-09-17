@@ -8,6 +8,7 @@ from echo.schema.llm import (
     LLMCallResponse,
     LLMCapability,
     LLMRequestContext,
+    LLMPrompt
 )
 from echo.llm.advisor import Advisor, AdvisorChain
 from echo.llm.advisors.tool_call_advisor import ToolCallAdvisor
@@ -27,7 +28,7 @@ ALLOWED_GENERATE_CONFIG_KEYS = [
 ]
 
 
-def build_generate_config(llm_config: LLMConfig, **kwargs) -> Dict[str, Any]:
+def build_generate_config(llm_config: LLMConfig, generate_config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """构建生成配置
 
     Args:
@@ -42,10 +43,10 @@ def build_generate_config(llm_config: LLMConfig, **kwargs) -> Dict[str, Any]:
     for key in llm_config_kwargs:
         if key in ALLOWED_GENERATE_CONFIG_KEYS:
             config[key] = llm_config_kwargs[key]
-    if kwargs:
-        for key in kwargs:
+    if generate_config:
+        for key in generate_config:
             if key in ALLOWED_GENERATE_CONFIG_KEYS:
-                config[key] = kwargs[key]
+                config[key] = generate_config[key]
     return config
 
 
@@ -97,24 +98,33 @@ class LLMEngine:
         """
         raise NotImplementedError
 
-    def _ensure_request_context(self, request: LLMRequest) -> LLMRequest:
-        if request.context is None:
-            capability = LLMCapability(
-                supports_native_tool_call=self.llm_config.supports_native_tool_call
-            )
-            request.context = LLMRequestContext(capability=capability)
+    def _ensure_request_context(self, prompt: LLMPrompt) -> LLMRequest:
+        capability = LLMCapability(
+            supports_native_tool_call=self.llm_config.supports_native_tool_call
+        )
+        request = LLMRequest(
+            model=self.model,
+            messages=prompt.messages,
+            tools=prompt.tools,
+            tool_choice=prompt.tool_choice,
+            generate_config=build_generate_config(self.llm_config, prompt.generate_config),
+            context=LLMRequestContext(capability=capability)
+        )
         return request
 
-    def call(self, request: LLMRequest) -> LLMCallResponse:
+
+    def call(self, prompt: LLMPrompt) -> LLMCallResponse:
         """带 AdvisorChain 的非流式调用"""
-        if request.tools:
-            self._advisor_chain.advisors.insert(0, ToolCallAdvisor(tools=request.tools))
+        request = self._ensure_request_context(prompt)
+        if prompt.tools:
+            self._advisor_chain.advisors.insert(0, ToolCallAdvisor(tools=prompt.tools))
         wrapped = self._advisor_chain.wrap_call(self.do_call)
         return wrapped(request)
 
-    def stream(self, request: LLMRequest) -> LLMStreamResponse:
+    def stream(self, prompt: LLMPrompt) -> LLMStreamResponse:
         """带 AdvisorChain 的流式调用"""
-        if request.tools:
-            self._advisor_chain.advisors.insert(0, ToolCallAdvisor(tools=request.tools))
+        request = self._ensure_request_context(prompt)
+        if prompt.tools:
+            self._advisor_chain.advisors.insert(0, ToolCallAdvisor(tools=prompt.tools))
         wrapped = self._advisor_chain.wrap_stream(self.do_stream)
         return wrapped(request)

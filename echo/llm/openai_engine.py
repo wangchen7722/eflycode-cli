@@ -1,9 +1,8 @@
-from typing import Dict, Optional
+from typing import Dict, Optional, Any
 
 import httpx
 
-from echo.util.logger import logger
-from echo.llm.llm_engine import LLMConfig, LLMEngine, build_generate_config
+from echo.llm.llm_engine import LLMConfig, LLMEngine
 from echo.schema.llm import LLMCallResponse, LLMStreamResponse, LLMRequest
 
 
@@ -34,6 +33,27 @@ class OpenAIEngine(LLMEngine):
             timeout=30.0
         )
 
+    def _generate_request_data(self, request: LLMRequest) -> Dict[str, Any]:
+        """生成请求数据
+        
+        Args:
+            request: LLM请求
+        
+        Returns:
+            包含请求数据的字典
+        """
+        request_data = {
+            "model": request.model,
+            "messages": [message.model_dump() for message in request.messages],
+            **request.generate_config
+        }
+        if request.context.capability.supports_native_tool_call and request.tools:
+            request_data["tools"] = [
+                tool.model_dump() for tool in request.tools
+            ]
+            request_data["tool_choice"] = request.tool_choice
+        return request_data
+
     def do_call(
         self,
         request: LLMRequest,
@@ -41,20 +61,14 @@ class OpenAIEngine(LLMEngine):
         """非流式生成回复
 
         Args:
-            messages: 消息列表
-            request_data: 请求数据
+            request: LLM请求
 
         Returns:
             LLMCallResponse对象
         """
-        generate_config = build_generate_config(self.llm_config, **request.generate_config)
-        request_data = {
-            "model": self.model,
-            "messages": [message.model_dump() for message in request.messages],
-            "stream": False,
-            **generate_config,
-        }
-
+        
+        request_data = self._generate_request_data(request)
+        request_data["stream"] = False
         response = self._client.post(
             "/chat/completions",
             json=request_data
@@ -71,14 +85,8 @@ class OpenAIEngine(LLMEngine):
         Returns:
             LLMStreamResponse对象
         """
-        generate_config = build_generate_config(self.llm_config, **request.generate_config)
-        request_data = {
-            "model": self.model,
-            "messages": [message.model_dump() for message in request.messages],
-            "stream": True,
-            **generate_config,
-        }
-
+        request_data = self._generate_request_data(request)
+        request_data["stream"] = True
         response = self._client.post(
             "/chat/completions",
             json=request_data

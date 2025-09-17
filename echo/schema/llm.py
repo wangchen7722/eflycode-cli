@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, Literal, Union, Generator
+from typing import Any, Dict, List, Optional, Literal, Generator
 from pydantic import BaseModel, Field
 
 
@@ -20,6 +20,18 @@ class ToolFunction(BaseModel):
     name: str
     description: str
     parameters: ToolFunctionParameters
+
+class ToolDefinition(BaseModel):
+    """工具定义
+
+    Attributes:
+        name: 工具名称
+        description: 工具描述
+        parameters: 工具参数
+    """
+
+    type: Literal["function"] = "function"
+    function: ToolFunction
 
 
 class ToolCallFunction(BaseModel):
@@ -167,7 +179,6 @@ class LLMConfig(BaseModel):
 
 class LLMCapability(BaseModel):
     """模型能力"""
-
     supports_native_tool_call: bool = Field(
         default=False, description="是否支持原生函数调用"
     )
@@ -175,22 +186,28 @@ class LLMCapability(BaseModel):
 
 class LLMRequestContext(BaseModel):
     """模型请求上下文"""
-
     capability: LLMCapability = Field(description="模型能力")
 
 
 class LLMRequest(BaseModel):
     model: str = Field(description="模型ID")
     messages: List[Message] = Field(description="消息列表")
-    tools: Optional[List[ToolFunction]] = Field(default=None, description="工具列表")
+    tools: Optional[List[ToolDefinition]] = Field(default=None, description="工具列表")
     tool_choice: Optional[Dict[str, Any]] = Field(default=None, description="工具选择")
     generate_config: Optional[Dict[str, Any]] = Field(
         default=None, description="生成配置"
     )
-    context: Optional[LLMRequestContext] = Field(
-        default=None, description="模型请求上下文"
-    )
+    context: LLMRequestContext = Field(description="模型请求上下文")
 
+
+class LLMPrompt(BaseModel):
+    """模型提示"""
+    messages: List[Message] = Field(description="消息列表")
+    tools: Optional[List[ToolDefinition]] = Field(default=None, description="工具列表")
+    tool_choice: Optional[Dict[str, Any]] = Field(default=None, description="工具选择")
+    generate_config: Optional[Dict[str, Any]] = Field(
+        default=None, description="生成配置"
+    )
 
 LLMCallResponse = ChatCompletion
 LLMStreamResponse = Generator[ChatCompletionChunk, None, None]

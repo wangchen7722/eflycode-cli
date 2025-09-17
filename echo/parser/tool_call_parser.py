@@ -1,12 +1,11 @@
 import json
 import uuid
-from typing import Generator, Optional, Sequence, List, Dict, Any
-from echo.tool.base_tool import BaseTool
-from echo.schema.llm import ChatCompletionChunk, StreamChoice, ToolCall, ToolFunction, Message, ToolCallFunction
-from echo.parser.base_parser import ResponseParser
+from typing import Generator, Optional, Sequence, List
+from echo.schema.llm import ChatCompletionChunk, StreamChoice, ToolCall, ToolDefinition, ToolFunction, Message, ToolCallFunction, ChatCompletion
+from echo.parser.base_parser import ChatCompletionStreamParser, ChatCompletionParser
 
 
-class ToolCallStreamParser(ResponseParser):
+class ToolCallStreamParser(ChatCompletionStreamParser):
     """流式响应解析器，支持解析工具调用"""
 
     # 状态常量
@@ -17,7 +16,7 @@ class ToolCallStreamParser(ResponseParser):
 
     def __init__(
             self,
-            tools: Sequence[ToolFunction],
+            tools: Sequence[ToolDefinition],
             tool_call_start: str = "<tool_call>",
             tool_call_end: str = "</tool_call>",
             tool_name_start: str = "<tool_name>",
@@ -89,8 +88,6 @@ class ToolCallStreamParser(ResponseParser):
         Yields:
             ChatCompletionChunk: 解析后的响应块
         """
-        last_finish_reason = None
-        last_usage = None
         raw_content = ""
         last_chunk = None
 
@@ -497,3 +494,106 @@ class ToolCallStreamParser(ResponseParser):
                 )],
                 usage=last_chunk.usage,
             )
+
+
+class ToolCallParser(ChatCompletionParser):
+    """非流式工具调用解析器"""
+
+    def __init__(
+        self,
+        tools: List[ToolFunction],
+        tool_call_start: str = "<tool_call>",
+        tool_call_end: str = "</tool_call>",
+        tool_name_start: str = "<tool_name>",
+        tool_name_end: str = "</tool_name>",
+        tool_params_start: str = "<tool_params>",
+        tool_params_end: str = "</tool_params>",
+    ):
+        """初始化非流式工具调用解析器
+        
+        Args:
+            tools: 支持的工具函数列表
+            tool_call_start: 工具调用开始标签
+            tool_call_end: 工具调用结束标签
+            tool_name_start: 工具名称开始标签
+            tool_name_end: 工具名称结束标签
+            tool_params_start: 工具参数开始标签
+            tool_params_end: 工具参数结束标签
+        """
+        super().__init__(tools)
+        self.tool_call_start = tool_call_start
+        self.tool_call_end = tool_call_end
+        self.tool_name_start = tool_name_start
+        self.tool_name_end = tool_name_end
+        self.tool_params_start = tool_params_start
+        self.tool_params_end = tool_params_end
+
+    def parse(self, completion: ChatCompletion) -> ChatCompletion:
+        """
+        解析非流式响应中的工具调用
+
+        Args:
+            completion: ChatCompletion 响应对象
+
+        Returns:
+            带解析后工具调用的 ChatCompletion
+        """
+        for choice in completion.choices:
+            msg: Message = choice.message
+
+            # 如果已经有 tool_calls，直接返回
+            if msg.tool_calls:
+                continue
+
+            if msg.content:
+                tool_calls = self._parse_content(msg.content)
+                if tool_calls:
+                    msg.tool_calls = tool_calls
+                    msg.content = ""
+        return completion
+
+    def _parse_content(self, text: str) -> Optional[List[ToolCall]]:
+        """从 message.content 里解析工具调用"""
+        calls: List[ToolCall] = []
+
+        start = 0
+        while True:
+            start_idx = text.find(self.tool_call_start, start)
+            if start_idx == -1:
+                break
+            end_idx = text.find(self.tool_call_end, start_idx)
+            if end_idx == -1:
+                break
+
+            call_block = text[start_idx + len(self.tool_call_start): end_idx]
+
+            tool_name = self._extract_between(call_block, self.tool_name_start, self.tool_name_end)
+            params_str = self._extract_between(call_block, self.tool_params_start, self.tool_params_end)
+
+            try:
+                arguments = json.loads(params_str) if params_str else {}
+            except json.JSONDecodeError:
+                arguments = {}
+
+            if tool_name:
+                calls.append(
+                    ToolCall(
+                        id=uuid.uuid4().hex,
+                        type="function",
+                        function=ToolCallFunction(
+                            name=tool_name,
+                            arguments=json.dumps(arguments),
+                        ),
+                    )
+                )
+            start = end_idx + len(self.tool_call_end)
+
+        return calls or None
+
+    def _extract_between(self, text: str, start_tag: str, end_tag: str) -> str:
+        """提取两个标签之间的内容"""
+        start_idx = text.find(start_tag)
+        end_idx = text.find(end_tag, start_idx + len(start_tag))
+        if start_idx == -1 or end_idx == -1:
+            return ""
+        return text[start_idx + len(start_tag): end_idx].strip()

@@ -5,7 +5,7 @@ from typing import Dict, List
 from tree_sitter import Node
 from tree_sitter_languages import get_parser
 
-from echo.tool.base_tool import BaseTool
+from echo.tool.base_tool import BaseTool, ToolGroup, ToolFunctionParameters
 
 
 class ListCodeDefinitionsTool(BaseTool):
@@ -34,10 +34,10 @@ class ListCodeDefinitionsTool(BaseTool):
         return "列出代码定义"
     
     @property
-    def parameters(self):
-        return {
-            "type": "object",
-            "properties": {
+    def parameters(self) -> ToolFunctionParameters:
+        return ToolFunctionParameters(
+            type="object",
+            properties={
                 "path": {
                     "type": "string",
                     "description": "The path to the file or directory containing the source code files."
@@ -57,8 +57,8 @@ class ListCodeDefinitionsTool(BaseTool):
                     "description": "The pattern to match the source code files."
                 }
             },
-            "required": ["path", "language", "pattern"]
-        }
+            required=["path", "language", "pattern"]
+        )
     @property
     def examples(self):
         return {
@@ -155,3 +155,8 @@ class ListCodeDefinitionsTool(BaseTool):
         else:
             return f"Successfully list all top level source code definitions in the {path} and found {len(definitions)} files:\n\n{output}"
     
+CODE_TOOL_GROUP = ToolGroup(
+    name="code",
+    description="代码工具组",
+    tools=[ListCodeDefinitionsTool()]
+)

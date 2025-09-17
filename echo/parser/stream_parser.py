@@ -386,7 +386,7 @@ class StreamResponseParser(ResponseParser):
                             type="function",
                             function={
                                 "name": self.tool_call["name"],
-                                "arguments": self.tool_call["arguments"],
+                                "arguments": json.dumps(self.tool_call["arguments"]),
                             },
                         )
                     ],

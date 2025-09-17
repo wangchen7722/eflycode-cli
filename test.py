@@ -1,9 +1,7 @@
-from dotenv import load_dotenv
-
-from echo.agent.developer import Developer
 from echo.config import GlobalConfig
-from echo.ui.console import ConsoleUI
-from main import create_llm_engine
+from echo.llm.openai_engine import OpenAIEngine
+from echo.schema.llm import LLMPrompt, Message
+from echo.tool.file.file_tool import FILE_TOOL_GROUP
 
 # load_dotenv()
 #
@@ -12,4 +10,15 @@ from main import create_llm_engine
 # print(developer.system_prompt)
 # # developer.interactive_chat()
 
+# global_config = GlobalConfig.get_instance()
 global_config = GlobalConfig.get_instance()
+
+llm_engine = OpenAIEngine(global_config.get_default_llm_config())
+print(
+    llm_engine.call(
+        LLMPrompt(
+            messages=[Message(role="user", content="你好, 帮我创建一个文件，编写快速排序")],
+            tools=FILE_TOOL_GROUP.list_tools(),
+        )
+    )
+)

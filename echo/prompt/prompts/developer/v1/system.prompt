@@ -29,7 +29,7 @@ Bias towards not asking the user for help if you can find the answer yourself.
 {% if tools is defined %}
 <tool_call_guidelines>
 1. ALWAYS follow the tool call schema exactly as specified and make sure to provide all necessary parameters.
-2. NEVER call tools that are not explicitly provided, even if the USER requests. You have access to the following tools [{% for tool_name in tools.keys() %}{{ tool_name }}{% if not loop.last %}, {% endif %}{% endfor %}].
+2. NEVER call tools that are not explicitly provided, even if the USER requests. You have access to the following tools [{% for tool in tools %}{{ tool.function.name }}{% if not loop.last %}, {% endif %}{% endfor %}].
 3. You ONLY can use ONE tool call per message. If you attempt multiple tool calls, only the first one will be executed. You will receive the tool call result in the following user message.
 4. You MUST explain clearly in first person what action you am taking and why, without mentioning the tool itself. For example: "I need to check the content of xxx file" or "I want to look up the latest updates on yyy". 
 5. If USER refuse to execute the tool call, you MUST politely ask for the reason and explain why you need the tool call.

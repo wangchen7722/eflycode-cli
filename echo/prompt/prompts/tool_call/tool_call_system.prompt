@@ -13,23 +13,23 @@ If you need to use a tool, you must format your message in the following way:
 </tool_call_formatting>
 
 <tool_namespace>
-{% for tool_name, tool in tools.items() %}
-## {{ loop.index }}. {{ tool_name }}
-def {{ tool_name }}(
-    {% for param_name, param_schema in tool.parameters.items() %}
+{% for tool in tools %}
+## {{ loop.index }}. {{ tool.name }}
+def {{ tool.name }}(
+    {% for param_name, param_schema in tool.function.parameters.properties.items() %}
     {{ param_name }}: {{ param_schema.type }}{{ "," if not loop.last else "" }}
     {% endfor %}
 ) -> str:
-    """{{ tool.description }}
+    """{{ tool.function.description }}
 
     Parameters:
-    {% for param_name, param_schema in tool.parameters.items() %}
-    - {{ param_name }}: {{ "(required)" if param_schema.required else "(optional)" }} {{ param_schema.description }}{{ " default is " ~ param_schema.default if param_schema.default is defined else "" }}
+    {% for param_name, param_schema in tool.function.parameters.properties.items() %}
+    - {{ param_name }}: {{ "(required)" if param_name in tool.function.parameters.required else "(optional)" }} {{ param_schema.description }}{{ " default is " ~ param_schema.default if param_schema.default is defined else "" }}
     {% endfor %}
 
-    {% if tool.examples %}
+    {% if tool.function.examples %}
     Examples:
-    {% for example_name, example in tool.examples.items() %}
+    {% for example_name, example in tool.function.examples.items() %}
     - {{ example_name }}: {{ example }}
     {% endfor %}
     {% endif %}

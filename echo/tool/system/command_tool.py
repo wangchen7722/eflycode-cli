@@ -3,7 +3,7 @@ import subprocess
 import traceback
 from typing import Optional
 
-from echo.tool.base_tool import BaseTool
+from echo.tool.base_tool import BaseTool, ToolGroup, ToolFunctionParameters
 
 
 class ExecuteCommandTool(BaseTool):
@@ -36,24 +36,28 @@ class ExecuteCommandTool(BaseTool):
         return "执行命令"
 
     @property
-    def parameters(self):
-        return {
-            "command": {
-                "type": "string",
-                "description": "The CLI command to execute. This should be valid for the current operating system. Ensure the command is properly formatted and does not contain any harmful instructions.",
-                "required": True,
+    def parameters(self) -> ToolFunctionParameters:
+        return ToolFunctionParameters(
+            type="object",
+            properties={
+                "command": {
+                    "type": "string",
+                    "description": "The CLI command to execute. This should be valid for the current operating system. Ensure the command is properly formatted and does not contain any harmful instructions.",
+                    "required": True,
+                },
+                "cwd": {
+                    "type": "string",
+                    "description": f"The working directory to execute the command in default ({os.getcwd()}).",
+                    "required": False,
+                },
+                "timeout": {
+                    "type": "integer",
+                    "description": "The maximum time in seconds to wait for the command to complete. If the command takes longer than this time, the execution will be stopped and an error will be returned.",
+                    "required": False,
+                },
             },
-            "cwd": {
-                "type": "string",
-                "description": f"The working directory to execute the command in default ({os.getcwd()}).",
-                "required": False,
-            },
-            "timeout": {
-                "type": "integer",
-                "description": "The maximum time in seconds to wait for the command to complete. If the command takes longer than this time, the execution will be stopped and an error will be returned.",
-                "required": False,
-            },
-        }
+            required=["command"],
+        )
 
     @property
     def examples(self):
@@ -137,3 +141,10 @@ class ExecuteCommandTool(BaseTool):
         except Exception as e:
             details = traceback.format_exc()
             return f"Error: execute command failed: {e}\ndetails:\n{details}"
+
+
+COMMAND_TOOL_GROUP = ToolGroup(
+    name="command",
+    description="命令执行工具组",
+    tools=[ExecuteCommandTool()]
+)

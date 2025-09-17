@@ -24,6 +24,7 @@ class ModelEntry(BaseModel):
     base_url: str = Field(description="基础URL")
     max_context_length: int = Field(description="最大上下文长度")
     temperature: float = Field(description="温度")
+    support_native_tool_call: bool = Field(default=False, description="是否支持原生函数调用")
 
 
 class ModelConfig(BaseModel):

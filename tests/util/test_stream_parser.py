@@ -55,8 +55,8 @@ class TestStreamResponseParser(unittest.TestCase):
         self.assertEqual(chunks[0].type, AgentResponseChunkType.TOOL_CALL)
         self.assertIsNotNone(chunks[0].tool_calls)
         self.assertEqual(chunks[0].tool_calls[0].function.name, "search_files")
-        self.assertEqual(json.loads(chunks[0].tool_calls[0].function.arguments)["query"], "test")
-        self.assertEqual(json.loads(chunks[0].tool_calls[0].function.arguments)["path"], "/home")
+        self.assertEqual(chunks[0].tool_calls[0].function.arguments["query"], "test")
+        self.assertEqual(chunks[0].tool_calls[0].function.arguments["path"], "/home")
     
     def test_mixed_content_text_then_tool(self):
         """测试文本后跟工具调用的混合内容"""
@@ -80,7 +80,7 @@ class TestStreamResponseParser(unittest.TestCase):
         # 第二个chunk是工具调用
         self.assertEqual(chunks[1].type, AgentResponseChunkType.TOOL_CALL)
         self.assertEqual(chunks[1].tool_calls[0].function.name, "search_files")
-        self.assertEqual(json.loads(chunks[1].tool_calls[0].function.arguments)["query"], "*.py")
+        self.assertEqual(chunks[1].tool_calls[0].function.arguments["query"], "*.py")
     
     def test_mixed_content_tool_then_text(self):
         """测试工具调用后跟文本的混合内容"""
@@ -259,7 +259,7 @@ class TestStreamResponseParser(unittest.TestCase):
         self.assertEqual(len(chunks), 1)
         self.assertEqual(chunks[0].type, AgentResponseChunkType.TOOL_CALL)
         self.assertEqual(chunks[0].tool_calls[0].function.name, "custom_tool")
-        self.assertEqual(json.loads(chunks[0].tool_calls[0].function.arguments)["test"], "value")
+        self.assertEqual(chunks[0].tool_calls[0].function.arguments["test"], "value")
     
     def test_streaming_behavior(self):
         """测试流式处理行为"""

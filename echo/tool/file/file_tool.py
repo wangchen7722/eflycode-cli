@@ -2,10 +2,11 @@ import glob
 import os
 import re
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 
 from echo.tool.base_tool import BaseTool, ToolParameterError, ToolExecutionError
 from echo.config import GlobalConfig
+from echo.util.ignore import IgnoreManager
 
 
 def format_file_size(size_bytes: int) -> str:
@@ -46,7 +47,7 @@ def get_directory_stats(
     """获取目录统计信息（子目录和文件数量）"""
     try:
         config = GlobalConfig.get_instance()
-        ignore_manager = config.get_ignore_manager()
+        ignore_manager = IgnoreManager()
 
         dir_count = 0
         file_count = 0
@@ -161,7 +162,7 @@ class ListFilesTool(BaseTool):
             return structure
 
         config = GlobalConfig.get_instance()
-        ignore_manager = config.get_ignore_manager()
+        ignore_manager = IgnoreManager()
 
         # 当前目录的文件和子目录
         current_files = []
@@ -173,7 +174,6 @@ class ListFilesTool(BaseTool):
             # 应用忽略规则
             if (
                 apply_ignore
-                and ignore_patterns
                 and ignore_manager.should_ignore(item_path, ignore_patterns)
             ):
                 continue
@@ -286,8 +286,7 @@ class ListFilesTool(BaseTool):
         self, path: str, ignore_patterns: list = None, apply_ignore: bool = False
     ) -> str:
         """非递归列出目录内容"""
-        config = GlobalConfig.get_instance()
-        ignore_manager = config.get_ignore_manager()
+        ignore_manager = IgnoreManager()
         dirs = []
         files = []
 
@@ -352,8 +351,7 @@ class ListFilesTool(BaseTool):
         # 获取忽略模式
         ignore_patterns = None
         if apply_ignore:
-            config = GlobalConfig.get_instance()
-            ignore_manager = config.get_ignore_manager()
+            ignore_manager = IgnoreManager()
             ignore_patterns = ignore_manager.load_ignore_patterns(path)
 
         if recursive:

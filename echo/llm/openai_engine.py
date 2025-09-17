@@ -1,14 +1,10 @@
-import json
-import logging
-import os
-import traceback
-from typing import Any, Dict, Generator, List, Literal, Optional, Union, overload
+from typing import Dict, Optional
 
 import httpx
 
 from echo.util.logger import logger
 from echo.llm.llm_engine import LLMConfig, LLMEngine, build_generate_config
-from echo.schema.llm import ChatCompletion, ChatCompletionChunk, Message
+from echo.schema.llm import LLMCallResponse, LLMStreamResponse, LLMRequest
 
 
 class OpenAIEngine(LLMEngine):
@@ -38,10 +34,10 @@ class OpenAIEngine(LLMEngine):
             timeout=30.0
         )
 
-    def _generate_non_stream(
-            self,
-            request_data: Dict[str, Any],
-    ) -> ChatCompletion:
+    def do_call(
+        self,
+        request: LLMRequest,
+    ) -> LLMCallResponse:
         """非流式生成回复
 
         Args:
@@ -49,92 +45,44 @@ class OpenAIEngine(LLMEngine):
             request_data: 请求数据
 
         Returns:
-            ChatCompletion对象
+            LLMCallResponse对象
         """
+        generate_config = build_generate_config(self.llm_config, **request.generate_config)
+        request_data = {
+            "model": self.model,
+            "messages": [message.model_dump() for message in request.messages],
+            "stream": False,
+            **generate_config,
+        }
+
         response = self._client.post(
             "/chat/completions",
             json=request_data
         )
         response.raise_for_status()
-        return ChatCompletion(**response.json())
+        return LLMCallResponse(**response.json())
 
-    def _generate_stream(
-            self,
-            request_data: List[Message],
-    ) -> Generator[ChatCompletionChunk, None, None]:
+    def do_stream(self, request: LLMRequest) -> LLMStreamResponse:
         """流式生成回复
 
         Args:
-            request_data: 请求数据
+            request: LLM请求
 
         Returns:
-            ChatCompletionChunk生成器
+            LLMStreamResponse对象
         """
-        try:
-            with self._client.stream(
-                "POST",
-                "/chat/completions",
-                json=request_data
-            ) as response:
-                response.raise_for_status()
-                for line in response.iter_lines():
-                    if line.startswith("data: "):
-                        data = line[6:]
-                        if data == "[DONE]":
-                            break
-                        chunk_data = json.loads(data)
-                        yield ChatCompletionChunk(**chunk_data)
-        except Exception as e:
-            details = traceback.format_exc()
-            logger.error(f"parse /chat/completions response error: {e}\ndetails: {details}, request_data: {request_data}")
-            raise
-
-    @overload
-    def generate(
-        self,
-        messages: List[Message],
-        stream: Literal[False],
-        **kwargs
-    ) -> ChatCompletion:
-        ...
-
-    @overload
-    def generate(
-        self,
-        messages: List[Message],
-        stream: Literal[True],
-        **kwargs
-    ) -> Generator[ChatCompletionChunk, None, None]:
-        ...
-
-    def generate(
-            self,
-            messages: List[Message],
-            stream: bool = False,
-            **kwargs
-    ) -> Union[ChatCompletion, Generator[ChatCompletionChunk, None, None]]:
-        """生成回复
-
-        Args:
-            messages: 消息列表
-            stream: 是否使用流式生成
-            **kwargs: 其他参数
-
-        Returns:
-            如果stream=False，返回ChatCompletion对象；如果stream=True，返回ChatCompletionChunk生成器
-        """
-        generate_config = build_generate_config(self.llm_config, **kwargs)
+        generate_config = build_generate_config(self.llm_config, **request.generate_config)
         request_data = {
             "model": self.model,
-            "messages": [
-                message.model_dump()
-                for message in messages
-            ],
-            "stream": stream,
-            **generate_config
+            "messages": [message.model_dump() for message in request.messages],
+            "stream": True,
+            **generate_config,
         }
 
-        if not stream:
-            return self._generate_non_stream(request_data)
-        else:
-            return self._generate_stream(request_data)
+        response = self._client.post(
+            "/chat/completions",
+            json=request_data
+        )
+        response.raise_for_status()
+        return LLMStreamResponse(**response.json())
+

@@ -1,3 +1,2 @@
-This is system-generated message.
 The tool {{ tool_name }} call failed.
 The error message is {{ tool_response }}.

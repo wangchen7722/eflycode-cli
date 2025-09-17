@@ -1,4 +1,5 @@
 {% if tools is defined %}
+<tool_call_instruction>
 <tool_call_formatting>
 If you need to use a tool, you must format your message in the following way:
 {{ stream_parser.tool_call_start }}
@@ -37,4 +38,5 @@ def {{ tool_name }}(
 
 {% endfor %}
 </tool_namespace>
+</tool_call_instruction>
 {% endif %}

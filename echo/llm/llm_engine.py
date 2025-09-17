@@ -1,21 +1,16 @@
-import logging
-import os
-from typing import Any, Dict, Generator, List, Literal, NotRequired, Optional, overload
+from abc import abstractmethod
+from typing import Any, Dict, Optional, List
 
-from typing_extensions import TypedDict
-
-from echo.util.logger import logger
-from echo.schema.llm import ChatCompletion, ChatCompletionChunk, Message
-
-
-class LLMConfig(TypedDict):
-    """LLM配置类型定义"""
-    model: str
-    base_url: str
-    api_key: str
-    temperature: NotRequired[Optional[float]]
-    max_tokens: NotRequired[Optional[int]]
-
+from echo.schema.llm import (
+    LLMConfig,
+    LLMRequest,
+    LLMStreamResponse,
+    LLMCallResponse,
+    LLMCapability,
+    LLMRequestContext,
+)
+from echo.llm.advisor import Advisor, AdvisorChain
+from echo.llm.advisors.tool_call_advisor import ToolCallAdvisor
 
 
 ALLOWED_GENERATE_CONFIG_KEYS = [
@@ -32,10 +27,7 @@ ALLOWED_GENERATE_CONFIG_KEYS = [
 ]
 
 
-def build_generate_config(
-    llm_config: LLMConfig,
-    **kwargs
-) -> Dict[str, Any]:
+def build_generate_config(llm_config: LLMConfig, **kwargs) -> Dict[str, Any]:
     """构建生成配置
 
     Args:
@@ -46,9 +38,10 @@ def build_generate_config(
         Dict[str, Any]: 生成配置字典
     """
     config = {}
-    for key in llm_config:
+    llm_config_kwargs = llm_config.model_dump()
+    for key in llm_config_kwargs:
         if key in ALLOWED_GENERATE_CONFIG_KEYS:
-            config[key] = llm_config[key]
+            config[key] = llm_config_kwargs[key]
     if kwargs:
         for key in kwargs:
             if key in ALLOWED_GENERATE_CONFIG_KEYS:
@@ -60,63 +53,68 @@ class LLMEngine:
     """大语言模型引擎，负责处理与LLM的交互"""
 
     def __init__(
-            self,
-            llm_config: LLMConfig,
-            headers: Optional[Dict[str, str]] = None,
-            **kwargs
+        self,
+        llm_config: LLMConfig,
+        headers: Optional[Dict[str, str]] = None,
+        advisors: Optional[List[Advisor]] = None,
+        **kwargs,
     ):
         """初始化LLM引擎
-        
+
         Args:
             llm_config: LLM配置
             headers: 请求头
             **kwargs: 其他参数
         """
         self.llm_config = llm_config
-        if "model" not in self.llm_config:
-            raise ValueError("LLM配置中缺少model字段")
-        if "base_url" not in self.llm_config:
-            raise ValueError("LLM配置中缺少base_url字段")
-        if "api_key" not in self.llm_config:
-            raise ValueError("LLM配置中缺少api_key字段")
-        self.model = self.llm_config.get("model")
-        self.base_url = self.llm_config.get("base_url")
-        self.api_key = self.llm_config.get("api_key")
+        self.model = self.llm_config.model
+        self.base_url = self.llm_config.base_url
+        self.api_key = self.llm_config.api_key
         self.headers = headers or {}
+        self._advisor_chain = AdvisorChain(advisors or [])
 
-    @overload
-    def generate(
-        self,
-        messages: List[Message],
-        stream: Literal[False],
-        **kwargs
-    ) -> ChatCompletion:
-        ...
+    @abstractmethod
+    def do_call(self, request: LLMRequest) -> LLMCallResponse:
+        """调用模型
 
-    @overload
-    def generate(
-            self,
-            messages: List[Message],
-            stream: Literal[True],
-            **kwargs
-    ) -> Generator[ChatCompletionChunk, None, None]:
-        ...
-
-    def generate(
-        self, 
-        messages: List[Message], 
-        stream: bool = True,
-        **kwargs
-    ) -> ChatCompletion | Generator[
-        ChatCompletionChunk, None, None]:
-        """生成LLM响应
-        
         Args:
-            messages: 消息列表，每个消息是一个字典，包含role和content字段
-            stream: 是否流式响应
-            **kwargs: 其他参数
-            
+            request: LLM请求
+
         Returns:
-            ChatCompletion | Generator[ChatCompletionChunk, None, None]: LLM响应
+            LLMCallResponse: 调用响应
         """
         raise NotImplementedError
+
+    @abstractmethod
+    def do_stream(self, request: LLMRequest) -> LLMStreamResponse:
+        """调用模型并返回流式响应
+
+        Args:
+            request: LLM请求
+
+        Returns:
+            LLMStreamResponse: 流式响应
+        """
+        raise NotImplementedError
+
+    def _ensure_request_context(self, request: LLMRequest) -> LLMRequest:
+        if request.context is None:
+            capability = LLMCapability(
+                supports_native_tool_call=self.llm_config.supports_native_tool_call
+            )
+            request.context = LLMRequestContext(capability=capability)
+        return request
+
+    def call(self, request: LLMRequest) -> LLMCallResponse:
+        """带 AdvisorChain 的非流式调用"""
+        if request.tools:
+            self._advisor_chain.advisors.insert(0, ToolCallAdvisor(tools=request.tools))
+        wrapped = self._advisor_chain.wrap_call(self.do_call)
+        return wrapped(request)
+
+    def stream(self, request: LLMRequest) -> LLMStreamResponse:
+        """带 AdvisorChain 的流式调用"""
+        if request.tools:
+            self._advisor_chain.advisors.insert(0, ToolCallAdvisor(tools=request.tools))
+        wrapped = self._advisor_chain.wrap_stream(self.do_stream)
+        return wrapped(request)

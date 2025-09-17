@@ -116,7 +116,15 @@ class BaseTool(ABC):
             "function": {
                 "name": self.name,
                 "description": self.description,
-                "parameters": self.raw_parameters,
+                "parameters": {
+                    "type": "object",
+                    "properties": self.parameters,
+                    "required": [
+                        param_name 
+                        for param_name, param_schema in self.parameters.items()
+                        if param_schema.get("required", False)
+                    ]
+                },
             },
         }
 

@@ -4,7 +4,12 @@ from pydantic import BaseModel, Field
 from enum import Enum
 import tomllib
 
-from echo.constant import ECHO_USER_HOME_DIR, ECHO_USER_CONFIG_FILE, ECHO_PROJECT_HOME_DIR, ECHO_PROJECT_CONFIG_FILE
+from echo.constant import (
+    ECHO_USER_HOME_DIR,
+    ECHO_USER_CONFIG_FILE,
+    ECHO_PROJECT_HOME_DIR,
+    ECHO_PROJECT_CONFIG_FILE,
+)
 from echo.schema.config import LoggingConfig, ModelConfig
 from echo.util.logger import configure_logging, logger
 
@@ -42,7 +47,6 @@ class GlobalConfig:
         configure_logging(self._logging_config)
         self._model_config = self._parse_model_config(config)
 
-
     def _parse_logging_config(self, config: Dict[str, Any]) -> LoggingConfig:
         """解析日志配置"""
         logging_config = config.get("logging", {})
@@ -50,9 +54,8 @@ class GlobalConfig:
 
     def _parse_model_config(self, config: Dict[str, Any]) -> ModelConfig:
         """解析模型配置"""
-        # print(config)
-        # return ModelConfig(**model_config)
-        ...
+        model_config = config.get("model", {})
+        return ModelConfig(**model_config)
 
     def _load_config(self) -> Dict[str, Any]:
         # 加载用户目录配置和项目级配置，其中项目级配置优先级更高

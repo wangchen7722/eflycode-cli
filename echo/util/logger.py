@@ -22,4 +22,4 @@ def configure_logging(logging_config: LoggingConfig) -> None:
         format=logging_config.format,
         backtrace=True
     )
-    logger.error(f"日志记录器已配置，日志文件路径: {logging_config.dirpath / logging_config.filename}")
+    logger.debug(f"日志记录器已配置，日志文件路径: {logging_config.dirpath / logging_config.filename}")

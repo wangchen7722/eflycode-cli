@@ -70,14 +70,14 @@ data/
         self.assertEqual(self.tool.name, "list_files")
         self.assertEqual(self.tool.type, "function")
         self.assertEqual(self.tool.should_approval, False)
-        self.assertIn("查看指定目录中的文件和目录", self.tool.description)
+        self.assertIn("List the structure and stats of a folder.", self.tool.description)
         self.assertIn("apply_ignore", str(self.tool.parameters))
     
     def test_list_files_non_recursive(self):
         """测试非递归列出文件"""
         result = self.tool.do_run(self.test_dir, recursive=False, apply_ignore=False)
         
-        self.assertIn("成功查看", result)
+        self.assertIn(f"The structure and statistics for {self.test_dir}", result)
         self.assertIn("file1.txt", result)
         self.assertIn("file2.py", result)
         self.assertIn("README.md", result)
@@ -97,8 +97,7 @@ data/
         """测试递归列出文件"""
         result = self.tool.do_run(self.test_dir, recursive=True, apply_ignore=False)
         print(result)
-        self.assertIn("成功递归查看", result)
-        self.assertIn("最大深度2", result)
+        self.assertIn(f"The structure and statistics for {self.test_dir}", result)
         
         # 顶级文件
         self.assertIn("file1.txt", result)
@@ -119,8 +118,7 @@ data/
         """测试应用忽略规则"""
         result = self.tool.do_run(self.test_dir, recursive=True, apply_ignore=True)
         
-        self.assertIn("成功递归查看", result)
-        self.assertIn("应用忽略规则", result)
+        self.assertIn(f"The structure and statistics for {self.test_dir} (ignore rules applied)", result)
         
         # 正常文件应该存在
         self.assertIn("file1.txt", result)
@@ -138,8 +136,7 @@ data/
         """测试非递归模式下应用忽略规则"""
         result = self.tool.do_run(self.test_dir, recursive=False, apply_ignore=True)
         
-        self.assertIn("成功查看", result)
-        self.assertIn("应用忽略规则", result)
+        self.assertIn(f"The structure and statistics for {self.test_dir} (ignore rules applied)", result)
         
         # 正常文件应该存在
         self.assertIn("file1.txt", result)
@@ -155,7 +152,7 @@ data/
         with self.assertRaises(ToolParameterError) as context:
             self.tool.do_run("/nonexistent/directory")
         
-        self.assertIn("未找到目录", str(context.exception))
+        self.assertIn(f"Directory not found at /nonexistent/directory. Please ensure the directory exists.", str(context.exception))
     
     def test_not_a_directory(self):
         """测试路径不是目录"""
@@ -166,7 +163,7 @@ data/
         with self.assertRaises(ToolParameterError) as context:
             self.tool.do_run(str(test_file))
         
-        self.assertIn("不是一个目录", str(context.exception))
+        self.assertIn(f"{test_file} is not a directory. Please ensure the path points to a directory.", str(context.exception))
     
     def test_empty_directory(self):
         """测试空目录"""
@@ -175,7 +172,7 @@ data/
         
         result = self.tool.do_run(str(empty_dir), recursive=False, apply_ignore=False)
         
-        self.assertIn("成功查看", result)
+        self.assertIn(f"The structure and statistics for {empty_dir}", result)
         # 空目录应该只显示标题，没有文件列表
         lines = result.split('\n')
         self.assertLessEqual(len(lines), 2)  # 标题行 + 可能的空行
@@ -223,14 +220,7 @@ data/
         """测试examples属性"""
         examples = self.tool.examples
         self.assertIsInstance(examples, dict)
-        self.assertGreater(len(examples), 0)
-        
-        # 检查示例的结构
-        for example_name, example_data in examples.items():
-            self.assertIn("type", example_data)
-            self.assertIn("name", example_data)
-            self.assertIn("arguments", example_data)
-            self.assertEqual(example_data["name"], "list_files")
+        self.assertEqual(len(examples), 0)
 
 
 if __name__ == "__main__":

@@ -34,7 +34,7 @@ class TestEditFileTool(unittest.TestCase):
             new_string="修改后的第二行"
         )
         
-        self.assertIn("成功", result)
+        self.assertIn(f"Successfully applied changes to {self.test_file}.", result)
         
         # 验证文件内容
         with open(self.test_file, "r", encoding="utf-8") as f:
@@ -43,64 +43,7 @@ class TestEditFileTool(unittest.TestCase):
         self.assertIn("修改后的第二行", content)
         self.assertNotIn("第二行", content.replace("修改后的第二行", ""))
     
-    def test_insert_mode(self):
-        """测试插入模式"""
-        result = self.tool.run(
-            path=self.test_file,
-            old_string="",
-            new_string="插入的新行",
-            line_number=2
-        )
-        
-        self.assertIn("成功", result)
-        self.assertIn("第 2 行插入", result)
-        
-        # 验证文件内容
-        with open(self.test_file, "r", encoding="utf-8") as f:
-            lines = f.readlines()
-        
-        self.assertEqual(lines[1].strip(), "插入的新行")
-        self.assertEqual(len(lines), 4)  # 原来3行，插入1行
-    
-    def test_insert_at_end(self):
-        """测试在文件末尾插入"""
-        result = self.tool.run(
-            path=self.test_file,
-            old_string="",
-            new_string="末尾新行",
-            line_number=4
-        )
-        
-        self.assertIn("成功", result)
-        
-        # 验证文件内容
-        with open(self.test_file, "r", encoding="utf-8") as f:
-            lines = f.readlines()
-        
-        self.assertEqual(lines[-1].strip(), "末尾新行")
-    
-    def test_insert_without_line_number(self):
-        """测试插入模式但未提供行号"""
-        with self.assertRaises(ToolParameterError) as context:
-            self.tool.run(
-                path=self.test_file,
-                old_string="",
-                new_string="新内容"
-            )
-        
-        self.assertIn("插入模式需要指定line_number参数", str(context.exception))
-    
-    def test_invalid_line_number(self):
-        """测试无效的行号"""
-        with self.assertRaises(ToolParameterError) as context:
-            self.tool.run(
-                path=self.test_file,
-                old_string="",
-                new_string="新内容",
-                line_number=10  # 超出范围
-            )
-        
-        self.assertIn("行号必须在", str(context.exception))
+
     
     def test_old_string_not_found(self):
         """测试搜索字符串不存在"""
@@ -111,7 +54,7 @@ class TestEditFileTool(unittest.TestCase):
                 new_string="新内容"
             )
         
-        self.assertIn("未找到", str(context.exception))
+        self.assertIn(f"'不存在的内容' not found in {self.test_file}. Please ensure old_string is correct.", str(context.exception))
     
     def test_multiple_matches(self):
         """测试多个匹配项"""
@@ -126,8 +69,7 @@ class TestEditFileTool(unittest.TestCase):
                 new_string="新内容"
             )
         
-        self.assertIn("找到 2 个", str(context.exception))
-        self.assertIn("唯一存在", str(context.exception))
+        self.assertIn(f"Found 2 instances of '重复' in {self.test_file}. Please ensure old_string is unique.", str(context.exception))
     
     def test_file_not_found(self):
         """测试文件不存在"""
@@ -140,7 +82,7 @@ class TestEditFileTool(unittest.TestCase):
                 new_string="新内容"
             )
         
-        self.assertIn("文件未找到", str(context.exception))
+        self.assertIn("File not found", str(context.exception))
     
     def test_path_is_directory(self):
         """测试路径是目录而不是文件"""
@@ -151,7 +93,7 @@ class TestEditFileTool(unittest.TestCase):
                 new_string="新内容"
             )
         
-        self.assertIn("不是一个文件", str(context.exception))
+        self.assertIn("is not a file", str(context.exception))
 
 
 if __name__ == "__main__":

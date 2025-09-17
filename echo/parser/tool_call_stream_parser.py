@@ -2,12 +2,11 @@ import json
 import uuid
 from typing import Generator, Optional, Sequence, List, Dict, Any
 from echo.tool.base_tool import BaseTool
-from echo.schema.llm import ChatCompletionChunk, ToolCall, ToolFunction
-from echo.schema.agent import AgentResponseChunk, AgentResponseChunkType
+from echo.schema.llm import ChatCompletionChunk, StreamChoice, ToolCall, ToolFunction, Message, ToolCallFunction
 from echo.parser.base_parser import ResponseParser
 
 
-class StreamResponseParser(ResponseParser):
+class ToolCallStreamParser(ResponseParser):
     """流式响应解析器，支持解析工具调用"""
 
     # 状态常量
@@ -80,7 +79,7 @@ class StreamResponseParser(ResponseParser):
 
     def parse_stream(
             self, chat_completion_chunk_stream: Generator[ChatCompletionChunk, None, None]
-    ) -> Generator[AgentResponseChunk, None, None]:
+    ) -> Generator[ChatCompletionChunk, None, None]:
         """
         状态机解析器，支持可配置的工具调用分隔符
 
@@ -88,77 +87,67 @@ class StreamResponseParser(ResponseParser):
             chat_completion_chunk_stream: 聊天完成块的流式生成器
 
         Yields:
-            AgentResponseChunk: 解析后的响应块
+            ChatCompletionChunk: 解析后的响应块
         """
         last_finish_reason = None
         last_usage = None
         raw_content = ""
+        last_chunk = None
 
         # 主循环：逐个 chunk 处理
         for chunk in chat_completion_chunk_stream:
             if chunk is None:
                 continue
-            last_usage = chunk.usage
-            last_finish_reason = chunk.choices[0].finish_reason
+            last_chunk = chunk
             chunk_content = chunk.choices[0].delta.content
             raw_content += chunk_content
 
             for char in chunk_content:
-                yield from self._process_character(char)
+                yield from self._process_character(char, chunk)
 
         # 流结束后处理残留数据
-        yield from self._handle_stream_end(last_finish_reason, last_usage)
+        yield from self._handle_stream_end(last_chunk)
 
-        # 最终完成标记
-        yield AgentResponseChunk(
-            type=AgentResponseChunkType.DONE,
-            content="",
-            finish_reason=last_finish_reason,
-            tool_calls=None,
-            usage=last_usage,
-            metadata={
-                "raw_content": raw_content
-            }
-        )
 
-    def parse_text(self, text: str) -> Generator[AgentResponseChunk, None, None]:
+    def parse_text(self, text: str, chunk: ChatCompletionChunk) -> Generator[ChatCompletionChunk, None, None]:
         """解析纯文本内容（用于测试）
 
         Args:
             text: 要解析的文本内容
 
         Yields:
-            AgentResponseChunk: 解析后的响应块
+            ChatCompletionChunk: 解析后的响应块
         """
         self._reset_state()
 
         for char in text:
-            yield from self._process_character(char)
+            yield from self._process_character(char, chunk)
 
         # 处理残留数据
-        yield from self._handle_stream_end(None, None)
+        yield from self._handle_stream_end(chunk)
 
     def _process_character(
-            self, char: str
-    ) -> Generator[AgentResponseChunk, None, None]:
+            self, char: str, chunk: ChatCompletionChunk
+    ) -> Generator[ChatCompletionChunk, None, None]:
         """
         处理单个字符
 
         Args:
             char: 当前字符
+            chunk: 当前的 ChatCompletionChunk
         """
         if self.state == self.STATE_TEXT:
-            yield from self._handle_text_state(char)
+            yield from self._handle_text_state(char, chunk)
         elif self.state == self.STATE_POTENTIAL_TAG:
-            yield from self._handle_potential_tag_state(char)
+            yield from self._handle_potential_tag_state(char, chunk)
         elif self.state == self.STATE_TOOL_NAME:
-            yield from self._handle_tool_name_state(char)
+            yield from self._handle_tool_name_state(char, chunk)
         elif self.state == self.STATE_PARAMS:
-            yield from self._handle_params_state(char)
+            yield from self._handle_params_state(char, chunk)
 
     def _handle_text_state(
-            self, char: str
-    ) -> Generator[AgentResponseChunk, None, None]:
+            self, char: str, chunk: ChatCompletionChunk
+    ) -> Generator[ChatCompletionChunk, None, None]:
         """处理TEXT状态"""
         if char == self.tool_call_start[0]:  # 检查工具调用开始标记的第一个字符
             # 不立即输出文本缓冲区，而是进入潜在标签状态
@@ -174,8 +163,8 @@ class StreamResponseParser(ResponseParser):
             yield
 
     def _handle_potential_tag_state(
-            self, char: str
-    ) -> Generator[AgentResponseChunk, None, None]:
+            self, char: str, chunk: ChatCompletionChunk
+    ) -> Generator[ChatCompletionChunk, None, None]:
         """处理POTENTIAL_TAG状态"""
         self.tag_buffer += char
         candidates = self._get_candidates()
@@ -195,20 +184,28 @@ class StreamResponseParser(ResponseParser):
             if matched_candidate:
                 # 在处理匹配的标签之前，输出累积的文本（如果有的话）
                 if matched_candidate == self.tool_call_start and self.text_buffer:
-                    yield AgentResponseChunk(
-                        type=AgentResponseChunkType.TEXT,
-                        content=self.text_buffer,
-                        finish_reason=None,
-                        tool_calls=None,
+                    yield ChatCompletionChunk(
+                        id=chunk.id,
+                        object=chunk.object,
+                        created=chunk.created,
+                        model=chunk.model,
+                        choices=[StreamChoice(
+                            index=0,
+                            delta=Message(
+                                role=chunk.choices[0].delta.role,
+                                content=self.text_buffer,
+                            ),
+                            finish_reason=None,
+                        )],
                         usage=None,
                     )
                     self.text_buffer = ""
-                yield from self._handle_matched_tag(matched_candidate)
+                yield from self._handle_matched_tag(matched_candidate, chunk)
             # 如果没有完全匹配，继续累积标签（不需要额外操作）
 
     def _handle_tool_name_state(
-            self, char: str
-    ) -> Generator[AgentResponseChunk, None, None]:
+            self, char: str, chunk: ChatCompletionChunk
+    ) -> Generator[ChatCompletionChunk, None, None]:
         """处理工具名状态"""
         if char == self.tool_name_end[0]:  # 检查工具名结束标签的第一个字符
             self.tag_buffer = char
@@ -224,8 +221,8 @@ class StreamResponseParser(ResponseParser):
                 yield
 
     def _handle_params_state(
-            self, char: str
-    ) -> Generator[AgentResponseChunk, None, None]:
+            self, char: str, chunk: ChatCompletionChunk
+    ) -> Generator[ChatCompletionChunk, None, None]:
         """处理参数状态"""
         if char == self.tool_params_end[0]:  # 检查参数结束标签的第一个字符
             self.tag_buffer = char
@@ -320,8 +317,8 @@ class StreamResponseParser(ResponseParser):
         return None
 
     def _handle_matched_tag(
-            self, matched_tag: str
-    ) -> Generator[AgentResponseChunk, None, None]:
+            self, matched_tag: str, chunk: ChatCompletionChunk
+    ) -> Generator[ChatCompletionChunk, None, None]:
         """处理匹配的标签"""
         if matched_tag == self.tool_call_start:
             # 工具调用开始
@@ -376,20 +373,29 @@ class StreamResponseParser(ResponseParser):
             # 工具调用结束
             if self.tool_call:
                 self.tool_call["content"] += matched_tag
-                yield AgentResponseChunk(
-                    type=AgentResponseChunkType.TOOL_CALL,
-                    content="",
-                    finish_reason="tool_calls",
-                    tool_calls=[
-                        ToolCall(
-                            id=uuid.uuid4().hex,
-                            type="function",
-                            function={
-                                "name": self.tool_call["name"],
-                                "arguments": self.tool_call["arguments"],
-                            },
-                        )
-                    ],
+                yield ChatCompletionChunk(
+                    id=chunk.id,
+                    object=chunk.object,
+                    created=chunk.created,
+                    model=chunk.model,
+                    choices=[StreamChoice(
+                        index=0,
+                        delta=Message(
+                            role="assistant",
+                            content="",
+                            tool_calls=[
+                                ToolCall(
+                                    id=uuid.uuid4().hex,
+                                    type="function",
+                                    function=ToolCallFunction(
+                                        name=self.tool_call["name"],
+                                        arguments=json.dumps(self.tool_call["arguments"]),
+                                    ),
+                                )
+                            ],
+                        ),
+                        finish_reason="tool_calls",
+                    )],
                     usage=None,
                 )
             self.tool_call = None
@@ -402,8 +408,8 @@ class StreamResponseParser(ResponseParser):
             self.tag_context = None
 
     def _handle_stream_end(
-            self, last_finish_reason: Optional[str], last_usage: Optional[Dict[str, Any]]
-    ) -> Generator[AgentResponseChunk, None, None]:
+            self, last_chunk: ChatCompletionChunk
+    ) -> Generator[ChatCompletionChunk, None, None]:
         """处理流结束时的残留数据"""
         # 处理未完成的标签缓冲区
         if self.state == self.STATE_POTENTIAL_TAG:
@@ -411,12 +417,21 @@ class StreamResponseParser(ResponseParser):
                 self.tool_call["content"] += self.tag_buffer
                 if self.tag_context == "PARAM":
                     self.params_buffer += self.tag_buffer
-                yield AgentResponseChunk(
-                    type=AgentResponseChunkType.TOOL_CALL,
-                    content=self.tag_buffer,
-                    finish_reason=None,
-                    tool_calls=None,
-                    usage=None,
+                yield ChatCompletionChunk(
+                    id=last_chunk.id,
+                    object=last_chunk.object,
+                    created=last_chunk.created,
+                    model=last_chunk.model,
+                    choices=[StreamChoice(
+                        index=0,
+                        delta=Message(
+                            role="assistant",
+                            content=self.tag_buffer,
+                        ),
+                        finish_reason=last_chunk.choices[0].finish_reason,
+                        tool_calls=None,
+                    )],
+                    usage=last_chunk.usage,
                 )
             else:
                 # 将未完成的标签缓冲区内容添加到文本缓冲区
@@ -424,29 +439,38 @@ class StreamResponseParser(ResponseParser):
 
         # 输出剩余的文本缓冲区内容
         if self.text_buffer:
-            yield AgentResponseChunk(
-                type=AgentResponseChunkType.TEXT,
-                content=self.text_buffer,
-                finish_reason=last_finish_reason,
-                tool_calls=None,
-                usage=last_usage,
+            yield ChatCompletionChunk(
+                id=last_chunk.id,
+                object=last_chunk.object,
+                created=last_chunk.created,
+                model=last_chunk.model,
+                choices=[StreamChoice(
+                    index=0,
+                    delta=Message(
+                        role="assistant",
+                        content=self.text_buffer,
+                    ),
+                    finish_reason=last_chunk.choices[0].finish_reason,
+                    tool_calls=None,
+                )],
+                usage=last_chunk.usage,
             )
         elif self.state == self.STATE_TOOL_NAME and self.tool_call:
-            yield AgentResponseChunk(
-                type=AgentResponseChunkType.TOOL_CALL,
-                content="",
-                finish_reason=last_finish_reason,
-                tool_calls=[
-                    ToolCall(
-                        id=uuid.uuid4().hex,
-                        type="function",
-                        function={
-                            "name": self.tool_call["name"],
-                            "arguments": self.tool_call["arguments"],
-                        },
-                    )
-                ],
-                usage=last_usage,
+            yield ChatCompletionChunk(
+                id=last_chunk.id,
+                object=last_chunk.object,
+                created=last_chunk.created,
+                model=last_chunk.model,
+                choices=[StreamChoice(
+                    index=0,
+                    delta=Message(
+                        role="assistant",
+                        content=self.tool_call["content"],
+                    ),
+                    finish_reason=last_chunk.choices[0].finish_reason,
+                    tool_calls=None,
+                )],
+                usage=last_chunk.usage,
             )
         # 移除未定义的self.current_param相关代码
         elif self.state == self.STATE_PARAMS and self.tool_call:
@@ -457,19 +481,19 @@ class StreamResponseParser(ResponseParser):
                     self.tool_call["arguments"] = json.loads(params_json)
             except json.JSONDecodeError:
                 self.tool_call["arguments"] = {}
-            yield AgentResponseChunk(
-                type=AgentResponseChunkType.TOOL_CALL,
-                content="",
-                finish_reason=last_finish_reason,
-                tool_calls=[
-                    ToolCall(
-                        id=uuid.uuid4().hex,
-                        type="function",
-                        function={
-                            "name": self.tool_call["name"],
-                            "arguments": self.tool_call["arguments"],
-                        },
-                    )
-                ],
-                usage=last_usage,
+            yield ChatCompletionChunk(
+                id=last_chunk.id,
+                object=last_chunk.object,
+                created=last_chunk.created,
+                model=last_chunk.model,
+                choices=[StreamChoice(
+                    index=0,
+                    delta=Message(
+                        role="assistant",
+                        content=self.tool_call["content"],
+                    ),
+                    finish_reason=last_chunk.choices[0].finish_reason,
+                    tool_calls=None,
+                )],
+                usage=last_chunk.usage,
             )

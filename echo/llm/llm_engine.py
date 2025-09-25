@@ -142,9 +142,7 @@ class LLMEngine:
             # 使用 AdvisorChain 的新方法添加 advisor，自动处理优先级
             priority = AdvisorRegistry.get_advisor_priority("buildin_tool_call_advisor")
             self._advisor_chain.add_advisor(
-                tool_call_advisor, 
-                priority=priority, 
-                is_builtin=True
+                tool_call_advisor, priority=priority, is_builtin=True
             )
         wrapped = self._advisor_chain.wrap_call(self.do_call)
         return wrapped(request)
@@ -161,29 +159,16 @@ class LLMEngine:
             # 使用 AdvisorChain 的新方法添加 advisor，自动处理优先级
             priority = AdvisorRegistry.get_advisor_priority("buildin_tool_call_advisor")
             self._advisor_chain.add_advisor(
-                tool_call_advisor, 
-                priority=priority, 
-                is_builtin=True
+                tool_call_advisor, priority=priority, is_builtin=True
             )
         wrapped = self._advisor_chain.wrap_stream(self.do_stream)
         return wrapped(request)
 
-    def add_advisor(self, advisor: Union[Advisor, str], priority: int = 0):
+    def add_advisor(self, advisor: Advisor, priority: int = 0):
         """添加Advisor到引擎的AdvisorChain中
 
         Args:
-            advisor: Advisor实例、AdvisorItem实例或Advisor名称字符串
+            advisor: Advisor实例
             priority: 优先级，仅在 advisor 为 Advisor 实例时有效
         """
-        if isinstance(advisor, str):
-            # 从注册表获取 Advisor 类并实例化
-            advisor_class = AdvisorRegistry.get_advisor(advisor)
-            advisor_priority = AdvisorRegistry.get_advisor_priority(advisor)
-            advisor_instance = advisor_class()
-            self._advisor_chain.add_advisor(
-                advisor_instance, 
-                priority=advisor_priority
-            )
-        else:
-            self._advisor_chain.add_advisor(advisor, priority)
-
+        self._advisor_chain.add_advisor(advisor, priority)

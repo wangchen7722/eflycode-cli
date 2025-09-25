@@ -1,5 +1,4 @@
 import json
-import logging
 from abc import abstractmethod
 from typing import (
     Generator,
@@ -10,10 +9,8 @@ from typing import (
 )
 
 from echo.ui.console import ConsoleUI
-from echo.util.logger import logger
-from echo.util.system import get_system_info
 from echo.llm.llm_engine import LLMEngine
-from echo.schema.llm import Message, ToolCall
+from echo.schema.llm import LLMPrompt, LLMRequest, Message, ToolCall, ToolDefinition
 from echo.schema.tool import ToolError
 from echo.prompt.prompt_loader import PromptLoader
 from echo.tool.base_tool import BaseTool
@@ -25,7 +22,6 @@ from echo.schema.agent import (
     ToolCallResponse
 )
 from echo.config import GlobalConfig
-
 
 
 class BaseAgent:
@@ -69,9 +65,9 @@ class ToolCallAgent(BaseAgent):
         self._tool_map = {tool.name: tool for tool in self._tools}
 
     @property
-    def tools(self) -> Sequence[BaseTool]:
+    def tools(self) -> Sequence[ToolDefinition]:
         """获取工具字典"""
-        return self._tools
+        return [tool.definition for tool in self._tools]
 
     def execute_tool(self, tool_call: ToolCall) -> ToolCallResponse:
         """执行工具调用
@@ -96,7 +92,7 @@ class ToolCallAgent(BaseAgent):
                 message=tool_call_response_message,
             )
         try:
-            tool_response = tool.run(**tool_call_arguments)
+            tool_response = tool.run(**json.loads(tool_call_arguments))
             tool_call_response_message = PromptLoader.get_instance().render_template(
                 "tool_call/tool_call_succeeded.prompt",
                 tool_name=tool_name,
@@ -163,13 +159,11 @@ class ConversationAgent(ToolCallAgent):
         """渲染系统提示词"""
         if self._system_prompt:
             return self._system_prompt
-        system_info = get_system_info()
         return PromptLoader.get_instance().render_template(
             f"{self.role}/system.prompt",
             name=self.name,
             role=self.role,
             tools=self._tool_map,
-            system_info=system_info,
             stream_parser=self.stream_parser,
         )
 
@@ -182,9 +176,11 @@ class ConversationAgent(ToolCallAgent):
         return messages
 
     def _run_no_stream(
-            self, messages: List[Message], **kwargs
+            self, messages: List[Message]
     ) -> AgentResponse:
-        response = self.llm_engine.generate(messages=messages, stream=False, **kwargs)
+        """非流式运行智能体"""
+        prompt = LLMPrompt(messages=messages, tools=self.tools)
+        response = self.llm_engine.call(prompt=prompt)
         self._history_messages.append(response.choices[0].message)
         return AgentResponse(
             messages=messages,
@@ -197,12 +193,14 @@ class ConversationAgent(ToolCallAgent):
     def _run_stream(
             self, messages: List[Message], **kwargs
     ) -> Generator[AgentResponseChunk, None, None]:
+        """流式运行智能体"""
         stream_interval = kwargs.get("stream_interval", 3)
-        response = self.llm_engine.generate(messages=messages, stream=True, **kwargs)
+        prompt = LLMPrompt(messages=messages, tools=self.tools)
+        response = self.llm_engine.stream(prompt=prompt, stream=True, **kwargs)
         response_content = ""
         last_chunk: Optional[AgentResponseChunk] = None
         buffer = ""
-        
+
         try:
             for chunk in self.stream_parser.parse_stream(response):
                 if chunk.content:

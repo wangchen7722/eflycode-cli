@@ -70,11 +70,11 @@ class ToolCallResponse(BaseModel):
 
     Attributes:
         tool_name (str): 工具名称
-        arguments (Dict[str, Any]): 工具调用的参数
+        arguments (str): 工具调用的参数
         response (str): 工具执行的响应结果
     """
     tool_name: str
-    arguments: Dict[str, Any]
+    arguments: str
     success: bool
     result: str
     message: str

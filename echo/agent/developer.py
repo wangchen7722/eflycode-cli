@@ -5,7 +5,6 @@ from echo.agent.registry import register_agent
 from echo.llm.llm_engine import LLMEngine
 from echo.prompt import PromptLoader
 from echo.tool import FILE_TOOL_GROUP
-from echo.util.system import get_system_info
 
 
 @register_agent("developer")
@@ -40,12 +39,10 @@ class Developer(InteractiveConversationAgent):
         """渲染系统提示词"""
         if self._system_prompt:
             return self._system_prompt
-        system_info = get_system_info()
         return PromptLoader.get_instance().render_template(
             f"{self.role}/v1/system.prompt",
             name=self.name,
             role=self.role,
             tools=self._tool_map,
-            system_info=system_info,
             stream_parser=self.stream_parser,
         )

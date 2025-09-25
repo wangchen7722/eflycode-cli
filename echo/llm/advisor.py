@@ -120,3 +120,122 @@ class AdvisorChain:
             return lambda req: advisor.handle_stream(req, next_handler)
 
         return reduce(_wrap, reversed(self.advisors), final_handler)
+
+
+class AdvisorRegistry:
+    """Advisor注册表，用于管理所有注册的Advisor类"""
+    
+    _instance = None
+    # {name: {"class": AdvisorClass, "priority": int, "is_builtin": bool}}
+    _advisors = {}
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+    
+    @classmethod
+    def register(cls, name: str, advisor_class: type, priority: int = 0, is_builtin: bool = False):
+        """注册Advisor类
+        
+        Args:
+            name: Advisor名称
+            advisor_class: Advisor类
+            priority: 优先级，数值越大优先级越高
+            is_builtin: 是否为系统内置Advisor
+        """
+        if not issubclass(advisor_class, Advisor):
+            raise ValueError(f"Advisor类 {advisor_class.__name__} 必须继承自 Advisor")
+        
+        cls._advisors[name] = {
+            "class": advisor_class,
+            "priority": priority,
+            "is_builtin": is_builtin
+        }
+    
+    @classmethod
+    def get_advisor(cls, name: str) -> type:
+        """获取指定名称的Advisor类
+        
+        Args:
+            name: Advisor名称
+            
+        Returns:
+            type: Advisor类
+            
+        Raises:
+            KeyError: 当指定名称的Advisor不存在时
+        """
+        if name not in cls._advisors:
+            raise KeyError(f"未找到名称为 '{name}' 的Advisor")
+        return cls._advisors[name]["class"]
+    
+    def get_advisor_priority(cls, name: str) -> int:
+        """获取指定名称的Advisor的优先级
+        
+        Args:
+            name: Advisor名称
+            
+        Returns:
+            int: Advisor的优先级
+            
+        Raises:
+            KeyError: 当指定名称的Advisor不存在时
+        """
+        if name not in cls._advisors:
+            raise KeyError(f"未找到名称为 '{name}' 的Advisor")
+        return cls._advisors[name]["priority"]
+    
+    @classmethod
+    def get_all_advisors(cls) -> dict:
+        """获取所有注册的Advisor信息
+        
+        Returns:
+            dict: 所有Advisor信息
+        """
+        return cls._advisors.copy()
+    
+    @classmethod
+    def get_sorted_advisors(cls) -> list:
+        """获取按优先级排序的Advisor列表（系统内置优先级最高）
+        
+        Returns:
+            list: 按优先级排序的Advisor信息列表
+        """
+        advisors = list(cls._advisors.items())
+        # 按优先级排序，系统内置的优先级最高，然后按priority数值排序
+        advisors.sort(key=lambda x: (not x[1]["is_builtin"], -x[1]["priority"]))
+        return advisors
+    
+    @classmethod
+    def clear(cls):
+        """清空所有注册的Advisor（主要用于测试）"""
+        cls._advisors.clear()
+
+
+def register_advisor(name: str = None, priority: int = 0, is_builtin: bool = False):
+    """Advisor注册装饰器
+    
+    Args:
+        name: Advisor名称，如果不指定则使用类名
+        priority: 优先级，数值越大优先级越高
+        is_builtin: 是否为系统内置Advisor，系统内置的优先级最高
+        
+    Returns:
+        装饰器函数
+        
+    Example:
+        @register_advisor("tool_call", priority=10, is_builtin=True)
+        class ToolCallAdvisor(Advisor):
+            pass
+            
+        @register_advisor()  # 使用类名作为注册名
+        class CustomAdvisor(Advisor):
+            pass
+    """
+    def decorator(advisor_class: type):
+        advisor_name = name if name is not None else advisor_class.__name__
+        AdvisorRegistry.register(advisor_name, advisor_class, priority, is_builtin)
+        return advisor_class
+    
+    return decorator

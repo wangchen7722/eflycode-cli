@@ -1,11 +1,12 @@
 from typing import List
-from echo.llm.advisor import Advisor
+from echo.llm.advisor import Advisor, register_advisor
 from echo.schema.llm import LLMRequest, Message
 from echo.prompt.prompt_loader import PromptLoader
 from echo.schema.llm import LLMCallResponse, LLMStreamResponse, ToolDefinition
 from echo.parser.tool_call_parser import ToolCallStreamParser, ToolCallParser
 
 
+@register_advisor("buildin_tool_call_advisor", priority=10, is_builtin=True)
 class ToolCallAdvisor(Advisor):
     """当模型原生不支持工具调用时，使用此 Advisor 进行工具调用"""
     def __init__(self, tools: List[ToolDefinition]):
@@ -24,7 +25,7 @@ class ToolCallAdvisor(Advisor):
             stream_parser=self.stream_parser
         )
         if messages[0].role == "system":
-            messages[0].content += tool_call_system_prompt
+            messages[0].content += "\n" + tool_call_system_prompt
         else:
             messages.insert(0, Message(role="system", content=tool_call_system_prompt))
         # 将 tool 消息转为 user 消息

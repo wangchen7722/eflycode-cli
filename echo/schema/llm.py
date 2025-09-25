@@ -127,6 +127,25 @@ class ChatCompletion(BaseModel):
     choices: List[Choice]
     usage: Usage
 
+    def __str__(self) -> str:
+        if self.choices:
+            message = self.choices[0].message
+            if message.role == "assistant":
+                return f"{message.role}: {message.content}"
+            elif message.role == "tool":
+                # 打印所有的工具调用
+                tool_calls = message.tool_calls or []
+                tool_call_str = "\n".join(
+                    [
+                        f"Tool Call: {tool_call.function.name}\nTool Arguments: {tool_call.function.arguments}"
+                        for tool_call in tool_calls
+                    ]
+                )
+                return f"{message.role}: {tool_call_str}"
+            else:
+                return f"{message.role}: {message.content}"
+        else:
+            return "No choices available"
 
 class StreamChoice(BaseModel):
     """流式响应的选项格式

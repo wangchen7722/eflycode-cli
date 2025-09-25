@@ -4,7 +4,7 @@ from echo.agent.core.agent import InteractiveConversationAgent
 from echo.agent.registry import register_agent
 from echo.llm.llm_engine import LLMEngine
 from echo.prompt import PromptLoader
-from echo.tool import FILE_TOOL_GROUP, ExecuteCommandTool, ListCodeDefinitionsTool
+from echo.tool import FILE_TOOL_GROUP
 from echo.util.system import get_system_info
 
 
@@ -22,19 +22,16 @@ class Developer(InteractiveConversationAgent):
         description: Optional[str] = None,
         **kwargs,
     ):
-        developer_tools = [
-            # 文件操作工具
-            *FILE_TOOL_GROUP,
-            # 执行命令工具
-            ExecuteCommandTool(),
-            # 代码分析工具
-            # ListCodeDefinitionsTool()
-        ]
+        tool_groups = [FILE_TOOL_GROUP]
         super().__init__(
             name=name,
             llm_engine=llm_engine,
             description=description,
-            tools=developer_tools,
+            tools=[
+                tool
+                for group in tool_groups
+                for tool in group.list_tools()
+            ],
             **kwargs,
         )
 

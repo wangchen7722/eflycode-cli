@@ -10,8 +10,7 @@ from echo.schema.llm import (
     LLMRequestContext,
     LLMPrompt
 )
-from echo.llm.advisor import Advisor, AdvisorChain
-from echo.llm.advisors.tool_call_advisor import ToolCallAdvisor
+from echo.llm.advisor import Advisor, AdvisorChain, AdvisorRegistry
 
 
 ALLOWED_GENERATE_CONFIG_KEYS = [
@@ -117,7 +116,12 @@ class LLMEngine:
         """带 AdvisorChain 的非流式调用"""
         request = self._ensure_request_context(prompt)
         if prompt.tools:
-            self._advisor_chain.advisors.insert(0, ToolCallAdvisor(tools=prompt.tools))
+            # 从注册表获取ToolCallAdvisor类并实例化
+            tool_call_advisor_class = AdvisorRegistry.get_advisor("buildin_tool_call_advisor")
+            tool_call_advisor = tool_call_advisor_class(tools=prompt.tools)
+            # 插入到AdvisorChain的第一个位置
+            priority = AdvisorRegistry.get_advisor_priority("buildin_tool_call_advisor")
+            self._advisor_chain.advisors.insert(priority, tool_call_advisor)
         wrapped = self._advisor_chain.wrap_call(self.do_call)
         return wrapped(request)
 
@@ -125,6 +129,11 @@ class LLMEngine:
         """带 AdvisorChain 的流式调用"""
         request = self._ensure_request_context(prompt)
         if prompt.tools:
-            self._advisor_chain.advisors.insert(0, ToolCallAdvisor(tools=prompt.tools))
+            # 从注册表获取ToolCallAdvisor类并实例化
+            tool_call_advisor_class = AdvisorRegistry.get_advisor("buildin_tool_call_advisor")
+            tool_call_advisor = tool_call_advisor_class(tools=prompt.tools)
+            # 插入到优先级最高的位置
+            priority = AdvisorRegistry.get_advisor_priority("buildin_tool_call_advisor")
+            self._advisor_chain.advisors.insert(priority, tool_call_advisor)
         wrapped = self._advisor_chain.wrap_stream(self.do_stream)
         return wrapped(request)

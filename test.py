@@ -17,7 +17,7 @@ llm_engine = OpenAIEngine(global_config.get_default_llm_config())
 print(
     llm_engine.call(
         LLMPrompt(
-            messages=[Message(role="user", content="你好, 帮我创建一个文件，编写快速排序")],
+            messages=[Message(role="user", content="你好, 使用工具帮我创建一个文件sort.py，编写快速排序")],
             tools=FILE_TOOL_GROUP.list_tools(),
         )
     )

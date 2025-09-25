@@ -501,7 +501,7 @@ class ToolCallParser(ChatCompletionParser):
 
     def __init__(
         self,
-        tools: List[ToolFunction],
+        tools: List[ToolDefinition],
         tool_call_start: str = "<tool_call>",
         tool_call_end: str = "</tool_call>",
         tool_name_start: str = "<tool_name>",

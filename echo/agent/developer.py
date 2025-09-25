@@ -49,4 +49,3 @@ class Developer(InteractiveConversationAgent):
             system_info=system_info,
             stream_parser=self.stream_parser,
         )
-

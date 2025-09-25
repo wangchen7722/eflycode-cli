@@ -1,5 +1,6 @@
 from abc import abstractmethod
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, Optional, List, Union
+from echo.util.logger import logger
 
 from echo.schema.llm import (
     LLMConfig,
@@ -8,7 +9,8 @@ from echo.schema.llm import (
     LLMCallResponse,
     LLMCapability,
     LLMRequestContext,
-    LLMPrompt
+    LLMPrompt,
+    AdvisorItem,
 )
 from echo.llm.advisor import Advisor, AdvisorChain, AdvisorRegistry
 
@@ -27,7 +29,9 @@ ALLOWED_GENERATE_CONFIG_KEYS = [
 ]
 
 
-def build_generate_config(llm_config: LLMConfig, generate_config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def build_generate_config(
+    llm_config: LLMConfig, generate_config: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
     """构建生成配置
 
     Args:
@@ -56,7 +60,7 @@ class LLMEngine:
         self,
         llm_config: LLMConfig,
         headers: Optional[Dict[str, str]] = None,
-        advisors: Optional[List[Advisor]] = None,
+        advisors: Optional[List[str]] = None,
         **kwargs,
     ):
         """初始化LLM引擎
@@ -64,6 +68,7 @@ class LLMEngine:
         Args:
             llm_config: LLM配置
             headers: 请求头
+            advisors: Advisor名称列表，用于从AdvisorRegistry获取Advisor实例
             **kwargs: 其他参数
         """
         self.llm_config = llm_config
@@ -71,7 +76,19 @@ class LLMEngine:
         self.base_url = self.llm_config.base_url
         self.api_key = self.llm_config.api_key
         self.headers = headers or {}
-        self._advisor_chain = AdvisorChain(advisors or [])
+
+        # 处理advisors参数，支持字符串类型
+        processed_advisors = []
+        if advisors:
+            for advisor in advisors:
+                try:
+                    advisor_class = AdvisorRegistry.get_advisor(advisor)
+                    processed_advisors.append(advisor_class())
+                except KeyError:
+                    logger.warning(f"未找到名称为 '{advisor}' 的Advisor，已跳过")
+                    continue
+
+        self._advisor_chain = AdvisorChain(processed_advisors)
 
     @abstractmethod
     def do_call(self, request: LLMRequest) -> LLMCallResponse:
@@ -106,22 +123,29 @@ class LLMEngine:
             messages=prompt.messages,
             tools=prompt.tools,
             tool_choice=prompt.tool_choice,
-            generate_config=build_generate_config(self.llm_config, prompt.generate_config),
-            context=LLMRequestContext(capability=capability)
+            generate_config=build_generate_config(
+                self.llm_config, prompt.generate_config
+            ),
+            context=LLMRequestContext(capability=capability),
         )
         return request
-
 
     def call(self, prompt: LLMPrompt) -> LLMCallResponse:
         """带 AdvisorChain 的非流式调用"""
         request = self._ensure_request_context(prompt)
         if prompt.tools:
             # 从注册表获取ToolCallAdvisor类并实例化
-            tool_call_advisor_class = AdvisorRegistry.get_advisor("buildin_tool_call_advisor")
+            tool_call_advisor_class = AdvisorRegistry.get_advisor(
+                "buildin_tool_call_advisor"
+            )
             tool_call_advisor = tool_call_advisor_class(tools=prompt.tools)
-            # 插入到AdvisorChain的第一个位置
+            # 使用 AdvisorChain 的新方法添加 advisor，自动处理优先级
             priority = AdvisorRegistry.get_advisor_priority("buildin_tool_call_advisor")
-            self._advisor_chain.advisors.insert(priority, tool_call_advisor)
+            self._advisor_chain.add_advisor(
+                tool_call_advisor, 
+                priority=priority, 
+                is_builtin=True
+            )
         wrapped = self._advisor_chain.wrap_call(self.do_call)
         return wrapped(request)
 
@@ -130,10 +154,36 @@ class LLMEngine:
         request = self._ensure_request_context(prompt)
         if prompt.tools:
             # 从注册表获取ToolCallAdvisor类并实例化
-            tool_call_advisor_class = AdvisorRegistry.get_advisor("buildin_tool_call_advisor")
+            tool_call_advisor_class = AdvisorRegistry.get_advisor(
+                "buildin_tool_call_advisor"
+            )
             tool_call_advisor = tool_call_advisor_class(tools=prompt.tools)
-            # 插入到优先级最高的位置
+            # 使用 AdvisorChain 的新方法添加 advisor，自动处理优先级
             priority = AdvisorRegistry.get_advisor_priority("buildin_tool_call_advisor")
-            self._advisor_chain.advisors.insert(priority, tool_call_advisor)
+            self._advisor_chain.add_advisor(
+                tool_call_advisor, 
+                priority=priority, 
+                is_builtin=True
+            )
         wrapped = self._advisor_chain.wrap_stream(self.do_stream)
         return wrapped(request)
+
+    def add_advisor(self, advisor: Union[Advisor, str], priority: int = 0):
+        """添加Advisor到引擎的AdvisorChain中
+
+        Args:
+            advisor: Advisor实例、AdvisorItem实例或Advisor名称字符串
+            priority: 优先级，仅在 advisor 为 Advisor 实例时有效
+        """
+        if isinstance(advisor, str):
+            # 从注册表获取 Advisor 类并实例化
+            advisor_class = AdvisorRegistry.get_advisor(advisor)
+            advisor_priority = AdvisorRegistry.get_advisor_priority(advisor)
+            advisor_instance = advisor_class()
+            self._advisor_chain.add_advisor(
+                advisor_instance, 
+                priority=advisor_priority
+            )
+        else:
+            self._advisor_chain.add_advisor(advisor, priority)
+

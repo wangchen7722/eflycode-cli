@@ -1,13 +1,12 @@
 import json
 import uuid
 from typing import Generator, Optional, Sequence, List, Dict, Any
-from echo.tool.base_tool import BaseTool
 from echo.schema.llm import ChatCompletionChunk, ToolCall, ToolFunction
 from echo.schema.agent import AgentResponseChunk, AgentResponseChunkType
-from echo.parser.base_parser import ResponseParser
+from echo.parser.base_parser import StreamResponseParser
 
 
-class StreamResponseParser(ResponseParser):
+class AgentStreamResponseParser(StreamResponseParser):
     """流式响应解析器，支持解析工具调用"""
 
     # 状态常量

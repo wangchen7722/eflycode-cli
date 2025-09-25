@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 
-def get_system_info():
+def get_system_environment():
     """获取系统环境信息"""
     current_time = datetime.now()
     timezone_offset = int(current_time.astimezone().tzinfo.utcoffset(None).total_seconds() / 3600)

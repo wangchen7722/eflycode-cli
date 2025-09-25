@@ -9,7 +9,7 @@ class ChatCompletionParser(ABC):
     """
     抽象完成解析器基类
     """
-    def __init__(self, tools: Sequence[BaseTool]):
+    def __init__(self, tools: Sequence[ToolDefinition]):
         """
         初始化解析器
 

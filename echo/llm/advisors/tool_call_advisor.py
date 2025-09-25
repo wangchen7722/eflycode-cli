@@ -6,9 +6,13 @@ from echo.schema.llm import LLMCallResponse, LLMStreamResponse, ToolDefinition
 from echo.parser.tool_call_parser import ToolCallStreamParser, ToolCallParser
 
 
-@register_advisor("buildin_tool_call_advisor", priority=10, is_builtin=True)
+@register_advisor("buildin_tool_call_advisor", priority=10)
 class ToolCallAdvisor(Advisor):
     """当模型原生不支持工具调用时，使用此 Advisor 进行工具调用"""
+    
+    # 标识为系统内置 Advisor
+    is_builtin: bool = True
+
     def __init__(self, tools: List[ToolDefinition]):
         super().__init__()
         self.stream_parser = ToolCallStreamParser(tools)
@@ -17,7 +21,7 @@ class ToolCallAdvisor(Advisor):
     def _convert_messages(self, messages: List[Message], tools: List[ToolDefinition]) -> List[Message]:
         if not tools:
             return messages
-        
+
         # 非原生工具支持工具调用，需要添加特定的系统提示词，并将 tool 消息转为 user 消息
         tool_call_system_prompt = PromptLoader.get_instance().render_template(
             "tool_call/tool_call_system.prompt",
@@ -25,7 +29,7 @@ class ToolCallAdvisor(Advisor):
             stream_parser=self.stream_parser
         )
         if messages[0].role == "system":
-            messages[0].content += "\n" + tool_call_system_prompt
+            messages[0].content += "\n\n" + tool_call_system_prompt
         else:
             messages.insert(0, Message(role="system", content=tool_call_system_prompt))
         # 将 tool 消息转为 user 消息
@@ -34,10 +38,9 @@ class ToolCallAdvisor(Advisor):
                 message.role = "user"
         return messages
 
-
     def before_call(self, request: LLMRequest) -> LLMRequest:
         supports_native = (
-            request.context and request.context.capability.supports_native_tool_call
+                request.context and request.context.capability.supports_native_tool_call
         )
         if not supports_native:
             request.messages = self._convert_messages(request.messages, request.tools)
@@ -45,7 +48,7 @@ class ToolCallAdvisor(Advisor):
 
     def before_stream(self, request: LLMRequest) -> LLMRequest:
         supports_native = (
-            request.context and request.context.capability.supports_native_tool_call
+                request.context and request.context.capability.supports_native_tool_call
         )
         if not supports_native:
             request.messages = self._convert_messages(request.messages, request.tools)

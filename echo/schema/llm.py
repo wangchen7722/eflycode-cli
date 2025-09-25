@@ -131,16 +131,22 @@ class ChatCompletion(BaseModel):
         if self.choices:
             message = self.choices[0].message
             if message.role == "assistant":
-                return f"{message.role}: {message.content}"
+                tool_call_str = ""
+                # 工具调用
+                if message.tool_calls:
+                    tool_calls = message.tool_calls
+                    tool_call_str = "\n".join(
+                        [
+                            f"Tool Call ID: {tool_call.id}\nTool Call: {tool_call.function.name}\nTool Arguments: {tool_call.function.arguments}"
+                            for tool_call in tool_calls
+                        ]
+                    )
+                if message.content == None or message.content.strip() == "":
+                    return f"{message.role}: \n{tool_call_str}"
+                return f"{message.role}: {message.content}\n\n{tool_call_str}"
             elif message.role == "tool":
-                # 打印所有的工具调用
-                tool_calls = message.tool_calls or []
-                tool_call_str = "\n".join(
-                    [
-                        f"Tool Call: {tool_call.function.name}\nTool Arguments: {tool_call.function.arguments}"
-                        for tool_call in tool_calls
-                    ]
-                )
+                # 工具执行结果
+                tool_call_str = f"Tool Call ID: {message.tool_call_id}\nTool Result: {message.content}"
                 return f"{message.role}: {tool_call_str}"
             else:
                 return f"{message.role}: {message.content}"

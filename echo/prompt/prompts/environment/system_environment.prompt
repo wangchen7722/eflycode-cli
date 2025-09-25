@@ -1,0 +1,22 @@
+{% if system_environment is defined %}
+<system_environment>
+{% if system_environment.os_type %}
+<operation_system>{{ system_environment.os_type }}</operation_system>
+{% endif %}
+{% if system_environment.os_release %}
+<operation_system_release>{{ system_environment.os_release }}</operation_system_release>
+{% endif %}
+{% if system_environment.default_shell %}
+<shell>{{ system_environment.default_shell }}</shell>
+{% endif %}
+{% if system_environment.work_dir %}
+<workspace_directory>{{ system_environment.work_dir }}</workspace_directory>
+{% endif %}
+{% if system_environment.timezone %}
+<timezone>{{ system_environment.timezone }}</timezone>
+{% endif %}
+{% if system_environment.current_time %}
+<current_time>{{ system_environment.current_time }}</current_time>
+{% endif %}
+</system_environment>
+{% endif %}

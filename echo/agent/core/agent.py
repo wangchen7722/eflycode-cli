@@ -65,7 +65,7 @@ class ToolCallAgent(BaseAgent):
         self._tool_map = {tool.name: tool for tool in self._tools}
 
     @property
-    def tools(self) -> Sequence[ToolDefinition]:
+    def tools(self) -> List[ToolDefinition]:
         """获取工具字典"""
         return [tool.definition for tool in self._tools]
 
@@ -130,7 +130,7 @@ class ConversationAgent(ToolCallAgent):
             system_prompt: Optional[str] = None,
             name: Optional[str] = None,
             description: Optional[str] = None,
-            tools: Optional[Sequence[BaseTool]] = None,
+            tools: Optional[List[BaseTool]] = None,
             **kwargs,
     ):
         """初始化智能体

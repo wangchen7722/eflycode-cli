@@ -227,11 +227,26 @@ class RetrievalStrategy(Enum):
     HYBRID = "hybrid"
     # 相关性评分
     RELEVANCE = "relevance"
+    
+
+class MemoryType(Enum):
+    """记忆类型"""
+
+    WINDOW = "window"
+    """滑动窗口记忆：存储所有消息，但每次读取时只返回最近 k 条"""
+    
+class SlidingWindowConfig(BaseModel):
+    """滑动窗口记忆配置"""
+
+    window_size: int = Field(
+        default=5, description="滑动窗口大小，控制每次读取的消息数量"
+    )
 
 
 class MemoryConfig(BaseModel):
     """记忆管理配置"""
-
+    
+    type: MemoryType
     short_term_capacity: int = Field(
         default=50, description="短期记忆容量限制，控制可存储的短期记忆数量"
     )

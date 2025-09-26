@@ -10,7 +10,7 @@ from typing import (
 
 from echo.ui.console import ConsoleUI
 from echo.llm.llm_engine import LLMEngine
-from echo.schema.llm import LLMPrompt, LLMRequest, Message, ToolCall, ToolDefinition
+from echo.schema.llm import LLMPrompt, Message, ToolCall, ToolDefinition
 from echo.schema.tool import ToolError
 from echo.prompt.prompt_loader import PromptLoader
 from echo.tool.base_tool import BaseTool
@@ -47,37 +47,41 @@ class BaseAgent:
         return self.DESCRIPTION.strip()
 
     @abstractmethod
-    def run(self, content: str, stream: bool = True) -> AgentResponse:
+    def call(self, content: str) -> AgentResponse:
         """运行智能体"""
         pass
 
 
-class ToolCallAgent(BaseAgent):
-    """工具调用智能体类"""
+class ToolCallMixin:
+    """工具调用混入类，为智能体提供工具调用能力"""
 
-    ROLE = "tool_call"
-    DESCRIPTION = "所有工具调用智能体的基类，仅用来定义接口，没有任何功能。"
-
-    def __init__(self, name: Optional[str] = None, description: Optional[str] = None,
-                 tools: Optional[Sequence[BaseTool]] = None):
-        super().__init__(name=name, description=description)
+    def __init__(self, tools: Optional[Sequence[BaseTool]] = None, **kwargs):
+        super().__init__(**kwargs)
         self._tools = tools or []
         self._tool_map = {tool.name: tool for tool in self._tools}
 
     @property
     def tools(self) -> List[ToolDefinition]:
-        """获取工具字典"""
+        """获取工具定义列表
+        
+        Returns:
+            List[ToolDefinition]: 工具定义列表
+        """
         return [tool.definition for tool in self._tools]
 
     def execute_tool(self, tool_call: ToolCall) -> ToolCallResponse:
         """执行工具调用
 
         Args:
-            tool_call: 工具调用
+            tool_call: 工具调用对象
+
+        Returns:
+            ToolCallResponse: 工具调用响应结果
         """
         tool_name = tool_call.function.name
         tool_call_arguments = tool_call.function.arguments
         tool = self._tool_map.get(tool_name, None)
+        
         if not tool:
             tool_call_response_message = PromptLoader.get_instance().render_template(
                 "tool_call/tool_call_not_found.prompt",
@@ -91,6 +95,7 @@ class ToolCallAgent(BaseAgent):
                 result=f"工具 {tool_name} 不存在",
                 message=tool_call_response_message,
             )
+        
         try:
             tool_response = tool.run(**json.loads(tool_call_arguments))
             tool_call_response_message = PromptLoader.get_instance().render_template(
@@ -120,8 +125,10 @@ class ToolCallAgent(BaseAgent):
             )
 
 
-class ConversationAgent(ToolCallAgent):
-    ROLE = "base"
+class ConversationAgent(ToolCallMixin, BaseAgent):
+    """对话智能体，支持工具调用"""
+    
+    ROLE = "conversation"
     DESCRIPTION = "一个通用对话智能助手"
 
     def __init__(
@@ -134,12 +141,13 @@ class ConversationAgent(ToolCallAgent):
             **kwargs,
     ):
         """初始化智能体
+        
         Args:
             llm_engine: 语言模型引擎
             system_prompt: 系统提示词
             name: 智能体名称
             description: 智能体描述
-            tools: 初始工具字典
+            tools: 工具列表
             **kwargs: 其他参数
         """
         super().__init__(name=name, description=description, tools=tools, **kwargs)
@@ -156,7 +164,11 @@ class ConversationAgent(ToolCallAgent):
 
     @property
     def system_prompt(self) -> str:
-        """渲染系统提示词"""
+        """渲染系统提示词
+        
+        Returns:
+            str: 渲染后的系统提示词
+        """
         if self._system_prompt:
             return self._system_prompt
         return PromptLoader.get_instance().render_template(
@@ -168,7 +180,11 @@ class ConversationAgent(ToolCallAgent):
         )
 
     def _compose_messages(self) -> List[Message]:
-        """构建消息列表"""
+        """构建消息列表
+        
+        Returns:
+            List[Message]: 消息列表
+        """
         messages = [
             Message(role="system", content=self.system_prompt),
         ]
@@ -178,7 +194,14 @@ class ConversationAgent(ToolCallAgent):
     def _run_no_stream(
             self, messages: List[Message]
     ) -> AgentResponse:
-        """非流式运行智能体"""
+        """非流式运行智能体
+        
+        Args:
+            messages: 消息列表
+            
+        Returns:
+            AgentResponse: 智能体响应
+        """
         prompt = LLMPrompt(messages=messages, tools=self.tools)
         response = self.llm_engine.call(prompt=prompt)
         self._history_messages.append(response.choices[0].message)
@@ -193,10 +216,18 @@ class ConversationAgent(ToolCallAgent):
     def _run_stream(
             self, messages: List[Message], **kwargs
     ) -> Generator[AgentResponseChunk, None, None]:
-        """流式运行智能体"""
+        """流式运行智能体
+        
+        Args:
+            messages: 消息列表
+            **kwargs: 其他参数
+            
+        Yields:
+            AgentResponseChunk: 智能体响应块
+        """
         stream_interval = kwargs.get("stream_interval", 3)
         prompt = LLMPrompt(messages=messages, tools=self.tools)
-        response = self.llm_engine.stream(prompt=prompt, stream=True, **kwargs)
+        response = self.llm_engine.stream(prompt=prompt)
         response_content = ""
         last_chunk: Optional[AgentResponseChunk] = None
         buffer = ""
@@ -247,7 +278,7 @@ class ConversationAgent(ToolCallAgent):
             stream: 是否流式输出
 
         Returns:
-            AgentResponse: 智能体的响应结果
+            AgentResponse | Generator[AgentResponseChunk, None, None]: 智能体的响应结果
         """
         user_message = Message(role="user", content=content)
         self._history_messages.append(user_message)
@@ -261,14 +292,42 @@ class ConversationAgent(ToolCallAgent):
             response = self._run_no_stream(messages)
         return response
 
+    def call(self, content: str) -> AgentResponse:
+        """实现基类的抽象方法
+        
+        Args:
+            content: 用户输入内容
+            
+        Returns:
+            AgentResponse: 智能体响应
+        """
+        return self.chat(content)
+
     def chat(self, content: str) -> AgentResponse:
+        """聊天方法
+        
+        Args:
+            content: 用户输入内容
+            
+        Returns:
+            AgentResponse: 智能体响应
+        """
         return self._do_run(content, stream=False)
 
     def stream(self, content: str) -> Generator[AgentResponseChunk, None, None]:
+        """流式聊天方法
+        
+        Args:
+            content: 用户输入内容
+            
+        Yields:
+            AgentResponseChunk: 智能体响应块
+        """
         return self._do_run(content, stream=True)
 
 
 class InteractiveConversationAgent(ConversationAgent):
+    """交互式对话智能体"""
 
     def __init__(
             self,
@@ -280,6 +339,17 @@ class InteractiveConversationAgent(ConversationAgent):
             tools: Optional[Sequence[BaseTool]] = None,
             **kwargs,
     ):
+        """初始化交互式对话智能体
+        
+        Args:
+            ui: 控制台UI实例
+            llm_engine: 语言模型引擎
+            system_prompt: 系统提示词
+            name: 智能体名称
+            description: 智能体描述
+            tools: 工具列表
+            **kwargs: 其他参数
+        """
         super().__init__(
             llm_engine=llm_engine,
             system_prompt=system_prompt,
@@ -292,7 +362,11 @@ class InteractiveConversationAgent(ConversationAgent):
 
     @property
     def ui(self) -> ConsoleUI:
-        """获取UI实例"""
+        """获取UI实例
+        
+        Returns:
+            ConsoleUI: 控制台UI实例
+        """
         return self._ui
 
     def interactive_chat(self) -> None:
@@ -320,7 +394,7 @@ class InteractiveConversationAgent(ConversationAgent):
                             raise RuntimeError("工具调用不能为空")
                         tool_call = chunk.tool_calls[0]
                         tool_name = tool_call.function.name
-                        tool_args = tool_call.function.arguments
+                        tool_args = json.loads(tool_call.function.arguments)
                         tool_call_display = self._tool_map[tool_name].display(**tool_args)
                         # self.ui.panel([tool_name], tool_call_display, color="blue")
                         tool_call_response = self.execute_tool(tool_call)

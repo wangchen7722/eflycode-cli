@@ -2,14 +2,14 @@
 <tool_call_instruction>
 <tool_call_formatting>
 If you need to use a tool, you must format your message in the following way:
-{{ stream_parser.tool_call_start }}
-{{ stream_parser.tool_name_start }}tool_name{{ stream_parser.tool_name_end }}
-{{ stream_parser.tool_params_start }}
+{{ tool_call_parser.tool_call_start }}
+{{ tool_call_parser.tool_name_start }}tool_name{{ tool_call_parser.tool_name_end }}
+{{ tool_call_parser.tool_params_start }}
 {
   "parameter name": "parameter value"
 }
-{{ stream_parser.tool_params_end }}
-{{ stream_parser.tool_call_end }}
+{{ tool_call_parser.tool_params_end }}
+{{ tool_call_parser.tool_call_end }}
 </tool_call_formatting>
 
 <tool_namespace>

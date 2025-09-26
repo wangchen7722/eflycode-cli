@@ -9,8 +9,7 @@ from echo.schema.llm import (
     LLMCallResponse,
     LLMCapability,
     LLMRequestContext,
-    LLMPrompt,
-    AdvisorItem,
+    LLMPrompt
 )
 from echo.llm.advisor import Advisor, AdvisorChain, AdvisorRegistry
 
@@ -138,11 +137,11 @@ class LLMEngine:
             tool_call_advisor_class = AdvisorRegistry.get_advisor(
                 "buildin_tool_call_advisor"
             )
-            tool_call_advisor = tool_call_advisor_class(tools=prompt.tools)
+            tool_call_advisor = tool_call_advisor_class()
             # 使用 AdvisorChain 的新方法添加 advisor，自动处理优先级
             priority = AdvisorRegistry.get_advisor_priority("buildin_tool_call_advisor")
             self._advisor_chain.add_advisor(
-                tool_call_advisor, priority=priority, is_builtin=True
+                tool_call_advisor, priority=priority
             )
         wrapped = self._advisor_chain.wrap_call(self.do_call)
         return wrapped(request)
@@ -155,11 +154,11 @@ class LLMEngine:
             tool_call_advisor_class = AdvisorRegistry.get_advisor(
                 "buildin_tool_call_advisor"
             )
-            tool_call_advisor = tool_call_advisor_class(tools=prompt.tools)
+            tool_call_advisor = tool_call_advisor_class()
             # 使用 AdvisorChain 的新方法添加 advisor，自动处理优先级
             priority = AdvisorRegistry.get_advisor_priority("buildin_tool_call_advisor")
             self._advisor_chain.add_advisor(
-                tool_call_advisor, priority=priority, is_builtin=True
+                tool_call_advisor, priority=priority
             )
         wrapped = self._advisor_chain.wrap_stream(self.do_stream)
         return wrapped(request)

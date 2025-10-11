@@ -6,7 +6,6 @@ from typing import List, Literal, Optional, Sequence, Dict
 
 from colorama import Fore, Style as ColorStyle
 from rich.console import Console
-from rich.style import Style
 from rich.panel import Panel
 from rich.progress import Progress, TextColumn, BarColumn
 from rich.table import Table
@@ -28,6 +27,7 @@ from prompt_toolkit.application import Application
 from prompt_toolkit.widgets import TextArea, Frame
 from prompt_toolkit.keys import Keys
 from prompt_toolkit.filters import Condition
+from prompt_toolkit.styles import Style
 from .colors import PTK_STYLE
 from .base_ui import BaseUI
 

@@ -45,6 +45,17 @@ class ToolCallFunction(BaseModel):
     name: str
     arguments: str
 
+class DeltaToolCallFunction(BaseModel):
+    """工具调用信息
+
+    Attributes:
+        name: 被调用的工具函数名称
+        arguments: 工具函数的参数，通常为JSON格式的字符串
+    """
+
+    name: Optional[str] = None
+    arguments: str
+
 
 class ToolCall(BaseModel):
     """工具调用信息
@@ -58,6 +69,19 @@ class ToolCall(BaseModel):
     id: str
     type: Literal["function"]
     function: ToolCallFunction
+
+class DeltaToolCall(BaseModel):
+    """工具调用信息
+
+    Attributes:
+        id: 工具调用的唯一标识符
+        type: 调用类型，固定为"function"
+        function: 函数调用的详细信息
+    """
+    index: int
+    id: Optional[str] = None
+    type: Optional[Literal["function"]] = None
+    function: DeltaToolCallFunction
 
 
 class Message(BaseModel):
@@ -79,6 +103,23 @@ class Message(BaseModel):
     tool_calls: Optional[List[ToolCall]] = None
     tool_call_id: Optional[str] = None
 
+class DeltaMessage(BaseModel):
+    """聊天消息格式
+
+    Attributes:
+        role: 消息发送者的角色
+        reasoning_content: 推理过程的内容，用于展示决策过程
+        content: 消息的主要内容
+        name: 工具或函数的名称，仅在role为tool或function时使用
+        tool_calls: 工具调用的列表
+        tool_call_id: 工具调用的ID
+    """
+
+    role: Literal["system", "user", "assistant", "tool"]
+    reasoning_content: Optional[str] = None
+    content: Optional[str] = None
+    name: Optional[str] = None
+    tool_calls: Optional[List[DeltaToolCall]] = None
 
 class Choice(BaseModel):
     """完成选项
@@ -163,7 +204,7 @@ class StreamChoice(BaseModel):
     """
 
     index: int
-    delta: Message
+    delta: DeltaMessage
     finish_reason: Optional[str] = None
 
 

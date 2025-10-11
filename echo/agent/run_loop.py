@@ -5,13 +5,14 @@ Agent 运行循环模块
 """
 
 import json
-from typing import Optional, Dict, Callable
+from typing import Optional, Callable, List
 from enum import Enum
 
 from echo.ui.base_ui import BaseUI
 from echo.agent.core.agent import ConversationAgent
 from echo.ui.command.command_handler import CommandHandler
 from echo.schema.agent import AgentResponseChunk, AgentResponseChunkType
+from echo.schema.llm import ToolCall
 from echo.util.logger import logger
 
 
@@ -121,10 +122,6 @@ class AgentRunLoop:
                     self._state = RunLoopState.INTERRUPTING
                     self.ui.info("\n检测到中断信号")
                     self._state = RunLoopState.INTERRUPTED
-                    if self._confirm_quit():
-                        break
-                    # 用户选择继续，恢复运行状态
-                    self._state = RunLoopState.RUNNING
                     continue
                     
                 except Exception as e:
@@ -197,7 +194,7 @@ class AgentRunLoop:
         elif chunk.type == AgentResponseChunkType.DONE:
             self.ui.print("\n")
     
-    def _display_tool_calls(self, tool_calls) -> None:
+    def _display_tool_calls(self, tool_calls: List[ToolCall]) -> None:
         """显示工具调用信息"""
         for tool_call in tool_calls:
             tool_name = tool_call.function.name
@@ -212,14 +209,6 @@ class AgentRunLoop:
                 f"参数:\n{args_display}",
                 color="blue"
             )
-    
-    def _confirm_quit(self) -> bool:
-        """确认退出"""
-        try:
-            choice = self.ui.choices("确定要退出吗？", ["是", "否"])
-            return choice == "是"
-        except KeyboardInterrupt:
-            return True
     
     def stop(self) -> None:
         """停止运行循环"""

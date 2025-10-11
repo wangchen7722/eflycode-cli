@@ -1,7 +1,9 @@
 import json
 import uuid
 from typing import Generator, Optional, Sequence, List
-from echo.schema.llm import ChatCompletionChunk, StreamChoice, ToolCall, ToolDefinition, ToolFunction, Message, ToolCallFunction, ChatCompletion
+from echo.schema.llm import ChatCompletionChunk, DeltaToolCallFunction, StreamChoice, ToolCall, DeltaToolCall, \
+    ToolDefinition, ToolFunction, Message, DeltaMessage, \
+    ToolCallFunction, ChatCompletion
 from echo.parser.base_parser import ChatCompletionStreamParser, ChatCompletionParser
 
 
@@ -52,6 +54,9 @@ class ToolCallStreamParser(ChatCompletionStreamParser):
         # 状态变量
         self._reset_state()
 
+        # OpenAI 格式相关状态
+        self.tool_call_index = 0
+
     def _build_candidate_tags(self):
         """构建候选标签映射"""
         self.candidate_tags = {
@@ -63,7 +68,7 @@ class ToolCallStreamParser(ChatCompletionStreamParser):
             self.tool_name_end: self.tool_name_end,
             # 参数标签
             self.tool_params_start: self.tool_params_start,
-            self.tool_params_end: self.tool_params_end, 
+            self.tool_params_end: self.tool_params_end,
         }
 
     def _reset_state(self):
@@ -104,7 +109,6 @@ class ToolCallStreamParser(ChatCompletionStreamParser):
 
         # 流结束后处理残留数据
         yield from self._handle_stream_end(last_chunk)
-
 
     def parse_text(self, text: str, chunk: ChatCompletionChunk) -> Generator[ChatCompletionChunk, None, None]:
         """解析纯文本内容（用于测试）
@@ -162,7 +166,7 @@ class ToolCallStreamParser(ChatCompletionStreamParser):
                     model=chunk.model,
                     choices=[StreamChoice(
                         index=0,
-                        delta=Message(
+                        delta=DeltaMessage(
                             role=chunk.choices[0].delta.role,
                             content=char,
                         ),
@@ -200,7 +204,7 @@ class ToolCallStreamParser(ChatCompletionStreamParser):
                         model=chunk.model,
                         choices=[StreamChoice(
                             index=0,
-                            delta=Message(
+                            delta=DeltaMessage(
                                 role=chunk.choices[0].delta.role,
                                 content=self.text_buffer,
                             ),
@@ -210,7 +214,6 @@ class ToolCallStreamParser(ChatCompletionStreamParser):
                     )
                     self.text_buffer = ""
                 yield from self._handle_matched_tag(matched_candidate, chunk)
-            # 如果没有完全匹配，继续累积标签（不需要额外操作）
 
     def _handle_tool_name_state(
             self, char: str, chunk: ChatCompletionChunk
@@ -223,11 +226,10 @@ class ToolCallStreamParser(ChatCompletionStreamParser):
         else:
             # 累积工具名内容
             self.tool_name_buffer += char
-            if self.tool_call:
-                self.tool_call["content"] += char
-            # 不立即输出，等到工具调用结束时再输出
-            if False:  # 使其成为生成器
-                yield
+
+        # 转换成生成器
+        if False:
+            yield
 
     def _handle_params_state(
             self, char: str, chunk: ChatCompletionChunk
@@ -240,11 +242,29 @@ class ToolCallStreamParser(ChatCompletionStreamParser):
         else:
             # 累积参数内容
             self.params_buffer += char
-            if self.tool_call:
-                self.tool_call["content"] += char
-            # 不立即输出，等到工具调用结束时再输出
-        if False:  # 使其成为生成器
-            yield
+            yield ChatCompletionChunk(
+                id=chunk.id,
+                object=chunk.object,
+                created=chunk.created,
+                model=chunk.model,
+                choices=[StreamChoice(
+                    index=0,
+                    delta=DeltaMessage(
+                        role="assistant",
+                        content="",
+                        tool_calls=[
+                            DeltaToolCall(
+                                index=self.tool_call_index,
+                                function=DeltaToolCallFunction(
+                                    arguments=char,
+                                ),
+                            )
+                        ]
+                    ),
+                    finish_reason=None,
+                )],
+                usage=None,
+            )
 
     def get_tool_by_name(self, name: str) -> Optional[ToolFunction]:
         """
@@ -354,7 +374,28 @@ class ToolCallStreamParser(ChatCompletionStreamParser):
                 self.tool_call["content"] += matched_tag
             self.tag_context = "TOOL_AFTER_NAME"
             self.state = self.STATE_TEXT
-            # 不立即输出，等到工具调用结束时再输出
+            yield ChatCompletionChunk(
+                id=chunk.id,
+                object=chunk.object,
+                created=chunk.created,
+                model=chunk.model,
+                choices=[StreamChoice(
+                    index=0,
+                    delta=DeltaMessage(
+                        role="assistant",
+                        content="",
+                        tool_calls=[DeltaToolCall(
+                            index=self.tool_call_index,
+                            function=DeltaToolCallFunction(
+                                name=self.tool_name_buffer.strip(),
+                                arguments="",
+                            ),
+                        )]
+                    ),
+                    finish_reason=None,
+                )],
+                usage=None,
+            )
         elif matched_tag == self.tool_params_start:
             # 参数开始
             self.tag_context = "PARAMS"
@@ -381,7 +422,6 @@ class ToolCallStreamParser(ChatCompletionStreamParser):
         elif matched_tag == self.tool_call_end:
             # 工具调用结束
             if self.tool_call:
-                self.tool_call["content"] += matched_tag
                 yield ChatCompletionChunk(
                     id=chunk.id,
                     object=chunk.object,
@@ -389,20 +429,7 @@ class ToolCallStreamParser(ChatCompletionStreamParser):
                     model=chunk.model,
                     choices=[StreamChoice(
                         index=0,
-                        delta=Message(
-                            role="assistant",
-                            content="",
-                            tool_calls=[
-                                ToolCall(
-                                    id=uuid.uuid4().hex,
-                                    type="function",
-                                    function=ToolCallFunction(
-                                        name=self.tool_call["name"],
-                                        arguments=json.dumps(self.tool_call["arguments"]),
-                                    ),
-                                )
-                            ],
-                        ),
+                        delta=DeltaMessage(role="assistant", content=""),
                         finish_reason="tool_calls",
                     )],
                     usage=None,
@@ -433,7 +460,7 @@ class ToolCallStreamParser(ChatCompletionStreamParser):
                     model=last_chunk.model,
                     choices=[StreamChoice(
                         index=0,
-                        delta=Message(
+                        delta=DeltaMessage(
                             role="assistant",
                             content=self.tag_buffer,
                         ),
@@ -455,7 +482,7 @@ class ToolCallStreamParser(ChatCompletionStreamParser):
                 model=last_chunk.model,
                 choices=[StreamChoice(
                     index=0,
-                    delta=Message(
+                    delta=DeltaMessage(
                         role="assistant",
                         content=self.text_buffer,
                     ),
@@ -472,7 +499,7 @@ class ToolCallStreamParser(ChatCompletionStreamParser):
                 model=last_chunk.model,
                 choices=[StreamChoice(
                     index=0,
-                    delta=Message(
+                    delta=DeltaMessage(
                         role="assistant",
                         content=self.tool_call["content"],
                     ),
@@ -497,7 +524,7 @@ class ToolCallStreamParser(ChatCompletionStreamParser):
                 model=last_chunk.model,
                 choices=[StreamChoice(
                     index=0,
-                    delta=Message(
+                    delta=DeltaMessage(
                         role="assistant",
                         content=self.tool_call["content"],
                     ),
@@ -512,14 +539,14 @@ class ToolCallParser(ChatCompletionParser):
     """非流式工具调用解析器"""
 
     def __init__(
-        self,
-        tools: List[ToolDefinition],
-        tool_call_start: str = "<tool_call>",
-        tool_call_end: str = "</tool_call>",
-        tool_name_start: str = "<tool_name>",
-        tool_name_end: str = "</tool_name>",
-        tool_params_start: str = "<tool_params>",
-        tool_params_end: str = "</tool_params>",
+            self,
+            tools: List[ToolDefinition],
+            tool_call_start: str = "<tool_call>",
+            tool_call_end: str = "</tool_call>",
+            tool_name_start: str = "<tool_name>",
+            tool_name_end: str = "</tool_name>",
+            tool_params_start: str = "<tool_params>",
+            tool_params_end: str = "</tool_params>",
     ):
         """初始化非流式工具调用解析器
         

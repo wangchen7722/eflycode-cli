@@ -37,7 +37,7 @@ class AgentResponseChunk(BaseModel):
     type: AgentResponseChunkType
     content: str
     finish_reason: Optional[str]
-    tool_calls: Optional[Sequence[ToolCall]]
+    tool_calls: Optional[List[ToolCall]]
     usage: Optional[Usage]
     metadata: Optional[Dict[str, Any]] = None
 

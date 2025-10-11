@@ -194,8 +194,16 @@ class ToolGroup:
         self.name = name
         self.description = description
         self.tools = tools
+        
+    def list_tools(self) -> list[BaseTool]:
+        """获取工具组中所有工具的列表
 
-    def list_tools(self) -> list[ToolDefinition]:
+        Returns:
+            list[BaseTool]: 工具组中所有工具的列表
+        """
+        return self.tools
+
+    def list_tool_definitions(self) -> list[ToolDefinition]:
         """获取工具组中所有工具的列表
 
         Returns:

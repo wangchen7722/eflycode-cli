@@ -14,7 +14,6 @@ from echo.schema.llm import LLMPrompt, Message, ToolCall, ToolDefinition
 from echo.schema.tool import ToolError
 from echo.prompt.prompt_loader import PromptLoader
 from echo.tool.base_tool import BaseTool
-from echo.parser.stream_parser import StreamResponseParser
 from echo.schema.agent import (
     AgentResponseChunk,
     AgentResponseChunkType,
@@ -160,8 +159,6 @@ class ConversationAgent(ToolCallMixin, BaseAgent):
         self._history_messages: List[Message] = []
         self._history_messages_limit = 10
 
-        self.stream_parser = StreamResponseParser(self._tools)
-
     @property
     def system_prompt(self) -> str:
         """渲染系统提示词
@@ -175,8 +172,7 @@ class ConversationAgent(ToolCallMixin, BaseAgent):
             f"{self.role}/system.prompt",
             name=self.name,
             role=self.role,
-            tools=self._tool_map,
-            stream_parser=self.stream_parser,
+            tools=self._tool_map
         )
 
     def _compose_messages(self) -> List[Message]:
@@ -229,41 +225,58 @@ class ConversationAgent(ToolCallMixin, BaseAgent):
         prompt = LLMPrompt(messages=messages, tools=self.tools)
         response = self.llm_engine.stream(prompt=prompt)
         response_content = ""
-        last_chunk: Optional[AgentResponseChunk] = None
         buffer = ""
 
         try:
-            for chunk in self.stream_parser.parse_stream(response):
-                if chunk.content:
-                    response_content += chunk.content
-                if last_chunk is None:
-                    # 第一个块
-                    last_chunk = chunk
-                if chunk.type == last_chunk.type:
-                    # 合并连续的文本块
-                    buffer += chunk.content
+            for chunk in response:
+                if chunk is None:
+                    continue
+                
+                # 获取内容
+                chunk_content = chunk.choices[0].delta.content or ""
+                if chunk_content:
+                    response_content += chunk_content
+                    buffer += chunk_content
+                    
+                    # 当缓冲区达到指定长度时输出
                     if len(buffer) >= stream_interval:
                         yield AgentResponseChunk(
-                            type=chunk.type,
+                            type=AgentResponseChunkType.TEXT,
                             content=buffer,
-                            finish_reason=chunk.finish_reason,
-                            tool_calls=chunk.tool_calls,
+                            finish_reason=chunk.choices[0].finish_reason,
+                            tool_calls=chunk.choices[0].delta.tool_calls,
                             usage=chunk.usage,
                         )
                         buffer = ""
-                else:
-                    # 输出上一个块
-                    if buffer:
-                        yield AgentResponseChunk(
-                            type=last_chunk.type,
-                            content=buffer,
-                            finish_reason=last_chunk.finish_reason,
-                            tool_calls=last_chunk.tool_calls,
-                            usage=last_chunk.usage,
-                        )
-                        buffer = ""
-                    yield chunk
-                last_chunk = chunk
+                
+                # 处理工具调用
+                if chunk.choices[0].delta.tool_calls:
+                    yield AgentResponseChunk(
+                        type=AgentResponseChunkType.TOOL_CALL,
+                        content="",
+                        finish_reason=chunk.choices[0].finish_reason,
+                        tool_calls=chunk.choices[0].delta.tool_calls,
+                        usage=chunk.usage,
+                    )
+            
+            # 输出剩余的缓冲区内容
+            if buffer:
+                yield AgentResponseChunk(
+                    type=AgentResponseChunkType.TEXT,
+                    content=buffer,
+                    finish_reason=None,
+                    tool_calls=None,
+                    usage=None,
+                )
+            
+            # 输出完成标记
+            yield AgentResponseChunk(
+                type=AgentResponseChunkType.DONE,
+                content="",
+                finish_reason="stop",
+                tool_calls=None,
+                usage=None,
+            )
         finally:
             # 确保无论生成器是否被提前终止，都会记录消息历史
             if response_content:
@@ -324,93 +337,3 @@ class ConversationAgent(ToolCallMixin, BaseAgent):
             AgentResponseChunk: 智能体响应块
         """
         return self._do_run(content, stream=True)
-
-
-class InteractiveConversationAgent(ConversationAgent):
-    """交互式对话智能体"""
-
-    def __init__(
-            self,
-            ui: ConsoleUI,
-            llm_engine: LLMEngine,
-            system_prompt: Optional[str] = None,
-            name: Optional[str] = None,
-            description: Optional[str] = None,
-            tools: Optional[Sequence[BaseTool]] = None,
-            **kwargs,
-    ):
-        """初始化交互式对话智能体
-        
-        Args:
-            ui: 控制台UI实例
-            llm_engine: 语言模型引擎
-            system_prompt: 系统提示词
-            name: 智能体名称
-            description: 智能体描述
-            tools: 工具列表
-            **kwargs: 其他参数
-        """
-        super().__init__(
-            llm_engine=llm_engine,
-            system_prompt=system_prompt,
-            name=name,
-            description=description,
-            tools=tools,
-            **kwargs,
-        )
-        self._ui = ui
-
-    @property
-    def ui(self) -> ConsoleUI:
-        """获取UI实例
-        
-        Returns:
-            ConsoleUI: 控制台UI实例
-        """
-        return self._ui
-
-    def interactive_chat(self) -> None:
-        """交互式聊天"""
-        conversation_count = 0
-        user_input = None
-        while True:
-            try:
-                if user_input is None:
-                    user_input = self.ui.acquire_user_input()
-                if not user_input:
-                    continue
-
-                streaming_response = self.stream(user_input)
-                user_input = None
-
-                for chunk in streaming_response:
-                    self.ui.print(chunk.model_dump_json())
-                    if chunk.type == AgentResponseChunkType.TEXT:
-                        # if chunk.content:
-                        #     self.ui.print(chunk.content.strip())
-                        continue
-                    elif chunk.type == AgentResponseChunkType.TOOL_CALL:
-                        if chunk.tool_calls is None or len(chunk.tool_calls) == 0:
-                            raise RuntimeError("工具调用不能为空")
-                        tool_call = chunk.tool_calls[0]
-                        tool_name = tool_call.function.name
-                        tool_args = json.loads(tool_call.function.arguments)
-                        tool_call_display = self._tool_map[tool_name].display(**tool_args)
-                        # self.ui.panel([tool_name], tool_call_display, color="blue")
-                        tool_call_response = self.execute_tool(tool_call)
-                        # if tool_call_response.success:
-                        #     self.ui.panel([tool_name], tool_call_response.result, color="green")
-                        # else:
-                        #     self.ui.panel([tool_name], tool_call_response.result, color="red")
-                        user_input = tool_call_response.message
-                        # break
-                    elif chunk.type == AgentResponseChunkType.DONE:
-                        if chunk.metadata is not None and "raw_content" in chunk.metadata:
-                            self.ui.print(chunk.metadata["raw_content"])
-
-                conversation_count += 1
-            except KeyboardInterrupt:
-                break
-            except RuntimeError as e:
-                self.ui.error(f"运行时错误: {str(e)}")
-                continue

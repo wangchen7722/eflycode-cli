@@ -4,12 +4,17 @@ from echo.util.system import get_system_environment
 from echo.prompt.prompt_loader import PromptLoader
 
 
-@register_advisor("buildin_environment_advisor", priority=-100)
+@register_advisor("buildin_environment_advisor")
 class EnvironmentAdvisor(Advisor):
     """收集当前系统环境信息并拼接到提示词末尾的 Advisor"""
     
-    # 标识为系统内置 Advisor
-    is_builtin: bool = True
+    def get_priority(self) -> int:
+        """获取 Advisor 的优先级"""
+        return -100
+    
+    def is_builtin_advisor(self) -> bool:
+        """判断是否为系统内置 Advisor"""
+        return True
     
     def _append_system_info(self, messages: list[Message]) -> list[Message]:
         """将系统环境信息拼接到消息末尾"""

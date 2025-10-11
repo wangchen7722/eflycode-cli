@@ -138,11 +138,8 @@ class LLMEngine:
                 "buildin_tool_call_advisor"
             )
             tool_call_advisor = tool_call_advisor_class()
-            # 使用 AdvisorChain 的新方法添加 advisor，自动处理优先级
-            priority = AdvisorRegistry.get_advisor_priority("buildin_tool_call_advisor")
-            self._advisor_chain.add_advisor(
-                tool_call_advisor, priority=priority
-            )
+            # 添加 advisor 到链中
+            self._advisor_chain.add_advisor(tool_call_advisor)
         wrapped = self._advisor_chain.wrap_call(self.do_call)
         return wrapped(request)
 
@@ -155,19 +152,15 @@ class LLMEngine:
                 "buildin_tool_call_advisor"
             )
             tool_call_advisor = tool_call_advisor_class()
-            # 使用 AdvisorChain 的新方法添加 advisor，自动处理优先级
-            priority = AdvisorRegistry.get_advisor_priority("buildin_tool_call_advisor")
-            self._advisor_chain.add_advisor(
-                tool_call_advisor, priority=priority
-            )
+            # 添加 advisor 到链中
+            self._advisor_chain.add_advisor(tool_call_advisor)
         wrapped = self._advisor_chain.wrap_stream(self.do_stream)
         return wrapped(request)
 
-    def add_advisor(self, advisor: Advisor, priority: int = 0):
+    def add_advisor(self, advisor: Advisor):
         """添加Advisor到引擎的AdvisorChain中
 
         Args:
             advisor: Advisor实例
-            priority: 优先级，仅在 advisor 为 Advisor 实例时有效
         """
-        self._advisor_chain.add_advisor(advisor, priority)
+        self._advisor_chain.add_advisor(advisor)

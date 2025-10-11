@@ -147,17 +147,29 @@ class ToolCallStreamParser(ChatCompletionStreamParser):
     ) -> Generator[ChatCompletionChunk, None, None]:
         """处理TEXT状态"""
         if char == self.tool_call_start[0]:  # 检查工具调用开始标记的第一个字符
-            # 不立即输出文本缓冲区，而是进入潜在标签状态
+            # 进入潜在标签状态
             self.state = self.STATE_POTENTIAL_TAG
             self.tag_buffer = char
         else:
             if self.tool_call:
                 self.tool_call["content"] += char
             else:
-                self.text_buffer += char
-        # 确保这是一个生成器函数
-        if False:
-            yield
+                # 立即输出单个字符，实现真正的流式输出
+                yield ChatCompletionChunk(
+                    id=chunk.id,
+                    object=chunk.object,
+                    created=chunk.created,
+                    model=chunk.model,
+                    choices=[StreamChoice(
+                        index=0,
+                        delta=Message(
+                            role=chunk.choices[0].delta.role,
+                            content=char,
+                        ),
+                        finish_reason=None,
+                    )],
+                    usage=None,
+                )
 
     def _handle_potential_tag_state(
             self, char: str, chunk: ChatCompletionChunk

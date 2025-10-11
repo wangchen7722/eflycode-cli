@@ -82,6 +82,26 @@ class TestToolCallStreamParser(unittest.TestCase):
             chunks.append(chunk)
         return chunks
 
+    def _combine_text_chunks(self, chunks: List[ChatCompletionChunk]) -> str:
+        """
+        辅助方法：合并所有文本chunk的内容
+        """
+        combined_text = ""
+        for chunk in chunks:
+            if chunk.choices[0].delta.content:
+                combined_text += chunk.choices[0].delta.content
+        return combined_text
+
+    def _get_tool_call_chunks(self, chunks: List[ChatCompletionChunk]) -> List[ChatCompletionChunk]:
+        """
+        辅助方法：获取所有包含工具调用的chunk
+        """
+        tool_chunks = []
+        for chunk in chunks:
+            if chunk.choices[0].delta.tool_calls:
+                tool_chunks.append(chunk)
+        return tool_chunks
+
     def test_pure_text_output(self):
         """
         测试纯文本输出
@@ -90,10 +110,13 @@ class TestToolCallStreamParser(unittest.TestCase):
         stream_input = [self._create_chunk(content)]
         parsed_chunks = self._parse_stream(stream_input)
 
-        self.assertEqual(len(parsed_chunks), 1)
-        self.assertIsNotNone(parsed_chunks[0].choices[0].delta.content)
-        self.assertEqual(parsed_chunks[0].choices[0].delta.content, content)
-        self.assertIsNone(parsed_chunks[0].choices[0].delta.tool_calls)
+        # 验证合并后的文本内容
+        combined_text = self._combine_text_chunks(parsed_chunks)
+        self.assertEqual(combined_text, content)
+        
+        # 验证没有工具调用
+        tool_chunks = self._get_tool_call_chunks(parsed_chunks)
+        self.assertEqual(len(tool_chunks), 0)
 
     def test_tool_call_only(self):
         """
@@ -130,18 +153,15 @@ class TestToolCallStreamParser(unittest.TestCase):
         ]
         parsed_chunks = self._parse_stream(stream_input)
 
-        self.assertEqual(len(parsed_chunks), 2)
+        # 验证文本内容
+        combined_text = self._combine_text_chunks(parsed_chunks)
+        self.assertEqual(combined_text, text_content)
 
-        # 第一个chunk是文本
-        self.assertIsNotNone(parsed_chunks[0].choices[0].delta.content)
-        self.assertEqual(parsed_chunks[0].choices[0].delta.content, text_content)
-        self.assertIsNone(parsed_chunks[0].choices[0].delta.tool_calls)
-
-        # 第二个chunk是工具调用
-        self.assertEqual(parsed_chunks[1].choices[0].delta.content, "")
-        self.assertIsNotNone(parsed_chunks[1].choices[0].delta.tool_calls)
-        self.assertEqual(parsed_chunks[1].choices[0].delta.tool_calls[0].function.name, tool_name)
-        self.assertEqual(parsed_chunks[1].choices[0].delta.tool_calls[0].function.arguments, json.dumps(arguments))
+        # 验证工具调用
+        tool_chunks = self._get_tool_call_chunks(parsed_chunks)
+        self.assertEqual(len(tool_chunks), 1)
+        self.assertEqual(tool_chunks[0].choices[0].delta.tool_calls[0].function.name, tool_name)
+        self.assertEqual(tool_chunks[0].choices[0].delta.tool_calls[0].function.arguments, json.dumps(arguments))
 
     def test_mixed_content_tool_then_text(self):
         """
@@ -159,18 +179,15 @@ class TestToolCallStreamParser(unittest.TestCase):
         ]
         parsed_chunks = self._parse_stream(stream_input)
 
-        self.assertEqual(len(parsed_chunks), 2)
+        # 验证工具调用
+        tool_chunks = self._get_tool_call_chunks(parsed_chunks)
+        self.assertEqual(len(tool_chunks), 1)
+        self.assertEqual(tool_chunks[0].choices[0].delta.tool_calls[0].function.name, tool_name)
+        self.assertEqual(tool_chunks[0].choices[0].delta.tool_calls[0].function.arguments, json.dumps(arguments))
 
-        # 第一个chunk是工具调用
-        self.assertEqual(parsed_chunks[0].choices[0].delta.content, "")
-        self.assertIsNotNone(parsed_chunks[0].choices[0].delta.tool_calls)
-        self.assertEqual(parsed_chunks[0].choices[0].delta.tool_calls[0].function.name, tool_name)
-        self.assertEqual(parsed_chunks[0].choices[0].delta.tool_calls[0].function.arguments, json.dumps(arguments))
-
-        # 第二个chunk是文本
-        self.assertIsNotNone(parsed_chunks[1].choices[0].delta.content)
-        self.assertEqual(parsed_chunks[1].choices[0].delta.content, text_content)
-        self.assertIsNone(parsed_chunks[1].choices[0].delta.tool_calls)
+        # 验证文本内容
+        combined_text = self._combine_text_chunks(parsed_chunks)
+        self.assertEqual(combined_text, text_content)
 
     def test_multiple_tool_calls(self):
         """
@@ -240,43 +257,43 @@ class TestToolCallStreamParser(unittest.TestCase):
         stream_input = [self._create_chunk(content)]
         parsed_chunks = self._parse_stream(stream_input)
 
-        self.assertEqual(len(parsed_chunks), 1)
-        self.assertIsNotNone(parsed_chunks[0].choices[0].delta.content)
-        self.assertEqual(parsed_chunks[0].choices[0].delta.content, content)
-        self.assertIsNone(parsed_chunks[0].choices[0].delta.tool_calls)
+        # 验证合并后的文本内容
+        combined_text = self._combine_text_chunks(parsed_chunks)
+        self.assertEqual(combined_text, content)
+        
+        # 验证没有工具调用
+        tool_chunks = self._get_tool_call_chunks(parsed_chunks)
+        self.assertEqual(len(tool_chunks), 0)
 
     def test_mixed_content_text_and_tool_call(self):
         """
-        测试混合文本和工具调用的流
+        测试文本和工具调用混合的复杂内容
         """
+        text1 = "首先我需要"
+        tool_name = "search_files"
+        arguments = {"pattern": "*.py"}
+        text2 = "然后分析结果"
+        
         stream_input = [
-            self._create_chunk("Hello, this is some text. "),
-            self._create_chunk("<tool_call><tool_name>my_tool</tool_name>"),
-            self._create_chunk('<tool_params>{"param1": "value1"}</tool_params></tool_call>'),
-            self._create_chunk(" And this is more text.", finish_reason="stop"),
+            self._create_chunk(text1),
+            self._create_chunk("<tool_call>"),
+            self._create_chunk(f"<tool_name>{tool_name}</tool_name>"),
+            self._create_chunk(f"<tool_params>{json.dumps(arguments)}</tool_params>"),
+            self._create_chunk("</tool_call>"),
+            self._create_chunk(text2),
         ]
+        parsed_chunks = self._parse_stream(stream_input)
 
-        parsed_chunks = list(self.parser.parse_stream(iter(stream_input)))
+        # 验证合并后的文本内容
+        combined_text = self._combine_text_chunks(parsed_chunks)
+        expected_text = text1 + text2
+        self.assertEqual(combined_text, expected_text)
 
-        self.assertEqual(len(parsed_chunks), 3)
-
-        # 验证第一个文本块
-        self.assertIsNotNone(parsed_chunks[0].choices[0].delta.content)
-        self.assertEqual(parsed_chunks[0].choices[0].delta.content, "Hello, this is some text. ")
-        self.assertIsNone(parsed_chunks[0].choices[0].delta.tool_calls)
-
-        # 验证工具调用块
-        self.assertEqual(parsed_chunks[1].choices[0].delta.content, "")
-        self.assertIsNotNone(parsed_chunks[1].choices[0].delta.tool_calls)
-        self.assertEqual(len(parsed_chunks[1].choices[0].delta.tool_calls), 1)
-        self.assertEqual(parsed_chunks[1].choices[0].delta.tool_calls[0].function.name, "my_tool")
-        self.assertEqual(parsed_chunks[1].choices[0].delta.tool_calls[0].function.arguments, json.dumps({"param1": "value1"}))
-
-        # 验证第二个文本块
-        self.assertIsNotNone(parsed_chunks[2].choices[0].delta.content)
-        self.assertEqual(parsed_chunks[2].choices[0].delta.content, " And this is more text.")
-        self.assertIsNone(parsed_chunks[2].choices[0].delta.tool_calls)
-        self.assertEqual(parsed_chunks[2].choices[0].finish_reason, "stop")
+        # 验证工具调用
+        tool_chunks = self._get_tool_call_chunks(parsed_chunks)
+        self.assertEqual(len(tool_chunks), 1)
+        self.assertEqual(tool_chunks[0].choices[0].delta.tool_calls[0].function.name, tool_name)
+        self.assertEqual(tool_chunks[0].choices[0].delta.tool_calls[0].function.arguments, json.dumps(arguments))
 
 if __name__ == "__main__":
     unittest.main()

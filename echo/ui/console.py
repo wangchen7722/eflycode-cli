@@ -64,12 +64,12 @@ class ConsoleUI(BaseUI):
 
         self._initialized = True
 
-    def welcome(self) -> None:
+    def welcome(self, text: str) -> None:
         """显示欢迎信息"""
         self.clear()
-        with self._lock:
-            # 直接使用 print, 避免 Rich 格式化
-            print(Fore.BLUE + ECHOAI_BANNER + ColorStyle.RESET_ALL)
+        # 直接使用 print, 避免 Rich 格式化
+        print(Fore.BLUE + ECHOAI_BANNER + ColorStyle.RESET_ALL)
+        self.panel(["欢迎使用 EchoAI"], text, color="blue")
 
     def flush(self) -> None:
         """刷新控制台输出"""
@@ -81,12 +81,13 @@ class ConsoleUI(BaseUI):
         with self._lock:
             self.console.clear()
 
-    def acquire_user_input(self, text: str = "请输入内容…", choices: Optional[List[str]] = None) -> str:
+    def acquire_user_input(self, text: str = "请输入内容…", choices: Optional[List[str]] = None, prompt: str = " > ") -> str:
         """获取用户输入
 
         Args:
             text: 输入框占位符文本
             choices: 可选的备选项列表 若提供则启用自动补全
+            prompt: 输入框提示前缀
 
         Returns:
             str: 用户输入的内容
@@ -120,7 +121,7 @@ class ConsoleUI(BaseUI):
         # 输入区域和布局
         textarea = TextArea(
             multiline=True,
-            prompt=FormattedText([("class:prompt", " > ")]),
+            prompt=FormattedText([("class:prompt", f"{prompt}")]),
             completer=completer,
             history=self._ptk_session.history,
             auto_suggest=AutoSuggestFromHistory(),
@@ -433,14 +434,15 @@ class ConsoleUI(BaseUI):
             return ""
         return result if result is not None else ""
 
-    def print(self, text: str) -> None:
+    def print(self, text: str, end: str = "\n") -> None:
         """打印文本到控制台
         
         Args:
             text: 要打印的文本内容
+            end: 打印结束时的字符串，默认为换行符
         """
         with self._lock:
-            self.console.print(text)
+            self.console.print(text, end=end)
 
     @classmethod
     def get_instance(cls) -> "ConsoleUI":

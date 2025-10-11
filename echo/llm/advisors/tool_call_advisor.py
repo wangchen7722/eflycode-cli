@@ -6,14 +6,22 @@ from echo.schema.llm import LLMCallResponse, LLMStreamResponse, ToolDefinition
 from echo.parser.tool_call_parser import ToolCallStreamParser, ToolCallParser
 
 
-@register_advisor("buildin_tool_call_advisor", priority=10)
+@register_advisor("buildin_tool_call_advisor")
 class ToolCallAdvisor(Advisor):
     """当模型原生不支持工具调用时，使用此 Advisor 进行工具调用"""
     
-    # 标识为系统内置 Advisor
-    is_builtin: bool = True
-    stream_parser_class: Type[ToolCallStreamParser]
-    parser_class: Type[ToolCallParser]
+    def __init__(self):
+        """初始化 ToolCallAdvisor"""
+        self.stream_parser_class = ToolCallStreamParser
+        self.parser_class = ToolCallParser
+    
+    def get_priority(self) -> int:
+        """获取 Advisor 的优先级"""
+        return 10
+    
+    def is_builtin_advisor(self) -> bool:
+        """判断是否为系统内置 Advisor"""
+        return True
 
     def _convert_messages(self, messages: List[Message], tools: List[ToolDefinition], parser: Union[ToolCallStreamParser, ToolCallParser]) -> List[Message]:
         if not tools:

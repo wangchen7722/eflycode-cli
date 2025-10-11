@@ -1,9 +1,11 @@
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, Generator
+import json
 
 import httpx
 
 from echo.llm.llm_engine import LLMConfig, LLMEngine
-from echo.schema.llm import LLMCallResponse, LLMStreamResponse, LLMRequest
+from echo.schema.llm import LLMCallResponse, LLMStreamResponse, LLMRequest, ChatCompletionChunk
+from echo.util.logger import logger
 
 
 class OpenAIEngine(LLMEngine):
@@ -87,10 +89,33 @@ class OpenAIEngine(LLMEngine):
         """
         request_data = self._generate_request_data(request)
         request_data["stream"] = True
-        response = self._client.post(
-            "/chat/completions",
+        
+        with self._client.stream(
+            method="POST",
+            url="/chat/completions",
             json=request_data
-        )
-        response.raise_for_status()
-        return LLMStreamResponse(**response.json())
+        ) as response:
+            response.raise_for_status()
+            
+            for line in response.iter_lines():
+                if not line.strip():
+                    continue
+                    
+                # 移除 "data: " 前缀
+                if line.startswith("data: "):
+                    line = line[6:]
+                
+                # 检查是否为结束标记
+                if line.strip() == "[DONE]":
+                    break
+                
+                try:
+                    # 解析 JSON 数据
+                    chunk_data = json.loads(line)
+                    chunk = ChatCompletionChunk(**chunk_data)
+                    yield chunk
+                except (json.JSONDecodeError, ValueError) as e:
+                    # 跳过无法解析的行
+                    logger.warning(f"Error parsing chunk: {e}")
+                    continue
 

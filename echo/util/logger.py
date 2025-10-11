@@ -4,6 +4,10 @@ from echo.schema.config import LoggingConfig
 
 def configure_logging(logging_config: LoggingConfig) -> None:
     """配置日志记录器"""
+    # 移除默认的控制台输出
+    logger.remove()
+    
+    # 只添加文件输出
     logger.add(
         logging_config.dirpath / logging_config.filename,
         rotation=logging_config.rotation,

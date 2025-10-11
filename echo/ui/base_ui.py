@@ -15,11 +15,12 @@ class BaseUI(ABC):
     """
 
     @abstractmethod
-    def print(self, text: str) -> None:
+    def print(self, text: str, end: str = "\n") -> None:
         """打印文本到控制台
         
         Args:
             text: 要打印的文本内容
+            end: 打印结束时的字符串，默认为换行符
         """
         pass
     
@@ -62,12 +63,13 @@ class BaseUI(ABC):
     
     # 用户交互方法
     @abstractmethod
-    def acquire_user_input(self, text: str = "", choices: Optional[List[str]] = None) -> str:
+    def acquire_user_input(self, text: str = "", choices: Optional[List[str]] = None, prompt: str = "") -> str:
         """获取用户输入
         
         Args:
             text: 输入框占位符文本
             choices: 可选的备选项列表，若提供则启用自动补全
+            prompt: 输入提示符，默认为空字符串
         
         Returns:
             用户输入的内容
@@ -148,8 +150,12 @@ class BaseUI(ABC):
     
     # 系统控制方法
     @abstractmethod
-    def welcome(self) -> None:
-        """显示欢迎信息"""
+    def welcome(self, text: str) -> None:
+        """显示欢迎信息
+        
+        Args:
+            text: 欢迎消息文本
+        """
         pass
     
     @abstractmethod

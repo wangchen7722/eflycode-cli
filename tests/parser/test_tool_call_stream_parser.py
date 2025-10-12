@@ -320,19 +320,6 @@ class TestToolCallStreamParser(unittest.TestCase):
         self.assertIsNotNone(tool_name_chunk)
         self.assertEqual(tool_name_chunk.choices[0].delta.tool_calls[0].function.name, tool_name)
 
-    def test_openai_format_tool_call(self):
-        """
-        测试 OpenAI 原生格式的工具调用流式输出
-        """
-        # 由于ToolCallStreamParser不支持use_openai_format参数，跳过此测试
-        self.skipTest("ToolCallStreamParser does not support use_openai_format parameter")
-
-    def test_openai_format_vs_original_format(self):
-        """
-        测试 OpenAI 格式与原有格式的输出差异
-        """
-        # 由于ToolCallStreamParser不支持use_openai_format参数，跳过此测试
-        self.skipTest("ToolCallStreamParser does not support use_openai_format parameter")
 
 if __name__ == "__main__":
     unittest.main()

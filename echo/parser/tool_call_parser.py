@@ -54,9 +54,6 @@ class ToolCallStreamParser(ChatCompletionStreamParser):
         # 状态变量
         self._reset_state()
 
-        # OpenAI 格式相关状态
-        self.tool_call_index = 0
-
     def _build_candidate_tags(self):
         """构建候选标签映射"""
         self.candidate_tags = {
@@ -80,6 +77,7 @@ class ToolCallStreamParser(ChatCompletionStreamParser):
         self.tool_name_buffer = ""
         self.params_buffer = ""
         self.text_buffer = ""
+        self.tool_call_index = 0
 
     def parse_stream(
             self, chat_completion_chunk_stream: Generator[ChatCompletionChunk, None, None]
@@ -428,12 +426,13 @@ class ToolCallStreamParser(ChatCompletionStreamParser):
                     created=chunk.created,
                     model=chunk.model,
                     choices=[StreamChoice(
-                        index=0,
+                        index=self.tool_call_index,
                         delta=DeltaMessage(role="assistant", content=""),
                         finish_reason="tool_calls",
                     )],
                     usage=None,
                 )
+                self.tool_call_index += 1
             self.tool_call = None
             self.tag_context = None
             self.state = self.STATE_TEXT

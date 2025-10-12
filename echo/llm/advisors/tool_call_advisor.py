@@ -61,10 +61,20 @@ class ToolCallAdvisor(Advisor):
 
     def after_call(self, request: LLMRequest, response: LLMCallResponse) -> LLMCallResponse:
         """在非流式响应接收后调用，可用于修改响应数据"""
+        supports_native = (
+                request.context and request.context.capability.supports_native_tool_call
+        )
+        if supports_native:
+            return response
         parser = self.parser_class(request.tools)
         return parser.parse(response)
 
     def after_stream(self, request: LLMRequest, response: LLMStreamResponse) -> LLMStreamResponse:
         """在流式响应接收后调用，可用于修改响应数据"""
+        supports_native = (
+                request.context and request.context.capability.supports_native_tool_call
+        )
+        if supports_native:
+            return response
         stream_parser = self.stream_parser_class(request.tools)
         return stream_parser.parse_stream(response)

@@ -8,7 +8,8 @@ from echo.schema.llm import ToolCall, Usage, Message
 class AgentResponseChunkType(Enum):
     """Agent响应块类型枚举"""
     TEXT = "text"
-    TOOL_CALL = "tool_call"
+    TOOL_CALL_START = "tool_call_start"
+    TOOL_CALL_END = "tool_call_end"
     DONE = "done"
 
     def __str__(self):

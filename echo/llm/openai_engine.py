@@ -111,7 +111,6 @@ class OpenAIEngine(LLMEngine):
                 
                 try:
                     # 解析 JSON 数据
-                    print(line)
                     chunk_data = json.loads(line)
                     chunk = ChatCompletionChunk(**chunk_data)
                     yield chunk

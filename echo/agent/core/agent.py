@@ -154,8 +154,6 @@ class ConversationAgent(ToolCallMixin, BaseAgent):
         self.llm_engine = llm_engine
         self.kwargs = kwargs
 
-        # 获取全局配置
-        self._global_config = GlobalConfig.get_instance()
         self._history_messages: List[Message] = []
         self._history_messages_limit = 10
 

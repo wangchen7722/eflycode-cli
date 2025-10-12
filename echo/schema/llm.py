@@ -65,7 +65,6 @@ class ToolCall(BaseModel):
         type: 调用类型，固定为"function"
         function: 函数调用的详细信息
     """
-
     id: str
     type: Literal["function"]
     function: ToolCallFunction
@@ -259,7 +258,7 @@ class LLMRequest(BaseModel):
     model: str = Field(description="模型ID")
     messages: List[Message] = Field(description="消息列表")
     tools: Optional[List[ToolDefinition]] = Field(default=None, description="工具列表")
-    tool_choice: Optional[Dict[str, Any]] = Field(default=None, description="工具选择")
+    tool_choice: Optional[Dict[str, Any] | str] = Field(default="auto", description="工具选择")
     generate_config: Optional[Dict[str, Any]] = Field(
         default=None, description="生成配置"
     )
@@ -270,7 +269,7 @@ class LLMPrompt(BaseModel):
     """模型提示"""
     messages: List[Message] = Field(description="消息列表")
     tools: Optional[List[ToolDefinition]] = Field(default=None, description="工具列表")
-    tool_choice: Optional[Dict[str, Any]] = Field(default=None, description="工具选择")
+    tool_choice: Optional[Dict[str, Any]] = Field(default="auto", description="工具选择")
     generate_config: Optional[Dict[str, Any]] = Field(
         default=None, description="生成配置"
     )

@@ -3,6 +3,7 @@ from echo.llm.openai_engine import OpenAIEngine
 from echo.agent.developer import Developer
 from echo.agent.run_loop import AgentRunLoop
 from echo.ui.console import ConsoleUI
+from echo.util.event_bus import EventBus
 
 
 def main():
@@ -10,6 +11,8 @@ def main():
     
     # 获取全局配置
     global_config = GlobalConfig.get_instance()
+    # 事件总线
+    event_bus = EventBus()
     
     # 创建 LLM 引擎
     llm_engine = OpenAIEngine(
@@ -28,7 +31,8 @@ def main():
         agent=developer,
         ui=ui,
         welcome_message="欢迎使用 EchoAI Developer Agent！输入 /help 查看可用命令。",
-        stream_output=True
+        stream_output=True,
+        event_bus=event_bus,
     )
     
     # 启动运行循环

@@ -14,13 +14,10 @@ class CommandResult(BaseModel):
     
     # 是否继续运行循环
     continue_loop: bool = True
-    
     # 执行消息
     message: Optional[str] = None
-    
     # 是否成功
     success: bool = True
-    
     # 额外数据
     data: Optional[Dict[str, Any]] = None
 

@@ -5,7 +5,7 @@ Agent 运行循环模块
 """
 
 import json
-from typing import Optional, Callable, List
+from typing import Optional, List
 from enum import Enum
 
 from echo.ui.base_ui import BaseUI
@@ -44,6 +44,7 @@ class AgentRunLoop:
         ui: BaseUI,
         welcome_message: Optional[str] = None,
         stream_output: bool = True,
+        event_bus: Optional[EventBus] = None,
     ):
         """初始化运行循环
         
@@ -52,11 +53,13 @@ class AgentRunLoop:
             ui: 用户界面实例
             welcome_message: 欢迎消息
             stream_output: 是否使用流式输出
+            event_bus: 事件总线实例
         """
         self.agent = agent
         self.ui = ui
         self.welcome_message = welcome_message
         self.stream_output = stream_output
+        self.event_bus = event_bus
         
         self._state = RunLoopState.INITIALIZING
         self._running = False
@@ -74,10 +77,6 @@ class AgentRunLoop:
     def is_running(self) -> bool:
         """检查是否正在运行"""
         return self._running
-    
-    def register_command(self, command: str, handler: Callable[[str], bool]):
-        """注册自定义命令"""
-        self.command_handler.register_command(command, handler)
     
     def run(self) -> None:
         """启动运行循环"""
@@ -186,7 +185,7 @@ class AgentRunLoop:
         if chunk.type == AgentResponseChunkType.TEXT and chunk.content:
             self.ui.print(chunk.content, end="")
             self.ui.flush()
-        elif chunk.type == AgentResponseChunkType.TOOL_CALL and chunk.tool_calls:
+        elif chunk.type in [AgentResponseChunkType.TOOL_CALL_START, AgentResponseChunkType.TOOL_CALL_END] and chunk.tool_calls:
             self._display_tool_calls(chunk.tool_calls)
         elif chunk.type == AgentResponseChunkType.DONE:
             self.ui.print("\n")
@@ -198,12 +197,12 @@ class AgentRunLoop:
             try:
                 tool_args = json.loads(tool_call.function.arguments)
                 args_display = json.dumps(tool_args, ensure_ascii=False, indent=2)
-            except:
+            except json.JSONDecodeError:
                 args_display = tool_call.function.arguments
             
             self.ui.panel(
                 [f"工具调用: {tool_name}"],
-                f"参数:\n{args_display}",
+                f"参数:\n{args_display}" if args_display else "",
                 color="blue"
             )
     

@@ -1,0 +1,197 @@
+from abc import abstractmethod
+from typing import Dict, Callable
+
+from echo.util.logger import logger
+
+
+class UIEventType:
+    """
+    UI事件类型
+    """
+    PROGRESS_START = "progress_start"
+    PROGRESS_UPDATE = "progress_update"
+    PROGRESS_END = "progress_end"
+    FILE_OPEN = "file_open"
+    FILE_UPDATE = "file_update"
+    INFO = "info"
+    WARNING = "warning"
+    ERROR = "error"
+    USER_INPUT = "user_input"
+    USER_CONFIRM = "user_confirm"
+
+
+class AgentUIEventType:
+    """
+    Agent UI事件类型
+    """
+    THINK_START = "think_start"
+    THINK_UPDATE = "think_update"
+    THINK_END = "think_end"
+
+    MESSAGE_START = "message_start"
+    MESSAGE_UPDATE = "message_update"
+    MESSAGE_END = "message_end"
+
+    TOOL_CALL_START = "tool_call_start"
+    TOOL_CALL_END = "tool_call_end"
+    TOOL_CALL_FINISH = "tool_call_finish"
+    TOOL_CALL_ERROR = "tool_call_error"
+
+    CODE_DIFF = "code_diff"
+    TERMINAL_EXEC_START = "terminal_exec_start"
+    TERMINAL_EXEC_RUNNING = "terminal_exec_running"
+    TERMINAL_EXEC_END = "terminal_exec_end"
+
+
+class UIEventHandlerMixin:
+    """
+    UI事件处理程序 Mixin
+    """
+
+    def __init__(self) -> None:
+        self._event_handlers: Dict[str, Callable[[dict], None]] = {}
+
+    def register_event_handler(self, event: str, handler: Callable[[dict], None]) -> None:
+        """注册单个事件处理函数"""
+        if event in self._event_handlers:
+            raise ValueError(f"事件 {event} 已注册处理函数")
+        self._event_handlers[event] = handler
+
+    def handle_event(self, event: str, data: dict) -> None:
+        """处理事件"""
+        handler = self._event_handlers.get(event)
+        if handler:
+            handler(data)
+        else:
+            # 尝试默认实现方法
+            handler_fn = f"_handle_{event}"
+            if hasattr(self, handler_fn):
+                getattr(self, handler_fn)(data)
+            else:
+                logger.warning(f"未注册处理函数的事件 {event}")
+
+    @abstractmethod
+    def _handle_progress_start(self, data: dict) -> None:
+        """处理进度开始事件"""
+        ...
+
+    @abstractmethod
+    def _handle_progress_update(self, data: dict) -> None:
+        """处理进度更新事件"""
+        ...
+
+    @abstractmethod
+    def _handle_progress_end(self, data: dict) -> None:
+        """处理进度结束事件"""
+        ...
+
+    @abstractmethod
+    def _handle_file_open(self, data: dict) -> None:
+        """处理文件打开事件"""
+        ...
+
+    @abstractmethod
+    def _handle_file_update(self, data: dict) -> None:
+        """处理文件更新事件"""
+        ...
+
+    @abstractmethod
+    def _handle_info(self, data: dict) -> None:
+        """处理信息事件"""
+        ...
+
+    @abstractmethod
+    def _handle_warning(self, data: dict) -> None:
+        """处理警告事件"""
+        ...
+
+    @abstractmethod
+    def _handle_error(self, data: dict) -> None:
+        """处理错误事件"""
+        ...
+
+    @abstractmethod
+    def _handle_user_input(self, data: dict) -> None:
+        """处理用户输入事件"""
+        ...
+
+    @abstractmethod
+    def _handle_user_confirm(self, data: dict) -> None:
+        """处理用户确认事件"""
+        ...
+
+
+class AgentUIEventHandlerMixin(UIEventHandlerMixin):
+    """
+    Agent UI事件处理程序 Mixin
+    """
+    
+    @abstractmethod
+    def _handle_think_start(self, data: dict) -> None:
+        """处理思考开始事件"""
+        ...
+        
+    @abstractmethod
+    def _handle_think_update(self, data: dict) -> None:
+        """处理思考更新事件"""
+        ...
+        
+    @abstractmethod
+    def _handle_think_end(self, data: dict) -> None:
+        """处理思考结束事件"""
+        ...
+        
+    @abstractmethod
+    def _handle_message_start(self, data: dict) -> None:
+        """处理消息开始事件"""
+        ...
+        
+    @abstractmethod
+    def _handle_message_update(self, data: dict) -> None:
+        """处理消息更新事件"""
+        ...
+        
+    @abstractmethod
+    def _handle_message_end(self, data: dict) -> None:
+        """处理消息结束事件"""
+        ...
+        
+    @abstractmethod
+    def _handle_tool_call_start(self, data: dict) -> None:
+        """处理工具调用开始事件"""
+        ...
+        
+    @abstractmethod
+    def _handle_tool_call_end(self, data: dict) -> None:
+        """处理工具调用结束事件"""
+        ...
+        
+    @abstractmethod
+    def _handle_tool_call_finish(self, data: dict) -> None:
+        """处理工具调用完成事件"""
+        ...
+        
+    @abstractmethod
+    def _handle_tool_call_error(self, data: dict) -> None:
+        """处理工具调用错误事件"""
+        ...
+        
+    @abstractmethod
+    def _handle_code_diff(self, data: dict) -> None:
+        """处理代码差异事件"""
+        ...
+        
+    @abstractmethod
+    def _handle_terminal_exec_start(self, data: dict) -> None:
+        """处理终端执行开始事件"""
+        ...
+        
+    @abstractmethod
+    def _handle_terminal_exec_running(self, data: dict) -> None:
+        """处理终端执行运行事件"""
+        ...
+        
+    @abstractmethod
+    def _handle_terminal_exec_end(self, data: dict) -> None:
+        """处理终端执行结束事件"""
+        ...

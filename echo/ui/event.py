@@ -1,7 +1,8 @@
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from typing import Dict, Callable
 
 from echo.util.logger import logger
+from echo.util.event_bus import EventBus
 
 
 class UIEventType:
@@ -43,20 +44,33 @@ class AgentUIEventType:
     TERMINAL_EXEC_END = "terminal_exec_end"
 
 
-class UIEventHandlerMixin:
+class UIEventHandlerMixin(ABC):
     """
     UI事件处理程序 Mixin
     """
 
-    def __init__(self) -> None:
+    def __init__(self, event_bus: EventBus) -> None:
         self._event_handlers: Dict[str, Callable[[dict], None]] = {}
+        self._event_bus = event_bus
+        
+        # 订阅事件总线
+        self._event_bus.subscribe(UIEventType.PROGRESS_START, self.handle_event)
+        self._event_bus.subscribe(UIEventType.PROGRESS_UPDATE, self.handle_event)
+        self._event_bus.subscribe(UIEventType.PROGRESS_END, self.handle_event)
+        self._event_bus.subscribe(UIEventType.FILE_OPEN, self.handle_event)
+        self._event_bus.subscribe(UIEventType.FILE_UPDATE, self.handle_event)
+        self._event_bus.subscribe(UIEventType.INFO, self.handle_event)
+        self._event_bus.subscribe(UIEventType.WARNING, self.handle_event)
+        self._event_bus.subscribe(UIEventType.ERROR, self.handle_event)
+        self._event_bus.subscribe(UIEventType.USER_INPUT, self.handle_event)
+        self._event_bus.subscribe(UIEventType.USER_CONFIRM, self.handle_event)
 
     def register_event_handler(self, event: str, handler: Callable[[dict], None]) -> None:
         """注册单个事件处理函数"""
         if event in self._event_handlers:
             raise ValueError(f"事件 {event} 已注册处理函数")
         self._event_handlers[event] = handler
-
+        
     def handle_event(self, event: str, data: dict) -> None:
         """处理事件"""
         handler = self._event_handlers.get(event)
@@ -126,6 +140,34 @@ class AgentUIEventHandlerMixin(UIEventHandlerMixin):
     Agent UI事件处理程序 Mixin
     """
     
+    def __init__(self, event_bus: EventBus) -> None:
+        super().__init__(event_bus)
+        
+        # 订阅事件总线
+        self._event_bus.subscribe(AgentUIEventType.THINK_START, self.handle_event)
+        self._event_bus.subscribe(AgentUIEventType.THINK_UPDATE, self.handle_event)
+        self._event_bus.subscribe(AgentUIEventType.THINK_END, self.handle_event)
+        
+        # 订阅消息事件
+        self._event_bus.subscribe(AgentUIEventType.MESSAGE_START, self.handle_event)
+        self._event_bus.subscribe(AgentUIEventType.MESSAGE_UPDATE, self.handle_event)
+        self._event_bus.subscribe(AgentUIEventType.MESSAGE_END, self.handle_event)
+        
+        # 订阅工具调用事件
+        self._event_bus.subscribe(AgentUIEventType.TOOL_CALL_START, self.handle_event)
+        self._event_bus.subscribe(AgentUIEventType.TOOL_CALL_END, self.handle_event)
+        self._event_bus.subscribe(AgentUIEventType.TOOL_CALL_FINISH, self.handle_event)
+        self._event_bus.subscribe(AgentUIEventType.TOOL_CALL_ERROR, self.handle_event)
+        
+        # 订阅代码差异事件
+        self._event_bus.subscribe(AgentUIEventType.CODE_DIFF, self.handle_event)
+        
+        # 订阅终端执行事件
+        self._event_bus.subscribe(AgentUIEventType.TERMINAL_EXEC_START, self.handle_event)
+        self._event_bus.subscribe(AgentUIEventType.TERMINAL_EXEC_RUNNING, self.handle_event)
+        self._event_bus.subscribe(AgentUIEventType.TERMINAL_EXEC_END, self.handle_event)
+        
+        
     @abstractmethod
     def _handle_think_start(self, data: dict) -> None:
         """处理思考开始事件"""

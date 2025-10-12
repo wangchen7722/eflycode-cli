@@ -1,8 +1,7 @@
 import sys
 import threading
 import os
-import time
-from typing import List, Literal, Optional, Sequence, Dict
+from typing import List, Literal, Optional, Sequence
 
 from colorama import Fore, Style as ColorStyle
 from rich.console import Console
@@ -28,8 +27,11 @@ from prompt_toolkit.widgets import TextArea, Frame
 from prompt_toolkit.keys import Keys
 from prompt_toolkit.filters import Condition
 from prompt_toolkit.styles import Style
-from .colors import PTK_STYLE
-from .base_ui import BaseUI
+
+from echo.ui.colors import PTK_STYLE
+from echo.ui.base_ui import BaseUI
+from echo.ui.event import AgentUIEventHandlerMixin, UIEventHandlerMixin
+from echo.util.event_bus import EventBus
 
 ECHOAI_BANNER = """
   _____     _                _    ___ 
@@ -455,3 +457,84 @@ class ConsoleUI(BaseUI):
         if cls._instance is None or not getattr(cls._instance, "_initialized", False):
             raise RuntimeError("ConsoleUI尚未初始化 请先调用构造函数")
         return cls._instance
+
+
+class ConsoleEventUI(ConsoleUI, AgentUIEventHandlerMixin):
+    """
+    控制台事件UI
+    """
+
+    def __init__(self, event_bus: EventBus) -> None:
+        super().__init__(event_bus)
+
+    def _handle_think_start(self, data: dict) -> None:
+        pass
+
+    def _handle_think_update(self, data: dict) -> None:
+        pass
+
+    def _handle_think_end(self, data: dict) -> None:
+        pass
+
+    def _handle_message_start(self, data: dict) -> None:
+        pass
+
+    def _handle_message_update(self, data: dict) -> None:
+        pass
+
+    def _handle_message_end(self, data: dict) -> None:
+        pass
+
+    def _handle_tool_call_start(self, data: dict) -> None:
+        pass
+
+    def _handle_tool_call_end(self, data: dict) -> None:
+        pass
+
+    def _handle_tool_call_finish(self, data: dict) -> None:
+        pass
+
+    def _handle_tool_call_error(self, data: dict) -> None:
+        pass
+
+    def _handle_code_diff(self, data: dict) -> None:
+        pass
+
+    def _handle_terminal_exec_start(self, data: dict) -> None:
+        pass
+
+    def _handle_terminal_exec_running(self, data: dict) -> None:
+        pass
+
+    def _handle_terminal_exec_end(self, data: dict) -> None:
+        pass
+
+    def _handle_progress_start(self, data: dict) -> None:
+        pass
+
+    def _handle_progress_update(self, data: dict) -> None:
+        pass
+
+    def _handle_progress_end(self, data: dict) -> None:
+        pass
+
+    def _handle_file_open(self, data: dict) -> None:
+        pass
+
+    def _handle_file_update(self, data: dict) -> None:
+        pass
+
+    def _handle_info(self, data: dict) -> None:
+        pass
+
+    def _handle_warning(self, data: dict) -> None:
+        pass
+
+    def _handle_error(self, data: dict) -> None:
+        pass
+
+    def _handle_user_input(self, data: dict) -> None:
+        pass
+
+    def _handle_user_confirm(self, data: dict) -> None:
+        pass

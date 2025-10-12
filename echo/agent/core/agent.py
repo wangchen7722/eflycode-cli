@@ -8,6 +8,7 @@ from typing import (
     Literal,
 )
 
+from agent.core.response_converter import AgentResponseConverter
 from echo.ui.console import ConsoleUI
 from echo.llm.llm_engine import LLMEngine
 from echo.schema.llm import LLMPrompt, Message, ToolCall, ToolDefinition
@@ -157,6 +158,8 @@ class ConversationAgent(ToolCallMixin, BaseAgent):
         self._history_messages: List[Message] = []
         self._history_messages_limit = 10
 
+        self.agent_response_converter = AgentResponseConverter()
+
     @property
     def system_prompt(self) -> str:
         """渲染系统提示词
@@ -199,13 +202,7 @@ class ConversationAgent(ToolCallMixin, BaseAgent):
         prompt = LLMPrompt(messages=messages, tools=self.tools)
         response = self.llm_engine.call(prompt=prompt)
         self._history_messages.append(response.choices[0].message)
-        return AgentResponse(
-            messages=messages,
-            content=response.choices[0].message.content,
-            finish_reason=response.choices[0].finish_reason,
-            tool_calls=response.choices[0].message.tool_calls,
-            usage=response.usage,
-        )
+        return self.agent_response_converter.convert(response)
 
     def _run_stream(
             self, messages: List[Message], **kwargs
@@ -219,62 +216,20 @@ class ConversationAgent(ToolCallMixin, BaseAgent):
         Yields:
             AgentResponseChunk: 智能体响应块
         """
-        stream_interval = kwargs.get("stream_interval", 3)
         prompt = LLMPrompt(messages=messages, tools=self.tools)
         response = self.llm_engine.stream(prompt=prompt)
         response_content = ""
-        buffer = ""
 
         try:
-            for chunk in response:
+            for chunk in self.agent_response_converter.convert_stream(response):
                 if chunk is None:
                     continue
                 
                 # 获取内容
-                chunk_content = chunk.choices[0].delta.content or ""
+                chunk_content = chunk.content or ""
                 if chunk_content:
                     response_content += chunk_content
-                    buffer += chunk_content
-                    
-                    # 当缓冲区达到指定长度时输出
-                    if len(buffer) >= stream_interval:
-                        yield AgentResponseChunk(
-                            type=AgentResponseChunkType.TEXT,
-                            content=buffer,
-                            finish_reason=chunk.choices[0].finish_reason,
-                            tool_calls=chunk.choices[0].delta.tool_calls,
-                            usage=chunk.usage,
-                        )
-                        buffer = ""
-                
-                # 处理工具调用
-                if chunk.choices[0].delta.tool_calls:
-                    yield AgentResponseChunk(
-                        type=AgentResponseChunkType.TOOL_CALL,
-                        content="",
-                        finish_reason=chunk.choices[0].finish_reason,
-                        tool_calls=chunk.choices[0].delta.tool_calls,
-                        usage=chunk.usage,
-                    )
-            
-            # 输出剩余的缓冲区内容
-            if buffer:
-                yield AgentResponseChunk(
-                    type=AgentResponseChunkType.TEXT,
-                    content=buffer,
-                    finish_reason=None,
-                    tool_calls=None,
-                    usage=None,
-                )
-            
-            # 输出完成标记
-            yield AgentResponseChunk(
-                type=AgentResponseChunkType.DONE,
-                content="",
-                finish_reason="stop",
-                tool_calls=None,
-                usage=None,
-            )
+                yield chunk
         finally:
             # 确保无论生成器是否被提前终止，都会记录消息历史
             if response_content:

@@ -21,6 +21,7 @@ class AgentResponseConverter:
     def convert(
             self, chat_completion: ChatCompletion
     ) -> AgentResponse:
+        self._reset_state()
         return AgentResponse(
             messages=[chat_completion.choices[0].message] if chat_completion.choices else [],
             content=chat_completion.choices[0].message.content if chat_completion.choices else "",
@@ -34,6 +35,7 @@ class AgentResponseConverter:
             self, chat_completion_chunk_stream: Generator[ChatCompletionChunk, None, None]
     ) -> Generator[AgentResponseChunk, None, None]:
         """将 ChatCompletionChunk 转换为 AgentResponseChunk"""
+        self._reset_state()
         for chunk in chat_completion_chunk_stream:
             choice = chunk.choices[0]
             delta = choice.delta

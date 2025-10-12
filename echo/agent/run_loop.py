@@ -154,30 +154,27 @@ class AgentRunLoop:
     def _process_user_input(self, user_input: str) -> None:
         """处理用户输入"""
         try:
-            self.ui.info(f"\n[bold blue]{self.agent.name} 正在思考...[/bold blue]")
-            
             if self.stream_output and hasattr(self.agent, "stream"):
                 self._handle_stream_response(user_input)
             else:
                 self._handle_single_response(user_input)
-                
+            # 输出换行
+            self.ui.print("")
         except Exception as e:
             self.ui.error(f"Agent 处理失败: {str(e)}")
             logger.exception(f"Agent processing failed: {e}")
-    
+
     def _handle_stream_response(self, user_input: str) -> None:
         """处理流式响应"""
         response_stream = self.agent.stream(user_input)
-        self.ui.info(f"\n[bold green]{self.agent.name} 回复:[/bold green]")
-        
+
         for chunk in response_stream:
             self._display_response_chunk(chunk)
     
     def _handle_single_response(self, user_input: str) -> None:
         """处理单次响应"""
         response = self.agent.call(user_input)
-        self.ui.info(f"\n[bold green]{self.agent.name} 回复:[/bold green]")
-        
+
         if response.content:
             self.ui.print(response.content)
         

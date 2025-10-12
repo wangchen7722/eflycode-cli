@@ -24,10 +24,9 @@ class HelpCommand(BaseCommand):
         if hasattr(context, 'ui') and hasattr(context.ui, 'parent_handler'):
             registry = context.ui.parent_handler.registry
             for command in registry.list_commands():
-                commands.append({
-                    "command": f"/{command.name}",
-                    "description": command.description
-                })
+                commands.append([
+                    f"/{command.name}", command.description
+                ])
         
         if commands:
             context.ui.help(commands)
@@ -70,75 +69,6 @@ class ClearCommand(BaseCommand):
         return CommandResult(continue_loop=True)
 
 
-class StatusCommand(BaseCommand):
-    """状态命令"""
-    
-    def __init__(self):
-        super().__init__(
-            name="status",
-            description="显示运行状态"
-        )
-    
-    def execute(self, args: str, context: CommandContext) -> CommandResult:
-        """执行状态命令"""
-        if context.run_loop:
-            state = context.run_loop.state
-            is_running = context.run_loop.is_running
-            agent_name = getattr(context.run_loop.agent, 'name', '未知')
-            
-            status_info = [
-                f"Agent: {agent_name}",
-                f"状态: {state.value}",
-                f"运行中: {'是' if is_running else '否'}"
-            ]
-            
-            context.ui.panel(["系统状态"], "\n".join(status_info), color="blue")
-        else:
-            context.ui.warning("无法获取运行状态")
-        
-        return CommandResult(continue_loop=True)
-
-
-class PauseCommand(BaseCommand):
-    """暂停命令"""
-    
-    def __init__(self):
-        super().__init__(
-            name="pause",
-            description="暂停运行循环"
-        )
-    
-    def execute(self, args: str, context: CommandContext) -> CommandResult:
-        """执行暂停命令"""
-        # 设置暂停标志
-        context.set("paused", True)
-        return CommandResult(
-            continue_loop=True,
-            message="已暂停，输入 /resume 恢复运行",
-            success=True
-        )
-
-
-class ResumeCommand(BaseCommand):
-    """恢复命令"""
-    
-    def __init__(self):
-        super().__init__(
-            name="resume",
-            description="恢复运行循环"
-        )
-    
-    def execute(self, args: str, context: CommandContext) -> CommandResult:
-        """执行恢复命令"""
-        # 清除暂停标志
-        context.set("paused", False)
-        return CommandResult(
-            continue_loop=True,
-            message="已恢复运行",
-            success=True
-        )
-
-
 def get_builtin_commands():
     """获取所有内置命令实例
     
@@ -149,7 +79,4 @@ def get_builtin_commands():
         HelpCommand(),
         QuitCommand(),
         ClearCommand(),
-        StatusCommand(),
-        PauseCommand(),
-        ResumeCommand(),
     ]

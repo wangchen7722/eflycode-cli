@@ -228,18 +228,17 @@ class ConsoleUI(BaseUI):
                 except Exception as e:
                     raise e
 
-    def help(self, commands: List[Dict[str, str]]) -> None:
+    def help(self, commands: List[List[str]]) -> None:
         """显示帮助信息
 
         Args:
             commands: 命令列表 每个元素为 {"name": "命令名", "desc": "命令描述"}
         """
-        with self._lock:
-            self.table(
-                "",
-                ["命令", "描述"],
-                commands
-            )
+        self.table(
+            "",
+            ["命令", "描述"],
+            commands
+        )
 
     def info(self, text: str, **kwargs) -> None:
         """显示信息内容
@@ -258,7 +257,7 @@ class ConsoleUI(BaseUI):
             message: 错误信息
         """
         with self._lock:
-            self.console.print(f"[red][ERROR] {message}[/red]")
+            self.console.print(f"[red]{message}[/red]")
 
     def success(self, message: str) -> None:
         """显示成功信息
@@ -267,7 +266,7 @@ class ConsoleUI(BaseUI):
             message: 成功信息
         """
         with self._lock:
-            self.console.print(f"[green][SUCCESS] {message}[/green]")
+            self.console.print(f"[green]{message}[/green]")
 
     def warning(self, message: str) -> None:
         """显示警告信息
@@ -276,7 +275,7 @@ class ConsoleUI(BaseUI):
             message: 警告信息
         """
         with self._lock:
-            self.console.print(f"[yellow][WARNING] {message}[/yellow]")
+            self.console.print(f"[yellow]{message}[/yellow]")
 
     def panel(self, titles: Sequence[str], content: str, color: str = "green",
               align: Literal["default", "left", "center", "right", "full"] = "default",

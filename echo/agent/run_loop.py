@@ -148,9 +148,9 @@ class AgentRunLoop:
     
     def _show_welcome(self) -> None:
         """显示欢迎信息"""
-        self.ui.welcome(f"欢迎使用 {self.agent.name}")
-        self.ui.info("输入 /help 查看可用命令")
-    
+        if self.welcome_message:
+            self.ui.welcome(self.welcome_message)
+
     def _process_user_input(self, user_input: str) -> None:
         """处理用户输入"""
         try:

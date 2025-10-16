@@ -1,9 +1,9 @@
-from echo.config import GlobalConfig
-from echo.llm.openai_engine import OpenAIEngine
-from echo.agent.developer import Developer
-from echo.agent.run_loop import AgentRunLoop
-from echo.ui.console import ConsoleUI
-from echo.util.event_bus import EventBus
+from eflycode.config import GlobalConfig
+from eflycode.llm.openai_engine import OpenAIEngine
+from eflycode.agent.developer import Developer
+from eflycode.agent.run_loop import AgentRunLoop
+from eflycode.ui.console import ConsoleUI
+from eflycode.util.event_bus import EventBus
 
 
 def main():

@@ -1,15 +1,15 @@
 import unittest
 from unittest.mock import Mock
 
-from echo.agent.core.agent import ConversationAgent
-from echo.agent.registry import (
+from eflycode.agent.core.agent import ConversationAgent
+from eflycode.agent.registry import (
     register_agent,
     create_agent,
     list_agents,
     get_agent_class,
     AgentRegistry
 )
-from echo.llm.llm_engine import LLMEngine
+from eflycode.llm.llm_engine import LLMEngine
 
 
 class TestAgentRegistry(unittest.TestCase):

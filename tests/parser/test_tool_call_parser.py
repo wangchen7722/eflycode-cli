@@ -1,7 +1,7 @@
 import unittest
 import json
-from echo.parser.tool_call_parser import ToolCallParser
-from echo.schema.llm import ChatCompletion, Message, Choice, Usage, ToolDefinition, ToolFunction
+from eflycode.parser.tool_call_parser import ToolCallParser
+from eflycode.schema.llm import ChatCompletion, Message, Choice, Usage, ToolDefinition, ToolFunction
 
 
 class TestToolCallParser(unittest.TestCase):

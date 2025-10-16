@@ -1,7 +1,7 @@
 from agent.core.response_converter import AgentResponseConverter
-from echo.config import GlobalConfig
-from echo.llm.openai_engine import OpenAIEngine
-from echo.schema.llm import LLMPrompt, Message, ToolDefinition
+from eflycode.config import GlobalConfig
+from eflycode.llm.openai_engine import OpenAIEngine
+from eflycode.schema.llm import LLMPrompt, Message, ToolDefinition
 from tool import FILE_TOOL_GROUP
 
 global_config = GlobalConfig.get_instance()

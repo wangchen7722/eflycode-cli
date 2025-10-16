@@ -1,12 +1,12 @@
 import unittest
 import json
 from typing import List, Generator
-from echo.schema.agent import AgentResponseChunk, AgentResponseChunkType, AgentResponse
-from echo.schema.llm import (
+from eflycode.schema.agent import AgentResponseChunk, AgentResponseChunkType, AgentResponse
+from eflycode.schema.llm import (
     ChatCompletionChunk, StreamChoice, DeltaMessage, DeltaToolCall, DeltaToolCallFunction,
     ChatCompletion, Choice, Message, ToolCall, ToolCallFunction, Usage
 )
-from echo.agent.core.response_converter import AgentResponseConverter
+from eflycode.agent.core.response_converter import AgentResponseConverter
 
 
 class TestAgentResponseConverter(unittest.TestCase):

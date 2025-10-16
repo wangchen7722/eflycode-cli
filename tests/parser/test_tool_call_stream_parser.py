@@ -3,8 +3,8 @@ import json
 import uuid
 from typing import List, Dict, Any
 
-from echo.parser.tool_call_parser import ToolCallStreamParser
-from echo.schema.llm import ChatCompletionChunk, DeltaMessage, StreamChoice, ToolCall, ToolDefinition, Message, \
+from eflycode.parser.tool_call_parser import ToolCallStreamParser
+from eflycode.schema.llm import ChatCompletionChunk, DeltaMessage, StreamChoice, ToolCall, ToolDefinition, Message, \
     ToolFunction
 
 

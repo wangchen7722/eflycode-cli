@@ -150,11 +150,8 @@ class BaseUI(ABC):
     
     # 系统控制方法
     @abstractmethod
-    def welcome(self, text: str) -> None:
+    def welcome(self) -> None:
         """显示欢迎信息
-        
-        Args:
-            text: 欢迎消息文本
         """
         pass
     

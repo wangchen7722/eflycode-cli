@@ -14,7 +14,7 @@ from eflycode.ui.command.command_handler import CommandHandler
 from eflycode.schema.agent import AgentResponseChunk, AgentResponseChunkType
 from eflycode.schema.llm import ToolCall
 from eflycode.util.logger import logger
-from util.event_bus import EventBus
+from eflycode.util.event_bus import EventBus
 
 
 class RunLoopState(Enum):
@@ -43,7 +43,6 @@ class AgentRunLoop:
         self,
         agent: ConversationAgent,
         ui: BaseUI,
-        welcome_message: Optional[str] = None,
         stream_output: bool = True,
         event_bus: Optional[EventBus] = None,
     ):
@@ -52,13 +51,11 @@ class AgentRunLoop:
         Args:
             agent: 对话智能体实例
             ui: 用户界面实例
-            welcome_message: 欢迎消息
             stream_output: 是否使用流式输出
             event_bus: 事件总线实例
         """
         self.agent = agent
         self.ui = ui
-        self.welcome_message = welcome_message
         self.stream_output = stream_output
         self.event_bus = event_bus
         
@@ -148,8 +145,7 @@ class AgentRunLoop:
     
     def _show_welcome(self) -> None:
         """显示欢迎信息"""
-        if self.welcome_message:
-            self.ui.welcome(self.welcome_message)
+        self.ui.welcome()
 
     def _process_user_input(self, user_input: str) -> None:
         """处理用户输入"""

@@ -4,7 +4,7 @@ filename = "echoai.log"
 level = "DEBUG"
 format = "{time:YYYY-MM-DD HH:mm:ss} | {level} | {file}:{function}:{line} | {message}"
 rotation = "10 MB"
-retention = "10 days"
+retention = "14 days"
 encoding = "utf-8"
 
 [model]

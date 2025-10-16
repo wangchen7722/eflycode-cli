@@ -3,12 +3,12 @@ import threading
 import os
 from typing import List, Literal, Optional, Sequence
 
-from colorama import Fore, Style as ColorStyle
 from rich.console import Console
 from rich.panel import Panel
 from rich.progress import Progress, TextColumn, BarColumn
 from rich.table import Table
 from rich.text import Text
+from rich.align import Align
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import WordCompleter
@@ -31,12 +31,13 @@ from eflycode.ui.base_ui import BaseUI
 from eflycode.ui.event import AgentUIEventHandlerMixin
 from eflycode.util.event_bus import EventBus
 
-ECHOAI_BANNER = """
-  _____     _                _    ___ 
- | ____|___| |__   ___      / \  |_ _|
- |  _| / __| '_ \ / _ \    / _ \  | | 
- | |__| (__| | | | (_) |  / ___ \ | | 
- |_____\___|_| |_|\___/  /_/   \_\___|
+EFLYCODE_BANNER = r"""
+        _____  _          ____            _       
+   ___ |  ___|| | _   _  / ___| ___    __| |  ___ 
+  / _ \| |_   | || | | || |    / _ \  / _` | / _ \
+ |  __/|  _|  | || |_| || |___| (_) || (_| ||  __/
+  \___||_|    |_| \__, | \____|\___/  \__,_| \___|
+                  |___/                           
 """
 
 class ConsoleUI(BaseUI):
@@ -64,12 +65,25 @@ class ConsoleUI(BaseUI):
 
         self._initialized = True
 
-    def welcome(self, text: str) -> None:
+
+    def welcome(self) -> None:
         """显示欢迎信息"""
         self.clear()
-        # 直接使用 print, 避免 Rich 格式化
-        print(Fore.BLUE + ECHOAI_BANNER + ColorStyle.RESET_ALL)
-        self.panel(["欢迎使用 EchoAI"], text, color="blue")
+        # self.console.print(f"[bold #081776]{EFLYCODE_BANNER}[/bold #081776]")
+        product = Text()
+        product.append(">_ ", style="grey50")
+        product.append("eFlyCode", style="bold white")
+        product.append(" ", style="")
+        product.append("(v0.46.0)", style="grey50")
+        panel = Panel(
+            Align.left(product),
+            border_style="grey35",
+            expand=False,
+            padding=(0, 2),
+        )
+
+        self.console.print(panel)
+        # self.panel(titles=[], content=">_ eFlyCode 智能编程助手")
 
     def flush(self) -> None:
         """刷新控制台输出"""
@@ -168,7 +182,7 @@ class ConsoleUI(BaseUI):
         frame = Frame(body=body)
 
         app = Application(
-            layout=Layout(container=frame),
+            layout=Layout(container=body),
             key_bindings=bindings,
             mouse_support=False,
             full_screen=False,

@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Optional
 
 from eflycode.tool.base_tool import BaseTool, ToolParameterError, ToolExecutionError, ToolGroup, ToolFunctionParameters
-from eflycode.config import GlobalConfig
 from eflycode.util.ignore import IgnoreManager
 
 

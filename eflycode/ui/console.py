@@ -1,8 +1,9 @@
 import sys
 import threading
 import os
-from typing import List, Literal, Optional, Sequence
+from typing import Iterable, List, Literal, Optional, Sequence
 
+from prompt_toolkit.document import Document
 from rich.console import Console
 from rich.panel import Panel
 from rich.progress import Progress, TextColumn, BarColumn
@@ -11,7 +12,7 @@ from rich.text import Text
 from rich.align import Align
 
 from prompt_toolkit import PromptSession
-from prompt_toolkit.completion import WordCompleter
+from prompt_toolkit.completion import CompleteEvent, WordCompleter
 from prompt_toolkit.history import InMemoryHistory
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from prompt_toolkit.patch_stdout import patch_stdout
@@ -21,10 +22,11 @@ from prompt_toolkit.layout import Layout
 from prompt_toolkit.layout.controls import FormattedTextControl
 from prompt_toolkit.layout.containers import Window, HSplit, ConditionalContainer, FloatContainer, Float
 from prompt_toolkit.application import Application
-from prompt_toolkit.widgets import TextArea, Frame
+from prompt_toolkit.widgets import TextArea
 from prompt_toolkit.keys import Keys
 from prompt_toolkit.filters import Condition
 from prompt_toolkit.styles import Style
+from prompt_toolkit.completion import Completer, Completion, DynamicCompleter
 
 from eflycode.constant import EFLYCODE_VERSION
 from eflycode.ui.colors import PTK_STYLE
@@ -42,6 +44,27 @@ EFLYCODE_BANNER = r"""
   \___||_|    |_| \__, | \____|\___/  \__,_| \___|
                   |___/                           
 """
+
+class CommandCompleter(Completer):
+
+    def __init__(self, commands: List[str]):
+        self.commands = commands
+        self.max_command_length = max(len(cmd) for cmd in commands) if commands else 0
+
+    def get_completions(self, document: Document, complete_event: CompleteEvent) -> Iterable[Completion]:
+        text = document.text_before_cursor
+        if len(text) > 0:
+            # 从当前光标位置向前取出与最大命令长度相同的文本进行匹配
+            start_pos = max(0, len(text) - self.max_command_length)
+            text = text[start_pos:]
+            # 判断这段文本中是否含有 "/"，若含有找到 "/" 后的内容
+            slash_index = text.rfind("/")
+            if slash_index != -1:
+                text = text[slash_index + 1:]
+                for cmd in self.commands:
+                    if cmd.startswith(text):
+                        yield Completion(cmd, start_position=-len(text))
+
 
 class ConsoleUI(BaseUI):
     """终端用户界面类 处理用户输入输出和UI展示"""
@@ -127,9 +150,18 @@ class ConsoleUI(BaseUI):
         Returns:
             str: 用户输入的内容
         """
-        completer = None
+        base_completer = None
         if choices:
-            completer = WordCompleter(choices, ignore_case=True)
+            base_completer = WordCompleter(choices, ignore_case=True)
+
+        command_completer = CommandCompleter([
+            command.name
+            for command in get_builtin_commands()
+        ])
+        completer = DynamicCompleter(
+            lambda: command_completer if textarea.text.strip().startswith("/") else base_completer
+        )
+        completer = command_completer
 
         # 结果与取消标志
         result: List[str] = [""]
@@ -159,11 +191,13 @@ class ConsoleUI(BaseUI):
             prompt=FormattedText([("class:prompt", f" > ")]),
             completer=completer,
             history=self._ptk_session.history,
-            auto_suggest=AutoSuggestFromHistory(),
+            # auto_suggest=AutoSuggestFromHistory(),
+            auto_suggest=None,
             style="class:input",
             wrap_lines=True,
             focusable=True,
-            focus_on_click=True
+            focus_on_click=True,
+            complete_while_typing=True
         )
 
         @Condition

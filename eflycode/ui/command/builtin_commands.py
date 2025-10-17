@@ -3,6 +3,7 @@
 
 提供系统内置的基础命令
 """
+from typing import List
 
 from eflycode.ui.command.command import BaseCommand, CommandContext, CommandResult
 
@@ -69,7 +70,7 @@ class ClearCommand(BaseCommand):
         return CommandResult(continue_loop=True)
 
 
-def get_builtin_commands():
+def get_builtin_commands() -> List[BaseCommand]:
     """获取所有内置命令实例
     
     Returns:

@@ -106,7 +106,6 @@ class ConsoleUI(BaseUI):
         )
 
         self.console.print(panel)
-        # self.panel(titles=[], content=">_ eFlyCode 智能编程助手")
 
     def flush(self) -> None:
         """刷新控制台输出"""

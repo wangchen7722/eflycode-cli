@@ -1,6 +1,6 @@
 [logging]
 dirpath = "logs"
-filename = "echoai.log"
+filename = "eflycode.log"
 level = "DEBUG"
 format = "{time:YYYY-MM-DD HH:mm:ss} | {level} | {file}:{function}:{line} | {message}"
 rotation = "10 MB"

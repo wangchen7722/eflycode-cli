@@ -3,8 +3,9 @@ import json
 
 import httpx
 
-from eflycode.llm.llm_engine import LLMConfig, LLMEngine
+from eflycode.llm.llm_engine import LLMEngine
 from eflycode.schema.llm import LLMCallResponse, LLMStreamResponse, LLMRequest, ChatCompletionChunk
+from eflycode.schema.config import LLMConfig
 from eflycode.util.logger import logger
 
 

@@ -22,21 +22,6 @@ DEFAULT_GLOBAL_CONFIG = {
         "rotation": "10 MB",
         "retention": "10 days",
         "encoding": "utf-8"
-    },
-    "model": {
-        "default": "gpt-5",
-        "entries": [
-            {
-                "model": "gpt-5",
-                "name": "GPT-5",
-                "provider": "openai",
-                "api_key": "${OPENAI_API_KEY}",
-                "base_url": "https://api.openai.com/v1",
-                "max_context_length": 4096,
-                "temperature": 0.7,
-                "supports_native_tool_call": True
-            }
-        ]
     }
 }
 
@@ -147,30 +132,13 @@ def create_default_global_config(config_path: str) -> None:
         f.write("""# EflyCode 全局配置文件
 
 [logging]
-level = "INFO"
-format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-
-[logging.handlers.console]
-enabled = false
-level = "INFO"
-
-[logging.handlers.file]
-enabled = true
-level = "DEBUG"
+dirpath = "logs"
 filename = "eflycode.log"
-max_bytes = 10485760
-backup_count = 5
-
-[model]
-default_model = "gpt-5"
-
-[[model.models]]
-model = "gpt-5"
-provider = "openai"
-api_key = "${OPENAI_API_KEY}"
-base_url = "https://api.openai.com/v1"
-max_tokens = 4096
-temperature = 0.7
+level = "DEBUG"
+format = "{time:YYYY-MM-DD HH:mm:ss} | {level} | {file}:{function}:{line} | {message}"
+rotation = "10 MB"
+retention = "14 days"
+encoding = "utf-8"
 """)
 
 

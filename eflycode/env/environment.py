@@ -9,8 +9,10 @@ from threading import Lock
 from copy import deepcopy
 
 from eflycode.env.config_loader import ConfigLoader
-from eflycode.env.file_watcher import FileWatcher
-from eflycode.schema.config import LoggingConfig, ModelConfig
+from eflycode.util.file_watcher import FileWatcher
+from eflycode.util.logger import configure_logging
+from eflycode.schema.config import LoggingConfig, ModelConfig, LLMConfig, ModelEntry, WorkspaceConfig
+from eflycode.llm.advisor import initialize_builtin_advisors
 
 
 class Environment:
@@ -31,7 +33,10 @@ class Environment:
         self._initialized = False
         
         self._load_config()
+        self._initialize_advisors()
         self._setup_file_watching()
+        self._initialize_logging()
+        self._initialize_workspace()
         self._initialized = True
     
     @classmethod
@@ -74,7 +79,39 @@ class Environment:
     def _on_config_file_changed(self, file_path: str) -> None:
         """配置文件变化回调"""
         self.reload()
-    
+
+    def _initialize_logging(self) -> None:
+        """
+        初始化日志配置
+        
+        在配置加载完成后配置日志系统
+        """
+        try:
+            logging_config = self.get_logging_config()
+            configure_logging(logging_config)
+        except Exception as e:
+            print(f"日志配置初始化失败: {e}")
+
+    def _initialize_advisors(self) -> None:
+        """初始化Advisor注册"""
+        initialize_builtin_advisors()
+
+    def _initialize_workspace(self) -> None:
+        """
+        初始化工作空间配置
+        
+        如果workspace配置为空，则设置当前工作目录
+        """
+        import os
+        try:
+            workspace_config = self.get_workspace_config()
+            if workspace_config.work_dir is None:
+                # 获取当前工作目录
+                current_path = os.getcwd()
+                self.set("workspace.work_dir", current_path)
+        except Exception as e:
+            print(f"工作空间配置初始化失败: {e}")
+
     def get(self, key: str, default: Any = None) -> Any:
         """
         获取配置值
@@ -135,11 +172,43 @@ class Environment:
         """
         model_dict = self.get("model", {})
         return ModelConfig(**model_dict)
-    
+
+    def get_llm_config(self) -> LLMConfig:
+        """
+        获取LLM配置
+
+        Returns:
+            LLM配置对象
+        """
+        # 从 model config 中找到默认的模型
+        model_config = self.get_model_config()
+        # 从 model entries 中找到对应的配置
+        default_model = model_config.default
+        model_entries: List[ModelEntry] = model_config.entries or []
+        llm_entry = None
+        for entry in model_entries:
+            if entry.model == default_model:
+                llm_entry = entry
+                break
+        if llm_entry is None:
+            raise ValueError(f"未找到默认模型 '{default_model}' 的配置项")
+        return LLMConfig(**llm_entry.model_dump())
+
+    def get_workspace_config(self) -> WorkspaceConfig:
+        """
+        获取工作空间配置
+        
+        Returns:
+            工作空间配置对象
+        """
+        workspace_dict = self.get("workspace", {})
+        return WorkspaceConfig(**workspace_dict)
+
     def reload(self) -> None:
         """重新加载配置"""
         self._load_config()
         if self._initialized:
+            self._initialize_logging()
             self._notify_change()
     
     def save_to_project(self) -> bool:
@@ -182,24 +251,6 @@ class Environment:
             self._set_nested_value(full_config, key, value)
         
         return full_config
-    
-    def get_config_summary(self) -> Dict[str, Any]:
-        """
-        获取配置摘要信息
-        
-        Returns:
-            配置摘要字典
-        """
-        paths = self._config_loader.get_config_paths()
-        
-        import os
-        return {
-            "has_global_config": os.path.exists(paths["global"]),
-            "has_project_config": os.path.exists(paths["project"]),
-            "has_runtime_config": bool(self._runtime_config),
-            "total_keys": len(self._flatten_dict(self.get_full_config())),
-            "config_paths": paths
-        }
     
     def _get_nested_value(self, config: Dict[str, Any], key: str) -> Any:
         """

@@ -1,4 +1,4 @@
-from typing import List, Type, Union
+from typing import List, Union
 from eflycode.llm.advisor import Advisor, register_advisor
 from eflycode.schema.llm import LLMRequest, Message
 from eflycode.prompt.prompt_loader import PromptLoader
@@ -6,7 +6,6 @@ from eflycode.schema.llm import LLMCallResponse, LLMStreamResponse, ToolDefiniti
 from eflycode.parser.tool_call_parser import ToolCallStreamParser, ToolCallParser
 
 
-@register_advisor("buildin_tool_call_advisor")
 class ToolCallAdvisor(Advisor):
     """当模型原生不支持工具调用时，使用此 Advisor 进行工具调用"""
     

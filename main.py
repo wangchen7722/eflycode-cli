@@ -1,4 +1,4 @@
-from eflycode.env.environment import Environment
+from eflycode.env import Environment
 from eflycode.llm.openai_engine import OpenAIEngine
 from eflycode.agent.developer import Developer
 from eflycode.agent.run_loop import AgentRunLoop
@@ -16,7 +16,7 @@ def main():
     
     # 创建 LLM 引擎
     llm_engine = OpenAIEngine(
-        llm_config=environment.get_model_config(), 
+        llm_config=environment.get_llm_config(),
         advisors=["buildin_environment_advisor", "buildin_tool_call_advisor"]
     )
     

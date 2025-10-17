@@ -1,9 +1,8 @@
 from abc import abstractmethod
-from typing import Any, Dict, Optional, List, Union
+from typing import Any, Dict, Optional, List
 from eflycode.util.logger import logger
 
 from eflycode.schema.llm import (
-    LLMConfig,
     LLMRequest,
     LLMStreamResponse,
     LLMCallResponse,
@@ -11,6 +10,7 @@ from eflycode.schema.llm import (
     LLMRequestContext,
     LLMPrompt
 )
+from eflycode.schema.config import LLMConfig
 from eflycode.llm.advisor import Advisor, AdvisorChain, AdvisorRegistry
 
 
@@ -34,7 +34,7 @@ def build_generate_config(
     """构建生成配置
 
     Args:
-        llm_config: LLM配置
+        llm_config: 模型配置
         **kwargs: 其他参数
 
     Returns:

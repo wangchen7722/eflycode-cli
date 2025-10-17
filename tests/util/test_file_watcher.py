@@ -6,10 +6,8 @@ FileWatcher 哈希功能测试
 """
 
 import os
-import time
 import tempfile
 import unittest
-from pathlib import Path
 from eflycode.util.file_watcher import FileWatcher
 
 

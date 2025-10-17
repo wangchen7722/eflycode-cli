@@ -227,21 +227,6 @@ class ChatCompletionChunk(BaseModel):
     usage: Optional[Usage] = None
 
 
-class LLMConfig(BaseModel):
-    """模型配置项"""
-
-    model: str = Field(description="模型ID")
-    name: str = Field(description="模型名称")
-    provider: str = Field(description="模型提供方")
-    api_key: str = Field(description="API密钥")
-    base_url: str = Field(description="基础URL")
-    max_context_length: int = Field(description="最大上下文长度")
-    supports_native_tool_call: bool = Field(
-        default=False, description="是否支持原生函数调用"
-    )
-    temperature: float = Field(default=0.2, description="温度")
-
-
 class LLMCapability(BaseModel):
     """模型能力"""
     supports_native_tool_call: bool = Field(

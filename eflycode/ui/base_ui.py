@@ -63,14 +63,13 @@ class BaseUI(ABC):
     
     # 用户交互方法
     @abstractmethod
-    def acquire_user_input(self, text: str = "", choices: Optional[List[str]] = None, prompt: str = "") -> str:
+    def acquire_user_input(self, placeholder: str = "", choices: Optional[List[str]] = None) -> str:
         """获取用户输入
         
         Args:
-            text: 输入框占位符文本
+            placeholder: 输入框占位符文本
             choices: 可选的备选项列表，若提供则启用自动补全
-            prompt: 输入提示符，默认为空字符串
-        
+
         Returns:
             用户输入的内容
         

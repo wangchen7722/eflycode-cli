@@ -1,8 +1,7 @@
 from abc import ABC, abstractmethod
-from typing import Callable, Union, List, Optional, Dict, Any, Type
+from typing import Callable, List, Dict, Type
 from functools import reduce
 
-from eflycode.util.logger import logger
 from eflycode.schema.llm import LLMRequest, LLMCallResponse, LLMStreamResponse
 
 AdvisorCallHandler = Callable[[LLMRequest], LLMCallResponse]
@@ -197,7 +196,7 @@ class AdvisorRegistry:
         return cls._instance
     
     @classmethod
-    def register(cls, name: str, advisor_class: Type[Advisor]):
+    def register_advisor(cls, name: str, advisor_class: Type[Advisor]):
         """注册Advisor类
         
         Args:
@@ -225,6 +224,18 @@ class AdvisorRegistry:
         if name not in cls._advisors:
             raise KeyError(f"未找到名称为 '{name}' 的Advisor")
         return cls._advisors[name]
+
+    @classmethod
+    def contain_advisor(cls, name: str) -> bool:
+        """检查是否包含指定名称的Advisor
+
+        Args:
+            name: Advisor名称
+
+        Returns:
+            bool: True表示存在，False表示不存在
+        """
+        return name in cls._advisors
     
     @classmethod
     def get_advisor_priority(cls, name: str) -> int:
@@ -263,36 +274,25 @@ class AdvisorRegistry:
         cls._advisors.clear()
 
 
-def register_advisor(name: str = None):
+def register_advisor(advisor_name: str = None, advisor_class: Type[Advisor] = None):
     """Advisor注册装饰器
     
     Args:
-        name: Advisor名称，如果不指定则使用类名
-        
-    Returns:
-        装饰器函数
-        
-    Example:
-        @register_advisor("tool_call")
-        class ToolCallAdvisor(Advisor):
-            def get_priority(self) -> int:
-                return 10
-                
-            def is_builtin_advisor(self) -> bool:
-                return True
-            
-        @register_advisor()  # 使用类名作为注册名
-        class CustomAdvisor(Advisor):
-            def get_priority(self) -> int:
-                return 0
-                
-            def is_builtin_advisor(self) -> bool:
-                return False
+        advisor_name: Advisor名称，如果不指定则使用类名
+        advisor_class: Advisor类
     """
-    def decorator(advisor_class: type):
-        advisor_name = name if name is not None else advisor_class.__name__
-        
-        AdvisorRegistry.register(advisor_name, advisor_class)
-        return advisor_class
-    
-    return decorator
+    if AdvisorRegistry.contain_advisor(advisor_name):
+        raise ValueError(f"Advisor名称 '{advisor_name}' 已被注册")
+    else:
+        AdvisorRegistry.register_advisor(advisor_name, advisor_class)
+
+def get_advisor(name: str) -> Type[Advisor]:
+    """获取指定名称的Advisor类
+
+    Args:
+        name: Advisor名称
+
+    Returns:
+        type: Advisor类
+    """
+    return AdvisorRegistry.get_advisor(name)

@@ -9,13 +9,13 @@ from prompt_toolkit.styles import Style as PTKStyle
 # 全局UI配色方案
 UI_COLORS = {
     # 主要交互元素 - 采用柔和但醒目的颜色
-    "prompt": "#7c3aed",           # 提示符：紫罗兰色，现代且专业
+    "prompt": "#ffffff",           # 提示符：紫罗兰色，现代且专业
     "input": "#f8fafc",           # 输入文本：极浅灰白，柔和护眼
     "border": "#475569",          # 边框：石板灰，低调不突兀
     
     # 辅助信息元素
     "shortcut": "#64748b",        # 快捷键提示：中性石板灰
-    "placeholder": "#94a3b8",     # 占位符：浅石板灰，引导性
+    "placeholder": "#5A5A5A",     # 占位符：浅石板灰，引导性
     
     # 状态和反馈元素
     "success": "#10b981",         # 成功状态：翠绿色，清新自然
@@ -43,7 +43,7 @@ PTK_STYLE = PTKStyle.from_dict({
     
     # 辅助信息元素
     "shortcut": f"{UI_COLORS['shortcut']} italic",
-    "placeholder": f"{UI_COLORS['placeholder']} italic",
+    "placeholder": f"{UI_COLORS['placeholder']} bold italic",
     
     # 状态和反馈元素
     "success": f"{UI_COLORS['success']} bold",

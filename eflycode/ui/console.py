@@ -26,10 +26,13 @@ from prompt_toolkit.keys import Keys
 from prompt_toolkit.filters import Condition
 from prompt_toolkit.styles import Style
 
+from eflycode.constant import EFLYCODE_VERSION
 from eflycode.ui.colors import PTK_STYLE
 from eflycode.ui.base_ui import BaseUI
 from eflycode.ui.event import AgentUIEventHandlerMixin
 from eflycode.util.event_bus import EventBus
+from eflycode.env import Environment
+from eflycode.ui.command import get_builtin_commands
 
 EFLYCODE_BANNER = r"""
         _____  _          ____            _       
@@ -69,14 +72,34 @@ class ConsoleUI(BaseUI):
     def welcome(self) -> None:
         """显示欢迎信息"""
         self.clear()
-        # self.console.print(f"[bold #081776]{EFLYCODE_BANNER}[/bold #081776]")
+        environment = Environment.get_instance()
+
+        # 版本信息
         product = Text()
-        product.append(">_ ", style="grey50")
+        product.append(">_ ", style="bold grey50")
         product.append("eFlyCode", style="bold white")
         product.append(" ", style="")
-        product.append("(v0.46.0)", style="grey50")
+        product.append(f"(v{EFLYCODE_VERSION})", style="bold grey50")
+
+        # 模型和工作目录等基本信息
+        info = Text()
+        info.append("model:     ", style="bold grey50")
+        info.append(environment.get_llm_config().name, style="white")
+        info.append("\n", style="")
+        info.append("directory: ", style="bold grey50")
+        info.append(f"{environment.get_workspace_config().work_dir}", style="white")
+
+        # # 支持的命令
+        # commands = get_builtin_commands()
+        # helps = Text()
+        # helps.append("  To get started, describe a task or try one of these commands:\n\n", style="grey50")
+        # for cmd in commands:
+        #     helps.append(f"  /{cmd.name}", style="bold while")
+        #     helps.append(f" - {cmd.description}\n", style="grey50")
+
+        panel_content = Text.assemble(product, "\n\n", info)
         panel = Panel(
-            Align.left(product),
+            Align.left(panel_content),
             border_style="grey35",
             expand=False,
             padding=(0, 2),
@@ -95,13 +118,12 @@ class ConsoleUI(BaseUI):
         with self._lock:
             self.console.clear()
 
-    def acquire_user_input(self, text: str = "请输入内容…", choices: Optional[List[str]] = None, prompt: str = " > ") -> str:
+    def acquire_user_input(self, placeholder: str = "ask, code or command...", choices: Optional[List[str]] = None) -> str:
         """获取用户输入
 
         Args:
-            text: 输入框占位符文本
+            placeholder: 输入框占位符文本
             choices: 可选的备选项列表 若提供则启用自动补全
-            prompt: 输入框提示前缀
 
         Returns:
             str: 用户输入的内容
@@ -135,7 +157,7 @@ class ConsoleUI(BaseUI):
         # 输入区域和布局
         textarea = TextArea(
             multiline=True,
-            prompt=FormattedText([("class:prompt", f"{prompt}")]),
+            prompt=FormattedText([("class:prompt", f" > ")]),
             completer=completer,
             history=self._ptk_session.history,
             auto_suggest=AutoSuggestFromHistory(),
@@ -149,11 +171,10 @@ class ConsoleUI(BaseUI):
         def show_placeholder():
             return textarea.text == ""
 
-        placeholder_text = text
-        placeholder = ConditionalContainer(
+        placeholder_container = ConditionalContainer(
             Window(
                 content=FormattedTextControl(
-                    text=[("class:placeholder", placeholder_text)],
+                    text=[("class:placeholder", placeholder)],
                     show_cursor=True,
                 ),
                 height=1,
@@ -167,7 +188,7 @@ class ConsoleUI(BaseUI):
             content=textarea,
             floats=[
                 Float(
-                    content=placeholder,
+                    content=placeholder_container,
                     left=4,
                     top=0,
                     transparent=True
@@ -178,8 +199,6 @@ class ConsoleUI(BaseUI):
         body = HSplit([
             textarea_with_placeholder
         ])
-
-        frame = Frame(body=body)
 
         app = Application(
             layout=Layout(container=body),

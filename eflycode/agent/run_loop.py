@@ -92,7 +92,7 @@ class AgentRunLoop:
             
             while self._running:
                 try:
-                    user_input = self.ui.acquire_user_input(prompt="> ")
+                    user_input = self.ui.acquire_user_input()
                     
                     if not user_input.strip():
                         continue

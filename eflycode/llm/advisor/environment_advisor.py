@@ -4,7 +4,6 @@ from eflycode.util.system import get_system_environment
 from eflycode.prompt.prompt_loader import PromptLoader
 
 
-@register_advisor("buildin_environment_advisor")
 class EnvironmentAdvisor(Advisor):
     """收集当前系统环境信息并拼接到提示词末尾的 Advisor"""
     

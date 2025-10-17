@@ -14,7 +14,7 @@ class HelpCommand(BaseCommand):
     def __init__(self):
         super().__init__(
             name="help",
-            description="显示帮助信息"
+            description="显示可用命令列表"
         )
     
     def execute(self, args: str, context: CommandContext) -> CommandResult:
@@ -37,31 +37,13 @@ class HelpCommand(BaseCommand):
         return CommandResult(continue_loop=True)
 
 
-class QuitCommand(BaseCommand):
-    """退出命令"""
-    
-    def __init__(self):
-        super().__init__(
-            name="quit",
-            description="退出程序"
-        )
-    
-    def execute(self, args: str, context: CommandContext) -> CommandResult:
-        """执行退出命令"""
-        return CommandResult(
-            continue_loop=False,
-            message="再见！",
-            success=True
-        )
-
-
 class ClearCommand(BaseCommand):
     """清屏命令"""
     
     def __init__(self):
         super().__init__(
             name="clear",
-            description="清空屏幕"
+            description="清空屏幕内容"
         )
     
     def execute(self, args: str, context: CommandContext) -> CommandResult:
@@ -78,6 +60,5 @@ def get_builtin_commands() -> List[BaseCommand]:
     """
     return [
         HelpCommand(),
-        QuitCommand(),
         ClearCommand(),
     ]

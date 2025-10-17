@@ -5,6 +5,7 @@ Agent 运行循环模块
 """
 
 import json
+import sys
 from typing import Optional, List
 from enum import Enum
 
@@ -119,7 +120,7 @@ class AgentRunLoop:
                     self._state = RunLoopState.INTERRUPTING
                     self.ui.info("\n检测到中断信号")
                     self._state = RunLoopState.INTERRUPTED
-                    continue
+                    sys.exit(0)
                     
                 except Exception as e:
                     self.ui.error(f"处理输入时发生错误: {str(e)}")

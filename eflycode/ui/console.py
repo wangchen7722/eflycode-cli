@@ -12,21 +12,18 @@ from rich.text import Text
 from rich.align import Align
 
 from prompt_toolkit import PromptSession
-from prompt_toolkit.completion import CompleteEvent, WordCompleter
-from prompt_toolkit.history import InMemoryHistory
+from prompt_toolkit.history import FileHistory
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from prompt_toolkit.patch_stdout import patch_stdout
 from prompt_toolkit.key_binding import KeyBindings, KeyPressEvent
 from prompt_toolkit.formatted_text import FormattedText
 from prompt_toolkit.layout import Layout
 from prompt_toolkit.layout.controls import FormattedTextControl
-from prompt_toolkit.layout.containers import Window, HSplit, ConditionalContainer, FloatContainer, Float
+from prompt_toolkit.layout.containers import Window
 from prompt_toolkit.application import Application
-from prompt_toolkit.widgets import TextArea
 from prompt_toolkit.keys import Keys
-from prompt_toolkit.filters import Condition
 from prompt_toolkit.styles import Style
-from prompt_toolkit.completion import Completer, Completion, DynamicCompleter
+from prompt_toolkit.completion import Completer, Completion, CompleteEvent
 
 from eflycode.constant import EFLYCODE_VERSION
 from eflycode.ui.colors import PTK_STYLE
@@ -34,7 +31,7 @@ from eflycode.ui.base_ui import BaseUI
 from eflycode.ui.event import AgentUIEventHandlerMixin
 from eflycode.util.event_bus import EventBus
 from eflycode.env import Environment
-from eflycode.ui.command import get_builtin_commands
+from eflycode.ui.command import BaseCommand, get_builtin_commands
 
 EFLYCODE_BANNER = r"""
         _____  _          ____            _       
@@ -45,11 +42,11 @@ EFLYCODE_BANNER = r"""
                   |___/                           
 """
 
-class CommandCompleter(Completer):
+class SmartCompleter(Completer):
 
-    def __init__(self, commands: List[str]):
-        self.commands = commands
-        self.max_command_length = max(len(cmd) for cmd in commands) if commands else 0
+    def __init__(self):
+        self.commands: List[BaseCommand] = get_builtin_commands()
+        self.max_command_length = max(len(cmd.name) for cmd in self.commands) if self.commands else 0
 
     def get_completions(self, document: Document, complete_event: CompleteEvent) -> Iterable[Completion]:
         text = document.text_before_cursor
@@ -62,8 +59,8 @@ class CommandCompleter(Completer):
             if slash_index != -1:
                 text = text[slash_index + 1:]
                 for cmd in self.commands:
-                    if cmd.startswith(text):
-                        yield Completion(cmd, start_position=-len(text))
+                    if cmd.name.startswith(text):
+                        yield Completion(cmd.name, display=cmd.description, start_position=-len(text))
 
 
 class ConsoleUI(BaseUI):
@@ -80,15 +77,12 @@ class ConsoleUI(BaseUI):
         return cls._instance
 
     def __init__(self):
-        """初始化控制台UI"""
+        """初始化控制台 UI"""
         # 避免重复初始化
         if getattr(self, "_initialized", False):
             return
         self.console = Console(tab_size=4, highlight=False)
         self._lock = threading.Lock()
-
-        self._ptk_session = PromptSession(history=InMemoryHistory())
-
         self._initialized = True
 
 
@@ -106,19 +100,11 @@ class ConsoleUI(BaseUI):
 
         # 模型和工作目录等基本信息
         info = Text()
-        info.append("model:     ", style="bold grey50")
+        info.append("model:     ", style="grey50")
         info.append(environment.get_llm_config().name, style="white")
         info.append("\n", style="")
-        info.append("directory: ", style="bold grey50")
+        info.append("directory: ", style="grey50")
         info.append(f"{environment.get_workspace_config().work_dir}", style="white")
-
-        # # 支持的命令
-        # commands = get_builtin_commands()
-        # helps = Text()
-        # helps.append("  To get started, describe a task or try one of these commands:\n\n", style="grey50")
-        # for cmd in commands:
-        #     helps.append(f"  /{cmd.name}", style="bold while")
-        #     helps.append(f" - {cmd.description}\n", style="grey50")
 
         panel_content = Text.assemble(product, "\n\n", info)
         panel = Panel(
@@ -150,103 +136,79 @@ class ConsoleUI(BaseUI):
         Returns:
             str: 用户输入的内容
         """
-        base_completer = None
-        if choices:
-            base_completer = WordCompleter(choices, ignore_case=True)
+        key_bindings = KeyBindings()
 
-        command_completer = CommandCompleter([
-            command.name
-            for command in get_builtin_commands()
-        ])
-        completer = DynamicCompleter(
-            lambda: command_completer if textarea.text.strip().startswith("/") else base_completer
-        )
-        completer = command_completer
+        # Alt + Enter 用于插入换行
+        @key_bindings.add(Keys.Escape, Keys.Enter)
+        def _handle_ctrl_enter(event: KeyPressEvent):
+            event.current_buffer.insert_text("\n")
 
-        # 结果与取消标志
-        result: List[str] = [""]
-        cancelled: List[bool] = [False]
-
-        # 绑定 Ctrl+C 取消
-        bindings = KeyBindings()
-
-        @bindings.add(Keys.ControlC)
-        def _handle_ctrl_c(event: KeyPressEvent):
-            cancelled[0] = True
-            event.app.exit()
-
-        @bindings.add(Keys.Enter)
+        # Enter 用于提交输入
+        @key_bindings.add(Keys.Enter)
         def _handle_enter(event: KeyPressEvent):
-            if event.current_buffer.text:
-                result[0] = event.current_buffer.text
-                event.app.exit()
+            # 如果当前是补全状态，则不插入换行
+            if event.current_buffer.complete_state:
+                completion = event.current_buffer.complete_state.current_completion
+                if completion:
+                    event.current_buffer.apply_completion(completion)
+                else:
+                    if event.current_buffer.text:
+                        event.current_buffer.validate_and_handle()
+            else:
+                if event.current_buffer.text:
+                    event.current_buffer.validate_and_handle()
 
-        @bindings.add(Keys.Escape, Keys.Enter)
-        def _handle_alt_enter(event: KeyPressEvent):
-            event.current_buffer.insert_text('\n')
+        # Backspace 删除前一个字符并触发补全
+        @key_bindings.add(Keys.Backspace)
+        def _handle_backspace(event: KeyPressEvent):
+            buffer = event.current_buffer
+            if buffer.text:
+                buffer.delete_before_cursor(count=1)
+                if len(buffer.text) > 0 and buffer.text[-1] in ["/", "#", "@"]:
+                    buffer.start_completion(select_first=False)
 
-        # 输入区域和布局
-        textarea = TextArea(
-            multiline=True,
-            prompt=FormattedText([("class:prompt", f" > ")]),
-            completer=completer,
-            history=self._ptk_session.history,
-            # auto_suggest=AutoSuggestFromHistory(),
-            auto_suggest=None,
-            style="class:input",
-            wrap_lines=True,
-            focusable=True,
-            focus_on_click=True,
-            complete_while_typing=True
+        session = PromptSession(
+            history=FileHistory(Environment.get_instance().get_workspace_config().work_dir / ".eflycode_history"),
+            auto_suggest=AutoSuggestFromHistory(),
+            enable_system_prompt=False,
         )
 
-        @Condition
-        def show_placeholder():
-            return textarea.text == ""
+        # ===================== Completion ======================
+        completer = SmartCompleter()
 
-        placeholder_container = ConditionalContainer(
-            Window(
-                content=FormattedTextControl(
-                    text=[("class:placeholder", placeholder)],
-                    show_cursor=True,
-                ),
-                height=1,
-                dont_extend_height=True,
-                dont_extend_width=True,
-            ),
-            filter=show_placeholder,
-        )
+        # ===================== Prompt ======================
+        prompt = FormattedText([("class:prompt", f" > ")])
 
-        textarea_with_placeholder = FloatContainer(
-            content=textarea,
-            floats=[
-                Float(
-                    content=placeholder_container,
-                    left=4,
-                    top=0,
-                    transparent=True
-                )
-            ],
-        )
+        # ==================== Placeholder =====================
+        placeholder = FormattedText([("class:placeholder", placeholder)])
 
-        body = HSplit([
-            textarea_with_placeholder
+        # ===================== Bottom Toolbar =====================
+        default_bottom_toolbar = FormattedText([
+            ("class:bottom-toolbar.key", "[ @ ]"), ("class:bottom-toolbar.label", " Skills "),
+            ("class:bottom-toolbar.sep", "   "),
+            ("class:bottom-toolbar.key", "[ # ]"), ("class:bottom-toolbar.label", " Files "),
+            ("class:bottom-toolbar.sep", "   "),
+            ("class:bottom-toolbar.key", "[ / ]"), ("class:bottom-toolbar.label", " Commands "),
+            ("class:bottom-toolbar.sep", " " * 1000)
         ])
+        def dynamic_toolbar():
+            text = session.default_buffer.text
+            if len(text.strip()) == 0:
+                return default_bottom_toolbar
+            else:
+                return ""
 
-        app = Application(
-            layout=Layout(container=body),
-            key_bindings=bindings,
-            mouse_support=False,
-            full_screen=False,
+        return session.prompt(
+            prompt,
+            key_bindings=key_bindings,
+            completer=completer,
+            complete_while_typing=True,
+            complete_in_thread=True,
+            bottom_toolbar=dynamic_toolbar,
+            placeholder=placeholder,
             style=PTK_STYLE,
+            mouse_support=True,
         )
-
-        with patch_stdout():
-            app.run()
-
-        if cancelled[0]:
-            raise KeyboardInterrupt
-        return result[0]
 
     def exit(self) -> None:
         """退出控制台程序"""

@@ -14,7 +14,7 @@ UI_COLORS = {
     "border": "#475569",          # 边框：石板灰，低调不突兀
     
     # 辅助信息元素
-    "shortcut": "#64748b",        # 快捷键提示：中性石板灰
+    "shortcut": "#ffffff",        # 快捷键提示：中性石板灰
     "placeholder": "#5A5A5A",     # 占位符：浅石板灰，引导性
     
     # 状态和反馈元素
@@ -42,8 +42,21 @@ PTK_STYLE = PTKStyle.from_dict({
     "frame.border": UI_COLORS["border"],
     
     # 辅助信息元素
-    "shortcut": f"{UI_COLORS['shortcut']} italic",
-    "placeholder": f"{UI_COLORS['placeholder']} bold italic",
+    # "shortcut": f"{UI_COLORS['shortcut']}",
+    "shortcut": "fg:#00afff bold",
+    "bottom-toolbar": "bg:#2e2e2e fg:#ffffff",
+    "bottom-toolbar.key": "bg:#d0d0d0 fg:#000000 bold",
+    "bottom-toolbar.label": "bg:#d0d0d0 fg:#000000 bold",
+    "bottom-toolbar.sep": "bg:#d0d0d0 fg:#000000 bold",
+    "placeholder": f"{UI_COLORS['placeholder']}",
+
+    # 补全菜单样式
+    "completion-menu.completion": "bg:#222222 fg:#ffffff",
+    "completion-menu.completion.current": "bg:#00afff #ffffff",
+    # "scrollbar.background": "bg:#333333",
+    "scrollbar.button": "bg:#ffffff",
+    # "validation-toolbar": "bg:#440000 #ffffff",
+
     
     # 状态和反馈元素
     "success": f"{UI_COLORS['success']} bold",

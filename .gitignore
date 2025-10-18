@@ -12,5 +12,5 @@ research/
 .echoignore
 cache/
 
-.echo/
+.eflycode/
 .trae

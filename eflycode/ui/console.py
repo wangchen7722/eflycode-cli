@@ -104,7 +104,7 @@ class ConsoleUI(BaseUI):
         info.append(environment.get_llm_config().name, style="white")
         info.append("\n", style="")
         info.append("directory: ", style="grey50")
-        info.append(f"{environment.get_workspace_config().work_dir}", style="white")
+        info.append(f"{environment.get_runtime_config().workspace_dir}", style="white")
 
         panel_content = Text.assemble(product, "\n\n", info)
         panel = Panel(
@@ -169,9 +169,10 @@ class ConsoleUI(BaseUI):
                     buffer.start_completion(select_first=False)
 
         session = PromptSession(
-            history=FileHistory(Environment.get_instance().get_workspace_config().work_dir / ".eflycode_history"),
+            history=FileHistory(Environment.get_instance().get_runtime_config().settings_dir / ".eflycode_history"),
             auto_suggest=AutoSuggestFromHistory(),
             enable_system_prompt=False,
+            mouse_support=True,
         )
 
         # ===================== Completion ======================

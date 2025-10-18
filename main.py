@@ -17,7 +17,7 @@ def main():
     # 创建 LLM 引擎
     llm_engine = OpenAIEngine(
         llm_config=environment.get_llm_config(),
-        advisors=["buildin_environment_advisor", "buildin_tool_call_advisor"]
+        advisors=["buildin_environment_advisor", "buildin_tool_call_advisor", "buildin_logging_advisor"]
     )
     
     # 创建 Developer agent

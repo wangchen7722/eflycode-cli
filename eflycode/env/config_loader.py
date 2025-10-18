@@ -8,53 +8,58 @@ import os
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 from copy import deepcopy
-import tomllib
+import toml
 
-from eflycode.schema.config import LoggingConfig, ModelConfig
+from eflycode.util.logger import logger
+from eflycode.schema.config import AppConfig, LoggingConfig, RuntimeConfig
 
 # 默认配置
-DEFAULT_GLOBAL_CONFIG = {
+DEFAULT_CONFIG = {
     "logging": {
-        "dirpath": str(Path.home() / ".eflycode" / "logs"),
-        "filename": "echoai.log",
-        "level": "INFO",
+        "dirpath": (Path.home() / ".eflycode" / "logs").as_posix(),
+        "filename": "eflycode.log",
+        "level": "WARNING",
         "format": "{time:YYYY-MM-DD HH:mm:ss} | {level} | {file}:{function}:{line} | {message}",
         "rotation": "10 MB",
-        "retention": "10 days",
+        "retention": "14 days",
         "encoding": "utf-8"
     }
 }
 
+def to_posix(path: Path | str) -> str:
+    """将路径转换为 POSIX 格式"""
+    if isinstance(path, str):
+        path = Path(path)
+    return path.as_posix()
 
-def get_global_config_path():
+def get_global_settings_dir() -> Path:
     """获取全局配置文件路径"""
-    config_dir = os.environ.get("EFLYCODE_USER_CONFIG_DIR")
-    if not config_dir:
-        config_dir = os.path.expanduser("~/.eflycode")
-
-    return os.path.join(config_dir, "config.toml")
+    global_settings_dir = Path.home() / ".eflycode"
+    global_settings_dir.mkdir(parents=True, exist_ok=True)
+    return global_settings_dir
 
 
-def get_workspace_dir():
+def get_workspace_dir() -> Path:
     """获取工作空间目录"""
     workspace_dir = Path(os.getcwd())
     # 先检查当前运行路径下是否有 .eflycode 目录，如果没有，则尝试在上级目录查找，最多找 3 级目录
+    # 如果有 .eflycode 目录，则返回当前运行路径
     for _ in range(4):
         eflycode_dir = workspace_dir / ".eflycode"
         if eflycode_dir.exists() and eflycode_dir.is_dir():
-            return eflycode_dir
+            return workspace_dir
         # 向上一级目录
         workspace_dir = workspace_dir.parent
 
     # 如果都没找到，则返回当前工作目录下的默认路径
     eflycode_dir = Path(os.getcwd()) / ".eflycode"
     eflycode_dir.mkdir(parents=True, exist_ok=True)
-    return eflycode_dir
+    return eflycode_dir.parent
 
 
-def get_project_config_path():
+def get_project_config_path() -> Path:
     """获取项目配置文件路径"""
-    return get_workspace_dir() / "config.toml"
+    return get_workspace_dir() / ".eflycode" / "config.toml"
 
 
 def load_config_file(file_path: str) -> Optional[Dict[str, Any]]:
@@ -71,65 +76,63 @@ def load_config_file(file_path: str) -> Optional[Dict[str, Any]]:
         return None
 
     try:
-        with open(file_path, "rb") as f:
-            return tomllib.load(f)
+        with open(file_path, "r", encoding="utf-8") as f:
+            return toml.loads(f.read())
     except Exception as e:
-        print(f"加载配置文件失败 {file_path}: {e}")
+        logger.exception(f"加载配置文件失败 {file_path}: {e}")
+        return None
+    
+def dump_config_file(config: Dict[str, Any], file_path: str) -> None:
+    """
+    保存 TOML 配置文件
+    
+    Args:
+        config: 配置字典
+        file_path: 配置文件路径
+    """
+    try:
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(toml.dumps(config))
+    except Exception as e:
+        logger.exception(f"保存配置文件失败 {file_path}: {e}")
         return None
 
 
-def deep_merge_config(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+def deep_merge_config(base: Dict[str, Any], override: Dict[str, Any], is_overwrite: bool = False) -> Dict[str, Any]:
     """
     深度合并两个配置字典
     
     Args:
         base: 基础配置
         override: 覆盖配置
+        is_overwrite: 是否覆盖存在的键值对，默认 False
         
     Returns:
         合并后的配置
     """
-    result = deepcopy(base)
+    # 深度合并字典
+    merged = deepcopy(base)
 
     for key, value in override.items():
-        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+        base_value = merged.get(key)
+        
+        if base_value is None:
+            # 直接添加新键值对
+            merged[key] = deepcopy(value)
+        elif isinstance(base_value, dict) and isinstance(value, dict):
             # 递归合并字典
-            result[key] = deep_merge_config(result[key], value)
-        elif key == "entries" and isinstance(value, list) and isinstance(result.get(key), list):
-            # 特殊处理model.entries列表：按model字段合并
-            result[key] = merge_model_entries(result[key], value)
+            merged[key] = deep_merge_config(base_value, value, is_overwrite)
+        elif isinstance(base_value, list) and isinstance(value, list):
+            # 合并列表并去重
+            merged[key] = [
+                deepcopy(item) for item in set(base_value + value)
+            ]
         else:
             # 直接覆盖
-            result[key] = deepcopy(value)
+            if is_overwrite:
+                merged[key] = deepcopy(value)
 
-    return result
-
-
-def merge_model_entries(base_models: List[Dict], override_models: List[Dict]) -> List[Dict]:
-    """
-    合并模型配置列表
-    
-    Args:
-        base_models: 基础模型列表
-        override_models: 覆盖模型列表
-        
-    Returns:
-        合并后的模型列表
-    """
-    result = deepcopy(base_models)
-    base_model_map = {model.get("model"): i for i, model in enumerate(result)}
-
-    for override_model in override_models:
-        model_name = override_model.get("model")
-        if model_name and model_name in base_model_map:
-            # 更新现有模型
-            idx = base_model_map[model_name]
-            result[idx] = deep_merge_config(result[idx], override_model)
-        else:
-            # 添加新模型
-            result.append(deepcopy(override_model))
-
-    return result
+    return merged
 
 
 def create_default_global_config(config_path: str) -> None:
@@ -139,32 +142,27 @@ def create_default_global_config(config_path: str) -> None:
     Args:
         config_path: 配置文件路径
     """
-    config_dir = os.path.dirname(config_path)
-    os.makedirs(config_dir, exist_ok=True)
+    config_path = Path(config_path)
+    config_dir = config_path.parent
+    config_dir.mkdir(parents=True, exist_ok=True)
 
     with open(config_path, "w", encoding="utf-8") as f:
-        # 写入TOML格式的默认配置
-        f.write("""# EflyCode 全局配置文件
-
-[logging]
-dirpath = "logs"
-filename = "eflycode.log"
-level = "DEBUG"
-format = "{time:YYYY-MM-DD HH:mm:ss} | {level} | {file}:{function}:{line} | {message}"
-rotation = "10 MB"
-retention = "14 days"
-encoding = "utf-8"
-""")
+        toml.dump(DEFAULT_CONFIG, f)
 
 
 class ConfigLoader:
     """配置加载器"""
+    
+    SETTINGS_FOLDER = ".eflycode"
+    CONFIG_FILENAME = "config.toml"
 
     def __init__(self):
-        self._global_config_path = get_global_config_path()
-        self._project_config_path = get_project_config_path()
+        self._global_settings_dir = get_global_settings_dir()
+        self._workspace_settings_dir = get_workspace_dir() / self.SETTINGS_FOLDER
+        self._global_settings_file = self._global_settings_dir / self.CONFIG_FILENAME
+        self._workspace_settings_file = self._workspace_settings_dir / self.CONFIG_FILENAME
 
-    def load_config(self) -> Dict[str, Any]:
+    def load_config(self) -> AppConfig:
         """
         加载完整配置
         
@@ -172,36 +170,66 @@ class ConfigLoader:
             合并后的配置字典
         """
         # 从默认配置开始
-        config = deepcopy(DEFAULT_GLOBAL_CONFIG)
+        config = deepcopy(DEFAULT_CONFIG)
 
         # 加载全局配置
         global_config = self._load_global_config()
         if global_config:
-            config = deep_merge_config(config, global_config)
+            config = deep_merge_config(config, global_config, is_overwrite=True)
 
-        # 加载项目配置
-        project_config = self._load_project_config()
-        if project_config:
-            config = deep_merge_config(config, project_config)
-
-        return config
+        # 加载工作空间配置
+        workspace_config = self._load_workspace_config()
+        if workspace_config:
+            config = deep_merge_config(config, workspace_config, is_overwrite=True)
+            
+        # 设置默认配置
+        self._ensure_default_config(config)
+        
+        return AppConfig(**config)
 
     def _load_global_config(self) -> Optional[Dict[str, Any]]:
         """加载全局配置"""
-        config = load_config_file(self._global_config_path)
-        if config is None and not os.path.exists(self._global_config_path):
+        config = load_config_file(to_posix(self._global_settings_file))
+        if config is None and not self._global_settings_file.exists():
             # 创建默认全局配置
-            create_default_global_config(self._global_config_path)
-            config = load_config_file(self._global_config_path)
+            create_default_global_config(to_posix(self._global_settings_file))
+            config = load_config_file(to_posix(self._global_settings_file))
         return config
 
-    def _load_project_config(self) -> Optional[Dict[str, Any]]:
-        """加载项目配置"""
-        return load_config_file(self._project_config_path)
+    def _load_workspace_config(self) -> Optional[Dict[str, Any]]:
+        """加载工作空间配置"""
+        return load_config_file(to_posix(self._workspace_settings_file))
 
-    def save_project_config(self, config: Dict[str, Any]) -> bool:
+    def _ensure_logging_config(self, config: Dict[str, Any]) -> None:
+        """确保配置包含所有默认值"""
+        if "logging" not in config:
+            config["logging"] = DEFAULT_CONFIG["logging"]
+        else:
+            # 合并默认值
+            config["logging"] = deep_merge_config(config["logging"], DEFAULT_CONFIG["logging"], is_overwrite=False)
+            
+    def _ensure_workspace_config(self, config: Dict[str, Any]) -> None:
+        """确保配置包含所有默认值"""
+        defualt_workspace_config = {
+            "workspace_dir": to_posix(self._workspace_settings_dir.parent),
+            "settings_dir": to_posix(self._workspace_settings_dir),
+            "settings_file": to_posix(self._workspace_settings_file),
+        }
+        if "workspace" not in config:
+            config["workspace"] = defualt_workspace_config
+        else:
+            # 合并默认值
+            config["workspace"] = deep_merge_config(config["workspace"], defualt_workspace_config, is_overwrite=False)
+
+    def _ensure_default_config(self, config: Dict[str, Any]) -> None:
+        """确保配置包含所有默认值"""
+        
+        self._ensure_logging_config(config)
+        self.save_workspace_settings(config)
+
+    def save_workspace_settings(self, config: Dict[str, Any]) -> bool:
         """
-        保存项目配置
+        保存工作空间配置
         
         Args:
             config: 配置字典
@@ -210,51 +238,14 @@ class ConfigLoader:
             是否保存成功
         """
         try:
-            config_dir = os.path.dirname(self._project_config_path)
-            os.makedirs(config_dir, exist_ok=True)
-
-            # 手动写入TOML格式
-            with open(self._project_config_path, "w", encoding="utf-8") as f:
-                self._write_toml_config(config, f)
-
+            self._workspace_settings_dir.mkdir(parents=True, exist_ok=True)
+            dump_config_file(config, to_posix(self._workspace_settings_file))
+                
             return True
         except Exception as e:
-            print(f"保存项目配置失败: {e}")
+            logger.exception(f"保存工作空间配置失败: {e}")
             return False
-
-    def _write_toml_config(self, config: Dict[str, Any], file) -> None:
-        """
-        手动写入TOML格式配置
-        
-        Args:
-            config: 配置字典
-            file: 文件对象
-        """
-        # 简单的TOML写入实现
-        for section, values in config.items():
-            if isinstance(values, dict):
-                file.write(f"[{section}]\n")
-                for key, value in values.items():
-                    if isinstance(value, str):
-                        file.write(f'{key} = "{value}"\n')
-                    elif isinstance(value, bool):
-                        file.write(f'{key} = {str(value).lower()}\n')
-                    elif isinstance(value, (int, float)):
-                        file.write(f'{key} = {value}\n')
-                    elif isinstance(value, list):
-                        # 处理数组表格
-                        for item in value:
-                            if isinstance(item, dict):
-                                file.write(f"\n[[{section}.{key}]]\n")
-                                for k, v in item.items():
-                                    if isinstance(v, str):
-                                        file.write(f'{k} = "{v}"\n')
-                                    elif isinstance(v, bool):
-                                        file.write(f'{k} = {str(v).lower()}\n')
-                                    elif isinstance(v, (int, float)):
-                                        file.write(f'{k} = {v}\n')
-                file.write("\n")
-
+                
     def get_config_paths(self) -> Dict[str, str]:
         """
         获取配置文件路径
@@ -263,8 +254,8 @@ class ConfigLoader:
             包含全局和项目配置路径的字典
         """
         return {
-            "global": self._global_config_path,
-            "project": self._project_config_path
+            "global": (self._global_settings_dir / self.CONFIG_FILENAME).as_posix(),
+            "workspace": (self._workspace_settings_dir / self.CONFIG_FILENAME).as_posix()
         }
 
     def get_logging_config(self, config: Dict[str, Any]) -> LoggingConfig:
@@ -279,19 +270,20 @@ class ConfigLoader:
         """
         logging_dict = config.get("logging", {})
         return LoggingConfig(**logging_dict)
-
-    def get_model_config(self, config: Dict[str, Any]) -> ModelConfig:
+    
+    def get_runtime_config(self) -> RuntimeConfig:
         """
-        获取模型配置
+        获取运行时配置
         
-        Args:
-            config: 完整配置字典
-            
         Returns:
-            模型配置对象
+            运行时配置对象
         """
-        model_dict = config.get("model", {})
-        return ModelConfig(**model_dict)
+        runtime_config = {
+            "workspace_dir": self._workspace_settings_dir.parent.as_posix(),
+            "settings_dir": self._workspace_settings_dir.as_posix(),
+            "settings_file": self._workspace_settings_file.as_posix(),
+        }
+        return RuntimeConfig(**runtime_config)
 
     def get_workspace_dir(self) -> str:
         """

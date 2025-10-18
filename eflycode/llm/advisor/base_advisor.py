@@ -3,6 +3,7 @@ from typing import Callable, List, Dict, Type
 from functools import reduce
 
 from eflycode.schema.llm import LLMRequest, LLMCallResponse, LLMStreamResponse
+from eflycode.util.logger import logger
 
 AdvisorCallHandler = Callable[[LLMRequest], LLMCallResponse]
 AdvisorStreamHandler = Callable[[LLMRequest], LLMStreamResponse]
@@ -196,17 +197,18 @@ class AdvisorRegistry:
         return cls._instance
     
     @classmethod
-    def register_advisor(cls, name: str, advisor_class: Type[Advisor]):
+    def register_advisor(cls, name: str, advisor_class: Type[Advisor], overwrite: bool = False):
         """注册Advisor类
         
         Args:
             name: Advisor名称
             advisor_class: Advisor类
+            overwrite: 是否覆盖已有 Advisor
         """
-        if not issubclass(advisor_class, Advisor):
-            raise ValueError(f"Advisor类 {advisor_class.__name__} 必须继承自 Advisor")
-        
-        cls._advisors[name] = advisor_class
+        if name in cls._advisors and not overwrite:
+            raise ValueError(f"Advisor名称 '{name}' 已被注册")
+        else:
+            cls._advisors[name] = advisor_class
     
     @classmethod
     def get_advisor(cls, name: str) -> Type[Advisor]:
@@ -270,21 +272,22 @@ class AdvisorRegistry:
     
     @classmethod
     def clear(cls):
-        """清空所有注册的Advisor（主要用于测试）"""
+        """清空所有注册的Advisor"""
         cls._advisors.clear()
 
 
-def register_advisor(advisor_name: str = None, advisor_class: Type[Advisor] = None):
+def register_advisor(advisor_name: str = None, advisor_class: Type[Advisor] = None, overwrite: bool = False):
     """Advisor注册装饰器
     
     Args:
         advisor_name: Advisor名称，如果不指定则使用类名
         advisor_class: Advisor类
+        overwrite: 是否覆盖已存在的注册, 默认为 False
     """
     if AdvisorRegistry.contain_advisor(advisor_name):
         raise ValueError(f"Advisor名称 '{advisor_name}' 已被注册")
     else:
-        AdvisorRegistry.register_advisor(advisor_name, advisor_class)
+        AdvisorRegistry.register_advisor(advisor_name, advisor_class, overwrite)
 
 def get_advisor(name: str) -> Type[Advisor]:
     """获取指定名称的Advisor类
@@ -296,3 +299,7 @@ def get_advisor(name: str) -> Type[Advisor]:
         type: Advisor类
     """
     return AdvisorRegistry.get_advisor(name)
+
+def clear_advisors():
+    """清空所有注册的Advisor"""
+    AdvisorRegistry.clear()

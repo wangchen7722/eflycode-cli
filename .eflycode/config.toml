@@ -9,7 +9,6 @@ encoding = "utf-8"
 
 [model]
 default = "ep-20250327150955-48bsn"
-
 [[model.entries]]
 model = "ep-20250327150955-48bsn"
 name = "DeepSeek-V3 0324"
@@ -19,3 +18,8 @@ base_url = "https://ark.cn-beijing.volces.com/api/v3"
 max_context_length = 64000
 temperature = 0.2
 supports_native_tool_call = true
+
+[workspace]
+workspace_dir = "D:/Projects/eflycode"
+settings_dir = "D:/Projects/eflycode/.eflycode"
+settings_file = "D:/Projects/eflycode/.eflycode/config.toml"

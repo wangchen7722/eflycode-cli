@@ -35,11 +35,26 @@ def get_global_config_path():
     return os.path.join(config_dir, "config.toml")
 
 
+def get_workspace_dir():
+    """获取工作空间目录"""
+    workspace_dir = Path(os.getcwd())
+    # 先检查当前运行路径下是否有 .eflycode 目录，如果没有，则尝试在上级目录查找，最多找 3 级目录
+    for _ in range(4):
+        eflycode_dir = workspace_dir / ".eflycode"
+        if eflycode_dir.exists() and eflycode_dir.is_dir():
+            return eflycode_dir
+        # 向上一级目录
+        workspace_dir = workspace_dir.parent
+
+    # 如果都没找到，则返回当前工作目录下的默认路径
+    eflycode_dir = Path(os.getcwd()) / ".eflycode"
+    eflycode_dir.mkdir(parents=True, exist_ok=True)
+    return eflycode_dir
+
+
 def get_project_config_path():
     """获取项目配置文件路径"""
-    project_dir = os.getcwd()
-
-    return os.path.join(project_dir, ".eflycode", "config.toml")
+    return get_workspace_dir() / "config.toml"
 
 
 def load_config_file(file_path: str) -> Optional[Dict[str, Any]]:
@@ -52,7 +67,7 @@ def load_config_file(file_path: str) -> Optional[Dict[str, Any]]:
     Returns:
         配置字典，如果文件不存在或加载失败则返回None
     """
-    if not os.path.exists(file_path):
+    if not Path(file_path).exists():
         return None
 
     try:
@@ -277,3 +292,12 @@ class ConfigLoader:
         """
         model_dict = config.get("model", {})
         return ModelConfig(**model_dict)
+
+    def get_workspace_dir(self) -> str:
+        """
+        获取工作空间目录路径
+
+        Returns:
+            工作空间目录路径
+        """
+        return get_workspace_dir().as_posix()

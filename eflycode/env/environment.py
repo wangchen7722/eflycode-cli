@@ -102,15 +102,8 @@ class Environment:
         
         如果workspace配置为空，则设置当前工作目录
         """
-        import os
-        try:
-            workspace_config = self.get_workspace_config()
-            if workspace_config.work_dir is None:
-                # 获取当前工作目录
-                current_path = os.getcwd()
-                self.set("workspace.work_dir", current_path)
-        except Exception as e:
-            print(f"工作空间配置初始化失败: {e}")
+        workspace_dir = self._config_loader.get_workspace_dir()
+        self.set("workspace.work_dir", workspace_dir)
 
     def get(self, key: str, default: Any = None) -> Any:
         """

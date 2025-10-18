@@ -42,6 +42,7 @@ EFLYCODE_BANNER = r"""
                   |___/                           
 """
 
+
 class SmartCompleter(Completer):
 
     def __init__(self):
@@ -85,7 +86,6 @@ class ConsoleUI(BaseUI):
         self._lock = threading.Lock()
         self._initialized = True
 
-
     def welcome(self) -> None:
         """显示欢迎信息"""
         self.clear()
@@ -126,7 +126,8 @@ class ConsoleUI(BaseUI):
         with self._lock:
             self.console.clear()
 
-    def acquire_user_input(self, placeholder: str = "ask, code or command...", choices: Optional[List[str]] = None) -> str:
+    def acquire_user_input(self, placeholder: str = "ask, code or command...",
+                           choices: Optional[List[str]] = None) -> str:
         """获取用户输入
 
         Args:
@@ -191,12 +192,13 @@ class ConsoleUI(BaseUI):
             ("class:bottom-toolbar.key", "[ / ]"), ("class:bottom-toolbar.label", " Commands "),
             ("class:bottom-toolbar.sep", " " * 1000)
         ])
+
         def dynamic_toolbar():
             text = session.default_buffer.text
             if len(text.strip()) == 0:
                 return default_bottom_toolbar
             else:
-                return ""
+                return None
 
         return session.prompt(
             prompt,
@@ -204,7 +206,7 @@ class ConsoleUI(BaseUI):
             completer=completer,
             complete_while_typing=True,
             complete_in_thread=True,
-            bottom_toolbar=dynamic_toolbar,
+            # bottom_toolbar=dynamic_toolbar,
             placeholder=placeholder,
             style=PTK_STYLE,
             mouse_support=True,

@@ -43,17 +43,20 @@ PTK_STYLE = PTKStyle.from_dict({
     
     # 辅助信息元素
     "shortcut": f"{UI_COLORS['shortcut']} bold",
-    "bottom-toolbar": "bg:#2e2e2e fg:#ffffff",
-    "bottom-toolbar.key": "bg:#000000 bold",
-    "bottom-toolbar.label": "bg:#000000 bold",
-    "bottom-toolbar.sep": "bg:#000000 bold",
+    # "bottom-toolbar": "#ffffff",
+    # "bottom-toolbar.key": "bg:#5a5a5a bold",
+    # "bottom-toolbar.label": "#d0d0d0 bold",
+    # "bottom-toolbar.sep": "#d0d0d0 bold",
     "placeholder": f"{UI_COLORS['placeholder']}",
 
     # 补全菜单样式
-    "completion-menu.completion": "bg:#222222 fg:#ffffff",
-    "completion-menu.completion.current": "bg:#00afff #ffffff",
-    "scrollbar.button": "bg:#ffffff",
-
+    "completion-menu": "bg:#1e1e1e",
+    "completion-menu.completion": "bg:#2a2a2a fg:#cccccc",
+    "completion-menu.completion.current": "bg:#555555 fg:#ffffff",
+    "completion-menu.meta": "fg:#808080",
+    "completion-menu.multi-column-meta": "fg:#606060",
+    "scrollbar.background": "bg:#2a2a2a",
+    "scrollbar.button": "bg:#666666",
     
     # 状态和反馈元素
     "success": f"{UI_COLORS['success']} bold",
@@ -70,6 +73,13 @@ PTK_STYLE = PTKStyle.from_dict({
     "variable": UI_COLORS["variable"],
     "number": UI_COLORS["number"],
     "operator": f"{UI_COLORS['operator']} bold",
+
+    # 闪烁文本组件
+    "glowing.text.normal": "fg:#777777",
+    "glowing.text.near": "fg:#dddddd",
+    "glowing.text.far": "fg:#aaaaaa",
+    "glowing.text.center": "fg:#ffffff bold",
+    "glowing.text.paused": "fg:#777777",
 })
 
 # rich主题配置

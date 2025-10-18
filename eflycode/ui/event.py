@@ -9,6 +9,7 @@ class UIEventType:
     """
     UI事件类型
     """
+    SHOW_WELCOME = "show_welcome"
     PROGRESS_START = "progress_start"
     PROGRESS_UPDATE = "progress_update"
     PROGRESS_END = "progress_end"
@@ -21,7 +22,7 @@ class UIEventType:
     USER_CONFIRM = "user_confirm"
 
 
-class AgentUIEventType:
+class AgentUIEventType(UIEventType):
     """
     Agent UI事件类型
     """
@@ -53,7 +54,8 @@ class UIEventHandlerMixin(ABC):
         self._event_handlers: Dict[str, Callable[[dict], None]] = {}
         self._event_bus = event_bus
         
-        # 订阅事件总线
+        # 订阅事件总线事件
+        self._event_bus.subscribe(UIEventType.SHOW_WELCOME, self.handle_event)
         self._event_bus.subscribe(UIEventType.PROGRESS_START, self.handle_event)
         self._event_bus.subscribe(UIEventType.PROGRESS_UPDATE, self.handle_event)
         self._event_bus.subscribe(UIEventType.PROGRESS_END, self.handle_event)
@@ -73,6 +75,7 @@ class UIEventHandlerMixin(ABC):
         
     def handle_event(self, event: str, data: dict) -> None:
         """处理事件"""
+        print(f"handle_event: {event} {data}")
         handler = self._event_handlers.get(event)
         if handler:
             handler(data)
@@ -83,6 +86,11 @@ class UIEventHandlerMixin(ABC):
                 getattr(self, handler_fn)(data)
             else:
                 logger.warning(f"未注册处理函数的事件 {event}")
+
+    @abstractmethod
+    def _handle_show_welcome(self, data: dict) -> None:
+        """处理欢迎事件"""
+        ...
 
     @abstractmethod
     def _handle_progress_start(self, data: dict) -> None:

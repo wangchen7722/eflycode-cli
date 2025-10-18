@@ -6,7 +6,7 @@
 
 import os
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 from copy import deepcopy
 import toml
 
@@ -26,11 +26,13 @@ DEFAULT_CONFIG = {
     }
 }
 
+
 def to_posix(path: Path | str) -> str:
     """将路径转换为 POSIX 格式"""
     if isinstance(path, str):
         path = Path(path)
     return path.as_posix()
+
 
 def get_global_settings_dir() -> Path:
     """获取全局配置文件路径"""
@@ -81,7 +83,8 @@ def load_config_file(file_path: str) -> Optional[Dict[str, Any]]:
     except Exception as e:
         logger.exception(f"加载配置文件失败 {file_path}: {e}")
         return None
-    
+
+
 def dump_config_file(config: Dict[str, Any], file_path: str) -> None:
     """
     保存 TOML 配置文件
@@ -115,7 +118,7 @@ def deep_merge_config(base: Dict[str, Any], override: Dict[str, Any], is_overwri
 
     for key, value in override.items():
         base_value = merged.get(key)
-        
+
         if base_value is None:
             # 直接添加新键值对
             merged[key] = deepcopy(value)
@@ -152,7 +155,7 @@ def create_default_global_config(config_path: str) -> None:
 
 class ConfigLoader:
     """配置加载器"""
-    
+
     SETTINGS_FOLDER = ".eflycode"
     CONFIG_FILENAME = "config.toml"
 
@@ -181,10 +184,7 @@ class ConfigLoader:
         workspace_config = self._load_workspace_config()
         if workspace_config:
             config = deep_merge_config(config, workspace_config, is_overwrite=True)
-            
-        # 设置默认配置
-        self._ensure_default_config(config)
-        
+
         return AppConfig(**config)
 
     def _load_global_config(self) -> Optional[Dict[str, Any]]:
@@ -200,33 +200,6 @@ class ConfigLoader:
         """加载工作空间配置"""
         return load_config_file(to_posix(self._workspace_settings_file))
 
-    def _ensure_logging_config(self, config: Dict[str, Any]) -> None:
-        """确保配置包含所有默认值"""
-        if "logging" not in config:
-            config["logging"] = DEFAULT_CONFIG["logging"]
-        else:
-            # 合并默认值
-            config["logging"] = deep_merge_config(config["logging"], DEFAULT_CONFIG["logging"], is_overwrite=False)
-            
-    def _ensure_workspace_config(self, config: Dict[str, Any]) -> None:
-        """确保配置包含所有默认值"""
-        defualt_workspace_config = {
-            "workspace_dir": to_posix(self._workspace_settings_dir.parent),
-            "settings_dir": to_posix(self._workspace_settings_dir),
-            "settings_file": to_posix(self._workspace_settings_file),
-        }
-        if "workspace" not in config:
-            config["workspace"] = defualt_workspace_config
-        else:
-            # 合并默认值
-            config["workspace"] = deep_merge_config(config["workspace"], defualt_workspace_config, is_overwrite=False)
-
-    def _ensure_default_config(self, config: Dict[str, Any]) -> None:
-        """确保配置包含所有默认值"""
-        
-        self._ensure_logging_config(config)
-        self.save_workspace_settings(config)
-
     def save_workspace_settings(self, config: Dict[str, Any]) -> bool:
         """
         保存工作空间配置
@@ -240,12 +213,12 @@ class ConfigLoader:
         try:
             self._workspace_settings_dir.mkdir(parents=True, exist_ok=True)
             dump_config_file(config, to_posix(self._workspace_settings_file))
-                
+
             return True
         except Exception as e:
             logger.exception(f"保存工作空间配置失败: {e}")
             return False
-                
+
     def get_config_paths(self) -> Dict[str, str]:
         """
         获取配置文件路径
@@ -270,7 +243,7 @@ class ConfigLoader:
         """
         logging_dict = config.get("logging", {})
         return LoggingConfig(**logging_dict)
-    
+
     def get_runtime_config(self) -> RuntimeConfig:
         """
         获取运行时配置

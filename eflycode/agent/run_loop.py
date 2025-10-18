@@ -14,6 +14,7 @@ from eflycode.agent.core.agent import ConversationAgent
 from eflycode.ui.command.command_handler import CommandHandler
 from eflycode.schema.agent import AgentResponseChunk, AgentResponseChunkType
 from eflycode.schema.llm import ToolCall
+from eflycode.ui.event import AgentUIEventType
 from eflycode.util.logger import logger
 from eflycode.util.event_bus import EventBus
 
@@ -89,7 +90,8 @@ class AgentRunLoop:
         logger.info("Starting agent run loop")
         
         try:
-            self._show_welcome()
+            self.event_bus.emit(AgentUIEventType.SHOW_WELCOME)
+            # self._show_welcome()
             
             while self._running:
                 try:

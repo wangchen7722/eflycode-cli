@@ -11,20 +11,23 @@ from rich.table import Table
 from rich.text import Text
 from rich.align import Align
 
-from prompt_toolkit import PromptSession
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from prompt_toolkit.patch_stdout import patch_stdout
 from prompt_toolkit.key_binding import KeyBindings, KeyPressEvent
 from prompt_toolkit.formatted_text import FormattedText
-from prompt_toolkit.layout import Layout
-from prompt_toolkit.layout.controls import FormattedTextControl
-from prompt_toolkit.layout.containers import Window
+from prompt_toolkit.layout import CompletionsMenu, Dimension, Float, FloatContainer, HSplit, Layout, MultiColumnCompletionsMenu
+from prompt_toolkit.filters import Condition, has_focus
+from prompt_toolkit.layout.controls import FormattedTextControl, BufferControl
+from prompt_toolkit.layout.containers import Window, ConditionalContainer
 from prompt_toolkit.application import Application
 from prompt_toolkit.keys import Keys
 from prompt_toolkit.styles import Style
 from prompt_toolkit.completion import Completer, Completion, CompleteEvent
+from prompt_toolkit.buffer import Buffer
+from prompt_toolkit.lexers import PygmentsLexer
 
+from eflycode.ui.components import GlowingTextWidget
 from eflycode.constant import EFLYCODE_VERSION
 from eflycode.ui.colors import PTK_STYLE
 from eflycode.ui.base_ui import BaseUI
@@ -47,6 +50,8 @@ class SmartCompleter(Completer):
 
     def __init__(self):
         self.commands: List[BaseCommand] = get_builtin_commands()
+        self.skills: List[str] = []
+        self.files: List[str] = []
         self.max_command_length = max(len(cmd.name) for cmd in self.commands) if self.commands else 0
 
     def get_completions(self, document: Document, complete_event: CompleteEvent) -> Iterable[Completion]:
@@ -137,7 +142,18 @@ class ConsoleUI(BaseUI):
         Returns:
             str: 用户输入的内容
         """
+        application = [None]
+
+        def get_app() -> Application:
+            return application[0]
+
+        # ===================== Key Bindings ======================
         key_bindings = KeyBindings()
+
+        # Ctrl + C 用于取消输入
+        @key_bindings.add(Keys.ControlC)
+        def _handle_ctrl_c(event: KeyPressEvent):
+            event.app.exit(exception=KeyboardInterrupt)
 
         # Alt + Enter 用于插入换行
         @key_bindings.add(Keys.Escape, Keys.Enter)
@@ -168,50 +184,131 @@ class ConsoleUI(BaseUI):
                 if len(buffer.text) > 0 and buffer.text[-1] in ["/", "#", "@"]:
                     buffer.start_completion(select_first=False)
 
-        session = PromptSession(
+        # ===================== Buffer =====================
+        def accept_handler(buffer: Buffer):
+            app = get_app()
+            if app is None:
+                return
+            app.exit(
+                result=buffer.document.text
+            )
+            return True
+
+        input_buffer = Buffer(
+            completer=SmartCompleter(),
+            complete_while_typing=True,
             history=FileHistory(Environment.get_instance().get_runtime_config().settings_dir / ".eflycode_history"),
             auto_suggest=AutoSuggestFromHistory(),
-            enable_system_prompt=False,
-            mouse_support=True,
+            multiline=True,
+            accept_handler=accept_handler,
         )
-
-        # ===================== Completion ======================
-        completer = SmartCompleter()
-
-        # ===================== Prompt ======================
-        prompt = FormattedText([("class:prompt", f" > ")])
-
-        # ==================== Placeholder =====================
-        placeholder = FormattedText([("class:placeholder", placeholder)])
 
         # ===================== Bottom Toolbar =====================
-        default_bottom_toolbar = FormattedText([
-            ("class:bottom-toolbar.key", "[ @ ]"), ("class:bottom-toolbar.label", " Skills "),
-            ("class:bottom-toolbar.sep", "   "),
-            ("class:bottom-toolbar.key", "[ # ]"), ("class:bottom-toolbar.label", " Files "),
-            ("class:bottom-toolbar.sep", "   "),
-            ("class:bottom-toolbar.key", "[ / ]"), ("class:bottom-toolbar.label", " Commands "),
-            ("class:bottom-toolbar.sep", " " * 1000)
-        ])
+        @Condition
+        def toolbar_condition():
+            return input_buffer.text.strip() == ""
 
-        def dynamic_toolbar():
-            text = session.default_buffer.text
-            if len(text.strip()) == 0:
-                return default_bottom_toolbar
+        def toolbar_content():
+            return FormattedText([
+                ("", "[ @ ]"), ("", " Skills "),
+                ("", "   "),
+                ("", "[ # ]"), ("", " Files "),
+                ("", "   "),
+                ("", "[ / ]"), ("", " Commands "),
+            ])
+
+        toolbar_window = ConditionalContainer(
+            Window(
+                FormattedTextControl(lambda: toolbar_content()),
+                height=1,
+            ),
+            filter=toolbar_condition
+        )
+
+        # ===================== Completion =====================
+        completions_float = Float(
+            xcursor=True,
+            ycursor=True,
+            transparent=True,
+            content=CompletionsMenu(
+                max_height=5,
+                scroll_offset=1,
+                extra_filter=has_focus(input_buffer)
+            )
+        )
+
+        multi_completions_float = Float(
+            xcursor=True,
+            ycursor=True,
+            transparent=True,
+            content=MultiColumnCompletionsMenu(
+                extra_filter=has_focus(input_buffer)
+            )
+        )
+
+        # ===================== Input Window =====================
+        PROMPT_TEXT = " > "
+
+        def get_line_prefix(line_number: int, wrap_count: int) -> FormattedText:
+            if line_number == 0:
+                return FormattedText([("class:prompt", PROMPT_TEXT)])
             else:
-                return None
+                return FormattedText([("class:prompt", " " * len(PROMPT_TEXT))])
 
-        return session.prompt(
-            prompt,
+        empty_window = Window(height=1, char=" ", dont_extend_height=True)
+        input_window = Window(
+            BufferControl(
+                buffer=input_buffer,
+            ),
+            height=Dimension(min=1, max=5, preferred=1),
+            wrap_lines=True,
+            get_line_prefix=get_line_prefix,
+            dont_extend_height=True,
+        )
+
+        # ==================== Placeholder =====================
+        @Condition
+        def placeholder_condition():
+            return input_buffer.text.strip() == ""
+
+        placeholder_window = ConditionalContainer(
+            Window(
+                FormattedTextControl(
+                    lambda: FormattedText([("class:placeholder", placeholder)])
+                ),
+                height=1,
+            ),
+            filter=placeholder_condition
+        )
+        placeholder_float = Float(
+            left=len(PROMPT_TEXT),
+            top=0,
+            hide_when_covering_content=True,
+            content=placeholder_window,
+        )
+
+        root_container = FloatContainer(
+            content=HSplit([
+                input_window,
+                empty_window,
+                toolbar_window,
+            ]),
+            floats=[completions_float, multi_completions_float, placeholder_float],
+        )
+
+        layout = Layout(root_container, focused_element=input_window)
+
+        application[0] = Application(
+            layout=layout,
             key_bindings=key_bindings,
-            completer=completer,
-            complete_while_typing=True,
-            complete_in_thread=True,
-            # bottom_toolbar=dynamic_toolbar,
-            placeholder=placeholder,
             style=PTK_STYLE,
             mouse_support=True,
+            full_screen=False,
         )
+        result = get_app().run(
+            handle_sigint=True,
+        )
+        return result
 
     def exit(self) -> None:
         """退出控制台程序"""
@@ -494,76 +591,80 @@ class ConsoleEventUI(AgentUIEventHandlerMixin, ConsoleUI):
     """
 
     def __init__(self, event_bus: EventBus) -> None:
-        super().__init__(event_bus)
+        AgentUIEventHandlerMixin.__init__(self, event_bus)
+        ConsoleUI.__init__(self)
+
+    def _handle_show_welcome(self, data: dict) -> None:
+        self.welcome()
 
     def _handle_think_start(self, data: dict) -> None:
-        pass
+        print("handle_think_start", data)
 
     def _handle_think_update(self, data: dict) -> None:
-        pass
+        print("handle_think_update", data)
 
     def _handle_think_end(self, data: dict) -> None:
-        pass
+        print("handle_think_end", data)
 
     def _handle_message_start(self, data: dict) -> None:
-        pass
+        print("handle_message_start", data)
 
     def _handle_message_update(self, data: dict) -> None:
-        pass
+        print("handle_message_update", data)
 
     def _handle_message_end(self, data: dict) -> None:
-        pass
+        print("handle_message_end", data)
 
     def _handle_tool_call_start(self, data: dict) -> None:
-        pass
+        print("handle_tool_call_start", data)
 
     def _handle_tool_call_end(self, data: dict) -> None:
-        pass
+        print("handle_tool_call_end", data)
 
     def _handle_tool_call_finish(self, data: dict) -> None:
-        pass
+        print("handle_tool_call_finish", data)
 
     def _handle_tool_call_error(self, data: dict) -> None:
-        pass
+        print("handle_tool_call_error", data)
 
     def _handle_code_diff(self, data: dict) -> None:
-        pass
+        print("handle_code_diff", data)
 
     def _handle_terminal_exec_start(self, data: dict) -> None:
-        pass
+        print("handle_terminal_exec_start", data)
 
     def _handle_terminal_exec_running(self, data: dict) -> None:
-        pass
+        print("handle_terminal_exec_running", data)
 
     def _handle_terminal_exec_end(self, data: dict) -> None:
-        pass
+        print("handle_terminal_exec_end", data)
 
     def _handle_progress_start(self, data: dict) -> None:
-        pass
+        print("handle_progress_start", data)
 
     def _handle_progress_update(self, data: dict) -> None:
-        pass
+        print("handle_progress_update", data)
 
     def _handle_progress_end(self, data: dict) -> None:
-        pass
+        print("handle_progress_end", data)
 
     def _handle_file_open(self, data: dict) -> None:
-        pass
+        print("handle_file_open", data)
 
     def _handle_file_update(self, data: dict) -> None:
-        pass
+        print("handle_file_update", data)
 
     def _handle_info(self, data: dict) -> None:
-        pass
+        print("handle_info", data)
 
     def _handle_warning(self, data: dict) -> None:
-        pass
+        print("handle_warning", data)
 
     def _handle_error(self, data: dict) -> None:
-        pass
+        print("handle_error", data)
 
     def _handle_user_input(self, data: dict) -> None:
-        pass
+        print("handle_user_input", data)
 
     def _handle_user_confirm(self, data: dict) -> None:
-        pass
+        print("handle_user_confirm", data)

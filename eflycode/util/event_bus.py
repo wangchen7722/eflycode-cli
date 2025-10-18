@@ -47,7 +47,7 @@ class EventBus:
             
             for listener in self._subscribers.get(event, []):
                 try:
-                    listener(**data or {})
+                    listener(event, data or {})
                 except Exception as e:
                     logger.exception(f"订阅者 {listener.__name__} 处理事件 {event}时 触发异常: {e}")
                     continue

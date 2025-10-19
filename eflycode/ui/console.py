@@ -665,8 +665,6 @@ class ConsoleAgentUI(ConsoleUI):
         # 恢复主界面
         self.show_main()
 
-            # 清理引用
-            # self.tool_call_widget = None
         if result:
             self.panel(
                 titles=["Tool Call - " + name],

@@ -6,7 +6,7 @@ Agent 运行循环模块
 
 import json
 import sys
-from typing import Optional, List
+from typing import Literal, Optional, List
 from enum import Enum
 
 from eflycode.ui.base_ui import BaseUI
@@ -14,7 +14,7 @@ from eflycode.agent.core.agent import ConversationAgent
 from eflycode.ui.command.command_handler import CommandHandler
 from eflycode.schema.agent import AgentResponseChunk, AgentResponseChunkType
 from eflycode.schema.llm import ToolCall
-from eflycode.ui.event import AgentUIEventType
+from eflycode.ui.event import AgentUIEventType, UIEventType
 from eflycode.util.logger import logger
 from eflycode.util.event_bus import EventBus
 
@@ -91,8 +91,7 @@ class AgentRunLoop:
         
         try:
             self.event_bus.emit(AgentUIEventType.SHOW_WELCOME)
-            # self._show_welcome()
-            
+
             while self._running:
                 try:
                     user_input = self.ui.acquire_user_input()
@@ -178,7 +177,7 @@ class AgentRunLoop:
             self.ui.print(response.content)
         
         if response.tool_calls:
-            self._display_tool_calls(response.tool_calls)
+            self._display_tool_calls(AgentResponseChunkType.TOOL_CALL_END, response.tool_calls)
     
     def _display_response_chunk(self, chunk: AgentResponseChunk) -> None:
         """显示响应块"""
@@ -186,25 +185,29 @@ class AgentRunLoop:
             self.ui.print(chunk.content, end="")
             self.ui.flush()
         elif chunk.type in [AgentResponseChunkType.TOOL_CALL_START, AgentResponseChunkType.TOOL_CALL_END] and chunk.tool_calls:
-            self._display_tool_calls(chunk.tool_calls)
+            self._display_tool_calls(chunk.type, chunk.tool_calls)
         elif chunk.type == AgentResponseChunkType.DONE:
             self.ui.print("\n")
     
-    def _display_tool_calls(self, tool_calls: List[ToolCall]) -> None:
+    def _display_tool_calls(self, tool_call_type: Literal[AgentResponseChunkType.TOOL_CALL_START, AgentResponseChunkType.TOOL_CALL_END], tool_calls: List[ToolCall]) -> None:
         """显示工具调用信息"""
         for tool_call in tool_calls:
             tool_name = tool_call.function.name
             try:
                 tool_args = json.loads(tool_call.function.arguments)
-                args_display = json.dumps(tool_args, ensure_ascii=False, indent=2)
             except json.JSONDecodeError:
-                args_display = tool_call.function.arguments
-            
-            self.ui.panel(
-                [f"工具调用: {tool_name}"],
-                f"参数:\n{args_display}" if args_display else "",
-                color="blue"
-            )
+                tool_args = tool_call.function.arguments
+
+            if tool_call_type == AgentResponseChunkType.TOOL_CALL_START:
+                self.event_bus.emit(AgentUIEventType.TOOL_CALL_START, {
+                    "tool_name": tool_name
+                })
+            else:
+                self.event_bus.emit(AgentUIEventType.TOOL_CALL_END, {
+                    "tool_name": tool_name,
+                    "tool_args": tool_args,
+                })
+
     
     def stop(self) -> None:
         """停止运行循环"""

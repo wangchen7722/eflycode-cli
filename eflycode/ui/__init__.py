@@ -1,8 +1,8 @@
-from .console import ConsoleUI, ConsoleEventUI
+from .console import ConsoleUI, ConsoleAgentEventUI
 from .event import AgentUIEventType
 
 __all__ = [
     "ConsoleUI",
-    "ConsoleEventUI",
+    "ConsoleAgentEventUI",
     "AgentUIEventType",
 ]

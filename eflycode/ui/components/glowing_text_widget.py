@@ -105,8 +105,13 @@ class GlowingTextWidget(Window):
             text (str): 要显示的文本
         """
         with self._lock:
+            # 如果新内容不必原始内容短，那么保持原始内容的闪烁索引
+            # 否则，将闪烁索引重置为0
+            if len(text) <= len(self.text):
+                self._highlight_index = min(self._highlight_index, len(text) - 1)
+            else:
+                self._highlight_index = 0
             self.text = text
-            self._highlight_index = 0
         self._invalidate()
 
     def toggle(self):

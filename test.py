@@ -1,65 +1,44 @@
-# test_thinking_widget.py
 import time
-from prompt_toolkit.application import Application
-from prompt_toolkit.layout import Layout, HSplit
-from prompt_toolkit.key_binding import KeyBindings
-from prompt_toolkit.keys import Keys
-from prompt_toolkit.styles import merge_styles
-from prompt_toolkit.styles import Style
+import threading
+from prompt_toolkit.shortcuts import print_formatted_text
 
-from eflycode.ui.components.thinking_widget import ThinkingWidget
-from eflycode.ui.components.glowing_text_widget import GlowingTextWidget
-from eflycode.ui.colors import PTK_STYLE
+from eflycode.ui.console import ConsoleAgentUI
 
 
 def main():
-    kb = KeyBindings()
-    app_ref = [None]
+    ui = ConsoleAgentUI()
 
-    # 创建思考组件
-    thinking = ThinkingWidget(lambda: app_ref[0], "🤔 Thinking...", "")
+    def simulate():
+        """模拟工具调用的生命周期"""
+        time.sleep(1)
+        print_formatted_text("=== 🧩 启动工具调用 ===")
 
-    # 布局
-    layout = Layout(HSplit([
-        thinking,
-    ]))
+        # 启动动画
+        ui.start_tool_call("正在调用 SmartCodeAnalyzer() ...")
 
-    # 样式
-    base_style = Style.from_dict({
-        "glowing.text.normal": "fg:#777777",
-        "glowing.text.far": "fg:#aaaaaa",
-        "glowing.text.near": "fg:#dddddd",
-        "glowing.text.center": "fg:#ffffff bold",
-        "glowing.text.paused": "fg:#555555 italic",
-    })
-    style = merge_styles([base_style, PTK_STYLE])
+        # 模拟执行过程
+        time.sleep(2)
+        ui.execute_tool_call("SmartCodeAnalyzer", "code='print(1+1)'")
 
-    app = Application(
-        layout=layout,
-        key_bindings=kb,
-        style=style,
-        full_screen=False,
-    )
-    app_ref[0] = app
+        # 模拟执行中
+        time.sleep(2)
+        ui.execute_tool_call("SmartCodeAnalyzer", "code='sum(range(10))'")
 
-    # 绑定键盘事件
-    @kb.add(Keys.ControlS)
-    def _(event):
-        thinking.start_thinking()
-        thinking.append_content("Thinking deeply about something...")
-        thinking.append_content("Analyzing data...")
-        thinking.append_content("Drawing conclusions...")
-        event.app.invalidate()
+        # 模拟执行结束
+        time.sleep(2)
+        ui.finish_tool_call("SmartCodeAnalyzer", "code='sum(range(10))'", "55")
 
-    @kb.add(Keys.ControlE)
-    def _(event):
-        thinking.stop_thinking()
+        ui.print("=== ✅ 工具调用完成 ===")
 
-    @kb.add(Keys.ControlC)
-    def _(event):
-        event.app.exit()
+        # 延迟退出
+        time.sleep(1)
+        ui.exit()
 
-    app.run()
+    # 后台线程运行模拟逻辑
+    threading.Thread(target=simulate, daemon=True).start()
+
+    # 启动 UI 应用（主线程）
+    ui.run()
 
 
 if __name__ == "__main__":

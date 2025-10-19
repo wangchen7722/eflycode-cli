@@ -1,9 +1,11 @@
 import sys
 import threading
 import os
+import time
 from typing import Iterable, List, Literal, Optional, Sequence
 
 from prompt_toolkit.document import Document
+from pydantic_core.core_schema import FloatSchema
 from rich.console import Console
 from rich.panel import Panel
 from rich.progress import Progress, TextColumn, BarColumn
@@ -25,9 +27,8 @@ from prompt_toolkit.keys import Keys
 from prompt_toolkit.styles import Style
 from prompt_toolkit.completion import Completer, Completion, CompleteEvent
 from prompt_toolkit.buffer import Buffer
-from prompt_toolkit.lexers import PygmentsLexer
 
-from eflycode.ui.components import GlowingTextWidget
+from eflycode.ui.components import GlowingTextWidget, ThinkingWidget
 from eflycode.constant import EFLYCODE_VERSION
 from eflycode.ui.colors import PTK_STYLE
 from eflycode.ui.base_ui import BaseUI
@@ -583,16 +584,136 @@ class ConsoleUI(BaseUI):
         if cls._instance is None or not getattr(cls._instance, "_initialized", False):
             raise RuntimeError("ConsoleUI尚未初始化 请先调用构造函数")
         return cls._instance
+    
+
+class ConsoleAgentUI(ConsoleUI):
+    """控制台应用程序类 处理用户输入输出和UI展示"""
+    
+    def __init__(self) -> None:
+        """初始化控制台应用程序"""
+        super().__init__()
+        self._lock = threading.Lock()
+        self._main_layout = self._create_main_layout()
+        self._context: Literal["tool_call", "thinking", ""] = ""
+        self._app: Application = Application(
+            layout=self._main_layout,
+            style=PTK_STYLE,
+            mouse_support=True,
+            full_screen=False,
+            erase_when_done=False
+        )
+        
+        # 功能组件
+        self.tool_call_widget: GlowingTextWidget | None = None
+        self.thinking_widget: ThinkingWidget | None = None
+        self._running = False
+
+    def get_app(self) -> Application:
+        """获取应用程序实例"""
+        return self._app
+    
+    def run(self):
+        self._running = True
+        self._app.run(handle_sigint=True)
+        
+    def exit(self):
+        with self._lock:
+            self._running = False
+            if self._app.is_running:
+                self._app.exit()
+    
+    def show_main(self):
+        """显示主界面"""
+        with self._lock:
+            self._context = ""
+            self._app.layout = self._main_layout
+            self._app.invalidate()
+        
+    def start_tool_call(self, name: str):
+        """开始工具调用"""
+        with self._lock:
+            self._context = "tool_call"
+            self._app.layout = self._create_tool_call_layout(f"Calling {name}")
+            if self.tool_call_widget:
+                self.tool_call_widget.start()
+            self._app.invalidate()
+            
+    def execute_tool_call(self, name: str, args: str):
+        """执行工具调用"""
+        with self._lock:
+            if self._context != "tool_call":
+                return
+            
+            if self.tool_call_widget:
+                # 将内容替换为执行信息
+                self.tool_call_widget.update_text(f"Running {name}")
+                
+    def finish_tool_call(self, name: str, args: str, result: str):
+        """完成工具调用"""
+        with self._lock:
+            if self._context != "tool_call":
+                return
+            
+            if self.tool_call_widget:
+                # 停止动画线程
+                self.tool_call_widget.stop()
+                # 将内容替换为执行信息
+                self.tool_call_widget.update_text(f"{name} completed")
+                # 手动刷新
+                self._app.invalidate()
+            
+        # 恢复主界面
+        self.show_main()
+
+            # 清理引用
+            # self.tool_call_widget = None
+        if result:
+            self.panel(
+                titles=["Tool Call - " + name],
+                content="\n".join([f"Args: {args}", f"Result: {result}"]),
+                color="green",
+            )
+            
+        
+    def _create_main_layout(self) -> Layout:
+        """创建主布局"""
+        return Layout(
+            Window(
+                content=FormattedTextControl(text=""),
+                height=1,
+                dont_extend_height=True,
+            )
+        )
+
+    def _create_tool_call_layout(self, display_text: str) -> Layout:
+        """创建工具调用布局"""
+        self.tool_call_widget = GlowingTextWidget(
+            get_app=self.get_app,
+            text=display_text,
+            speed=0.05,
+            radius=1,
+        )
+        return Layout(self.tool_call_widget)
+        
+    def _create_thinking_layout(self) -> Layout:
+        """创建思考布局"""
+        self.thinking_widget = ThinkingWidget(
+            get_app=self.get_app,
+            title="Thinking...",
+        )
+        return Layout(self.thinking_widget)
 
 
-class ConsoleEventUI(AgentUIEventHandlerMixin, ConsoleUI):
+class ConsoleAgentEventUI(AgentUIEventHandlerMixin, ConsoleAgentUI):
     """
     控制台事件UI
     """
 
     def __init__(self, event_bus: EventBus) -> None:
         AgentUIEventHandlerMixin.__init__(self, event_bus)
-        ConsoleUI.__init__(self)
+        ConsoleAgentUI.__init__(self)
+
+        # 是否处于输入状态
 
     def _handle_show_welcome(self, data: dict) -> None:
         self.welcome()

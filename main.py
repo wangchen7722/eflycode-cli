@@ -2,7 +2,7 @@ from eflycode.env import Environment
 from eflycode.llm.openai_engine import OpenAIEngine
 from eflycode.agent.developer import Developer
 from eflycode.agent.run_loop import AgentRunLoop
-from eflycode.ui.console import ConsoleUI, ConsoleEventUI
+from eflycode.ui.console import ConsoleUI, ConsoleAgentEventUI
 from eflycode.util.event_bus import EventBus
 
 
@@ -24,7 +24,7 @@ def main():
     developer = Developer(llm_engine=llm_engine)
     
     # 创建控制台 UI
-    ui = ConsoleEventUI(event_bus)
+    ui = ConsoleAgentEventUI(event_bus)
     
     # 创建运行循环
     run_loop = AgentRunLoop(

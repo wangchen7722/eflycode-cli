@@ -61,23 +61,6 @@ class BaseUI(ABC):
         """
         pass
     
-    # 用户交互方法
-    @abstractmethod
-    def acquire_user_input(self, placeholder: str = "", choices: Optional[List[str]] = None) -> str:
-        """获取用户输入
-        
-        Args:
-            placeholder: 输入框占位符文本
-            choices: 可选的备选项列表，若提供则启用自动补全
-
-        Returns:
-            用户输入的内容
-        
-        Raises:
-            KeyboardInterrupt: 用户取消输入时抛出
-        """
-        pass
-    
     @abstractmethod
     def choices(self, tip: str, choices: List[str]) -> str:
         """提供一个选择列表供用户选择

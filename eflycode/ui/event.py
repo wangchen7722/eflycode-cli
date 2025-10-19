@@ -9,6 +9,9 @@ class UIEventType:
     """
     UI事件类型
     """
+    START_APP = "start_app"
+    STOP_APP = "stop_app"
+
     SHOW_WELCOME = "show_welcome"
     PROGRESS_START = "progress_start"
     PROGRESS_UPDATE = "progress_update"
@@ -19,6 +22,7 @@ class UIEventType:
     WARNING = "warning"
     ERROR = "error"
     USER_INPUT = "user_input"
+    USER_INPUT_RECEIVED = "user_input_received"
     USER_CONFIRM = "user_confirm"
 
 
@@ -55,6 +59,8 @@ class UIEventHandlerMixin(ABC):
         self._event_bus = event_bus
         
         # 订阅事件总线事件
+        self._event_bus.subscribe(UIEventType.START_APP, self.handle_event)
+        self._event_bus.subscribe(UIEventType.STOP_APP, self.handle_event)
         self._event_bus.subscribe(UIEventType.SHOW_WELCOME, self.handle_event)
         self._event_bus.subscribe(UIEventType.PROGRESS_START, self.handle_event)
         self._event_bus.subscribe(UIEventType.PROGRESS_UPDATE, self.handle_event)
@@ -86,6 +92,16 @@ class UIEventHandlerMixin(ABC):
                 getattr(self, handler_fn)(data)
             else:
                 logger.warning(f"未注册处理函数的事件 {event}")
+
+    @abstractmethod
+    def _handle_start_app(self, data: dict) -> None:
+        """处理启动应用事件"""
+        ...
+
+    @abstractmethod
+    def _handle_stop_app(self, data: dict) -> None:
+        """处理停止应用事件"""
+        ...
 
     @abstractmethod
     def _handle_show_welcome(self, data: dict) -> None:

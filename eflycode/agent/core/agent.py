@@ -9,7 +9,6 @@ from typing import (
 )
 
 from eflycode.agent.core.response_converter import AgentResponseConverter
-from eflycode.ui.console import ConsoleUI
 from eflycode.llm.llm_engine import LLMEngine
 from eflycode.schema.llm import LLMPrompt, Message, ToolCall, ToolDefinition
 from eflycode.schema.tool import ToolError

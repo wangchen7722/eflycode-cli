@@ -26,7 +26,7 @@ def main():
 
         # 模拟执行结束
         time.sleep(2)
-        ui.finish_tool_call("SmartCodeAnalyzer", "code='sum(range(10))'", "55")
+        ui.fail_tool_call("SmartCodeAnalyzer", "code='sum(range(10))'", "55")
 
         ui.print("=== ✅ 工具调用完成 ===")
 

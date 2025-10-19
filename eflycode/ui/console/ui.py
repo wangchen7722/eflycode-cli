@@ -4,8 +4,6 @@ import os
 import time
 from typing import Iterable, List, Literal, Optional, Sequence
 
-from prompt_toolkit.document import Document
-from pydantic_core.core_schema import FloatSchema
 from rich.console import Console
 from rich.panel import Panel
 from rich.progress import Progress, TextColumn, BarColumn
@@ -13,12 +11,14 @@ from rich.table import Table
 from rich.text import Text
 from rich.align import Align
 
+from prompt_toolkit.document import Document
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from prompt_toolkit.patch_stdout import patch_stdout
 from prompt_toolkit.key_binding import KeyBindings, KeyPressEvent
 from prompt_toolkit.formatted_text import FormattedText
-from prompt_toolkit.layout import CompletionsMenu, Dimension, Float, FloatContainer, HSplit, Layout, MultiColumnCompletionsMenu
+from prompt_toolkit.layout import CompletionsMenu, Dimension, Float, FloatContainer, HSplit, Layout, \
+    MultiColumnCompletionsMenu
 from prompt_toolkit.filters import Condition, has_focus
 from prompt_toolkit.layout.controls import FormattedTextControl, BufferControl
 from prompt_toolkit.layout.containers import Window, ConditionalContainer
@@ -89,7 +89,6 @@ class ConsoleUI(BaseUI):
         if getattr(self, "_initialized", False):
             return
         self.console = Console(tab_size=4, highlight=False)
-        self._lock = threading.Lock()
         self._initialized = True
 
     def welcome(self) -> None:
@@ -124,13 +123,11 @@ class ConsoleUI(BaseUI):
 
     def flush(self) -> None:
         """刷新控制台输出"""
-        with self._lock:
-            self.console.file.flush()
+        self.console.file.flush()
 
     def clear(self) -> None:
         """清空控制台屏幕"""
-        with self._lock:
-            self.console.clear()
+        self.console.clear()
 
     def acquire_user_input(self, placeholder: str = "ask, code or command...",
                            choices: Optional[List[str]] = None) -> str:
@@ -313,8 +310,7 @@ class ConsoleUI(BaseUI):
 
     def exit(self) -> None:
         """退出控制台程序"""
-        with self._lock:
-            self.console.print("[green]Bye!!![/green]")
+        self.console.print("[green]Bye!!![/green]")
         sys.exit(0)
 
     def progress(self, description: str, iterable, total=None):
@@ -339,23 +335,22 @@ class ConsoleUI(BaseUI):
             except TypeError:
                 total = None
 
-        with self._lock:
-            progress = Progress(
-                TextColumn("[bright_green]{task.description}", style="bold"),
-                BarColumn(),
-                TextColumn("[bright_blue][progress.percentage]{task.percentage:>3.0f}%"),
-                console=self.console
-            )
+        progress = Progress(
+            TextColumn("[bright_green]{task.description}", style="bold"),
+            BarColumn(),
+            TextColumn("[bright_blue][progress.percentage]{task.percentage:>3.0f}%"),
+            console=self.console
+        )
 
-            with progress:
-                task = progress.add_task(description, total=total)
+        with progress:
+            task = progress.add_task(description, total=total)
 
-                try:
-                    for item in iterable:
-                        yield item
-                        progress.advance(task, 1)
-                except Exception as e:
-                    raise e
+            try:
+                for item in iterable:
+                    yield item
+                    progress.advance(task, 1)
+            except Exception as e:
+                raise e
 
     def help(self, commands: List[List[str]]) -> None:
         """显示帮助信息
@@ -375,9 +370,8 @@ class ConsoleUI(BaseUI):
         Args:
             text: 要显示的信息内容
         """
-        with self._lock:
-            end = kwargs.pop("end", "\n")
-            self.console.print(text, end=end, **kwargs)
+        end = kwargs.pop("end", "\n")
+        self.console.print(text, end=end, **kwargs)
 
     def error(self, message: str) -> None:
         """显示错误信息
@@ -385,8 +379,7 @@ class ConsoleUI(BaseUI):
         Args:
             message: 错误信息
         """
-        with self._lock:
-            self.console.print(f"[red]{message}[/red]")
+        self.console.print(f"[red]{message}[/red]")
 
     def success(self, message: str) -> None:
         """显示成功信息
@@ -394,8 +387,7 @@ class ConsoleUI(BaseUI):
         Args:
             message: 成功信息
         """
-        with self._lock:
-            self.console.print(f"[green]{message}[/green]")
+        self.console.print(f"[green]{message}[/green]")
 
     def warning(self, message: str) -> None:
         """显示警告信息
@@ -403,8 +395,7 @@ class ConsoleUI(BaseUI):
         Args:
             message: 警告信息
         """
-        with self._lock:
-            self.console.print(f"[yellow]{message}[/yellow]")
+        self.console.print(f"[yellow]{message}[/yellow]")
 
     def panel(self, titles: Sequence[str], content: str, color: str = "green",
               align: Literal["default", "left", "center", "right", "full"] = "default",
@@ -429,8 +420,7 @@ class ConsoleUI(BaseUI):
             title_align="left",
             border_style=border_style
         )
-        with self._lock:
-            self.console.print(panel)
+        self.console.print(panel)
 
     def table(self, title: str, columns: List[str], rows: List[List[str]]) -> None:
         """显示表格内容
@@ -450,8 +440,7 @@ class ConsoleUI(BaseUI):
         for row in rows:
             table.add_row(*row)
 
-        with self._lock:
-            self.console.print(table)
+        self.console.print(table)
 
     def choices(self, tip: str, choices: List[str]) -> str:
         """提供一个可滚动的选择列表供用户选择
@@ -569,8 +558,7 @@ class ConsoleUI(BaseUI):
             text: 要打印的文本内容
             end: 打印结束时的字符串，默认为换行符
         """
-        with self._lock:
-            self.console.print(text, end=end)
+        self.console.print(text, end=end)
 
     @classmethod
     def get_instance(cls) -> "ConsoleUI":
@@ -584,11 +572,11 @@ class ConsoleUI(BaseUI):
         if cls._instance is None or not getattr(cls._instance, "_initialized", False):
             raise RuntimeError("ConsoleUI尚未初始化 请先调用构造函数")
         return cls._instance
-    
+
 
 class ConsoleAgentUI(ConsoleUI):
     """控制台应用程序类 处理用户输入输出和UI展示"""
-    
+
     def __init__(self) -> None:
         """初始化控制台应用程序"""
         super().__init__()
@@ -602,7 +590,7 @@ class ConsoleAgentUI(ConsoleUI):
             full_screen=False,
             erase_when_done=False
         )
-        
+
         # 功能组件
         self.tool_call_widget: GlowingTextWidget | None = None
         self.thinking_widget: ThinkingWidget | None = None
@@ -611,24 +599,24 @@ class ConsoleAgentUI(ConsoleUI):
     def get_app(self) -> Application:
         """获取应用程序实例"""
         return self._app
-    
+
     def run(self):
         self._running = True
         self._app.run(handle_sigint=True)
-        
+
     def exit(self):
         with self._lock:
             self._running = False
             if self._app.is_running:
                 self._app.exit()
-    
+
     def show_main(self):
         """显示主界面"""
         with self._lock:
             self._context = ""
             self._app.layout = self._main_layout
             self._app.invalidate()
-        
+
     def start_tool_call(self, name: str):
         """开始工具调用"""
         with self._lock:
@@ -637,23 +625,23 @@ class ConsoleAgentUI(ConsoleUI):
             if self.tool_call_widget:
                 self.tool_call_widget.start()
             self._app.invalidate()
-            
+
     def execute_tool_call(self, name: str, args: str):
         """执行工具调用"""
         with self._lock:
             if self._context != "tool_call":
                 return
-            
+
             if self.tool_call_widget:
                 # 将内容替换为执行信息
                 self.tool_call_widget.update_text(f"Running {name}")
-                
+
     def finish_tool_call(self, name: str, args: str, result: str):
         """完成工具调用"""
         with self._lock:
             if self._context != "tool_call":
                 return
-            
+
             if self.tool_call_widget:
                 # 停止动画线程
                 self.tool_call_widget.stop()
@@ -661,7 +649,7 @@ class ConsoleAgentUI(ConsoleUI):
                 self.tool_call_widget.update_text(f"{name} completed")
                 # 手动刷新
                 self._app.invalidate()
-            
+
         # 恢复主界面
         self.show_main()
 
@@ -671,8 +659,31 @@ class ConsoleAgentUI(ConsoleUI):
                 content="\n".join([f"Args: {args}", f"Result: {result}"]),
                 color="green",
             )
-            
-        
+
+    def fail_tool_call(self, name: str, args: str, error: str):
+        """失败工具调用"""
+        with self._lock:
+            if self._context != "tool_call":
+                return
+
+            if self.tool_call_widget:
+                # 停止动画线程
+                self.tool_call_widget.stop()
+                # 将内容替换为执行信息
+                self.tool_call_widget.update_text(f"{name} failed")
+                # 手动刷新
+                self._app.invalidate()
+
+        # 恢复主界面
+        self.show_main()
+
+        if error:
+            self.panel(
+                titles=["Tool Call - " + name],
+                content="\n".join([f"Args: {args}", f"Error: {error}"]),
+                color="red",
+            )
+
     def _create_main_layout(self) -> Layout:
         """创建主布局"""
         return Layout(
@@ -692,7 +703,7 @@ class ConsoleAgentUI(ConsoleUI):
             radius=1,
         )
         return Layout(self.tool_call_widget)
-        
+
     def _create_thinking_layout(self) -> Layout:
         """创建思考布局"""
         self.thinking_widget = ThinkingWidget(
@@ -710,8 +721,6 @@ class ConsoleAgentEventUI(AgentUIEventHandlerMixin, ConsoleAgentUI):
     def __init__(self, event_bus: EventBus) -> None:
         AgentUIEventHandlerMixin.__init__(self, event_bus)
         ConsoleAgentUI.__init__(self)
-
-        # 是否处于输入状态
 
     def _handle_show_welcome(self, data: dict) -> None:
         self.welcome()
@@ -735,16 +744,16 @@ class ConsoleAgentEventUI(AgentUIEventHandlerMixin, ConsoleAgentUI):
         print("handle_message_end", data)
 
     def _handle_tool_call_start(self, data: dict) -> None:
-        print("handle_tool_call_start", data)
+        self.start_tool_call(data["name"])
 
     def _handle_tool_call_end(self, data: dict) -> None:
-        print("handle_tool_call_end", data)
+        self.execute_tool_call(data["name"], data["args"])
 
     def _handle_tool_call_finish(self, data: dict) -> None:
-        print("handle_tool_call_finish", data)
+        self.finish_tool_call(data["name"], data["args"], data["result"])
 
     def _handle_tool_call_error(self, data: dict) -> None:
-        print("handle_tool_call_error", data)
+        self.fail_tool_call(data["name"], data["args"], data["error"])
 
     def _handle_code_diff(self, data: dict) -> None:
         print("handle_code_diff", data)

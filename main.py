@@ -2,7 +2,7 @@ from eflycode.env import Environment
 from eflycode.llm.openai_engine import OpenAIEngine
 from eflycode.agent.developer import Developer
 from eflycode.agent.run_loop import AgentRunLoop
-from eflycode.ui.console import ConsoleUI, ConsoleAgentEventUI
+from eflycode.ui.console.app import ConsoleAgentEventUI
 from eflycode.util.event_bus import EventBus
 
 

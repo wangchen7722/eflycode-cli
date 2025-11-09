@@ -11,8 +11,11 @@ class UIEventType:
     """
     START_APP = "start_app"
     STOP_APP = "stop_app"
+    QUIT_UI = "quit_ui"  # 新增：专门用于UI退出的事件
 
     SHOW_WELCOME = "show_welcome"
+    SHOW_HELP = "show_help"
+    CLEAR_SCREEN = "clear_screen"
     PROGRESS_START = "progress_start"
     PROGRESS_UPDATE = "progress_update"
     PROGRESS_END = "progress_end"
@@ -62,6 +65,8 @@ class UIEventHandlerMixin(ABC):
         self._event_bus.subscribe(UIEventType.START_APP, self.handle_event)
         self._event_bus.subscribe(UIEventType.STOP_APP, self.handle_event)
         self._event_bus.subscribe(UIEventType.SHOW_WELCOME, self.handle_event)
+        self._event_bus.subscribe(UIEventType.SHOW_HELP, self.handle_event)
+        self._event_bus.subscribe(UIEventType.CLEAR_SCREEN, self.handle_event)
         self._event_bus.subscribe(UIEventType.PROGRESS_START, self.handle_event)
         self._event_bus.subscribe(UIEventType.PROGRESS_UPDATE, self.handle_event)
         self._event_bus.subscribe(UIEventType.PROGRESS_END, self.handle_event)
@@ -105,7 +110,17 @@ class UIEventHandlerMixin(ABC):
 
     @abstractmethod
     def _handle_show_welcome(self, data: dict) -> None:
-        """处理欢迎事件"""
+        """处理显示欢迎信息事件"""
+        ...
+
+    @abstractmethod
+    def _handle_show_help(self, data: dict) -> None:
+        """处理显示帮助信息事件"""
+        ...
+
+    @abstractmethod
+    def _handle_clear_screen(self, data: dict) -> None:
+        """处理清屏事件"""
         ...
 
     @abstractmethod

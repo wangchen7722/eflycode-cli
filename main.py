@@ -1,41 +1,28 @@
-from eflycode.env import Environment
-from eflycode.llm.openai_engine import OpenAIEngine
-from eflycode.agent.developer import Developer
-from eflycode.agent.run_loop import AgentRunLoop
-from eflycode.ui.console.app import ConsoleAgentEventUI
-from eflycode.util.event_bus import EventBus
+from eflycode import get_application_context
 
 
 def main():
     """主函数，启动 Developer agent 的交互式会话"""
     
-    # 获取环境配置
-    environment = Environment.get_instance()
-    # 事件总线
-    event_bus = EventBus()
+    # 获取应用程序上下文
+    app_context = get_application_context()
     
-    # 创建 LLM 引擎
-    llm_engine = OpenAIEngine(
-        llm_config=environment.get_llm_config(),
-        advisors=["buildin_environment_advisor", "buildin_tool_call_advisor", "buildin_logging_advisor"]
-    )
+    # 启动应用程序上下文（会自动初始化Environment和EventBus）
+    app_context.start()
     
-    # 创建 Developer agent
-    developer = Developer(llm_engine=llm_engine)
+    # 使用AgentRegistry创建developer agent
+    # agent_registry = app_context.get_agent_registry()
+    # llm_engine = app_context.create_llm_engine()
+    # developer = agent_registry.create_agent("developer", llm_engine)
+    # run_loop = app_context.create_agent_run_loop(agent=developer, stream_output=True)
+    # main_app = app_context.create_main_ui_app()
     
-    # 创建控制台 UI
-    ui = ConsoleAgentEventUI(event_bus)
+    # 严格按序启动：先初始化UI（完成订阅），再启动AgentRunLoop
+    # main_app.initialize()  # 完成UI初始化和事件订阅
+    # run_loop.start_in_background()  # 启动Agent运行循环（后台线程）
     
-    # 创建运行循环
-    run_loop = AgentRunLoop(
-        agent=developer,
-        ui=ui,
-        stream_output=True,
-        event_bus=event_bus,
-    )
-    
-    # 启动运行循环
-    run_loop.run()
+    # 启动主UI应用程序（主线程阻塞）
+    # main_app.run()
 
 
 if __name__ == "__main__":

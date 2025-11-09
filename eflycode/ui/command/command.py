@@ -72,14 +72,14 @@ class BaseCommand(ABC):
 class CommandContext:
     """命令执行上下文"""
     
-    def __init__(self, ui, run_loop=None):
+    def __init__(self, event_bus, run_loop=None):
         """初始化命令上下文
         
         Args:
-            ui: 用户界面实例
+            event_bus: 事件总线实例
             run_loop: 运行循环实例
         """
-        self.ui = ui
+        self.event_bus = event_bus
         self.run_loop = run_loop
         self.data: Dict[str, Any] = {}
     

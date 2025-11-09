@@ -6,6 +6,7 @@
 from typing import List
 
 from eflycode.ui.command.command import BaseCommand, CommandContext, CommandResult
+from eflycode.ui.event import UIEventType
 
 
 class HelpCommand(BaseCommand):
@@ -19,22 +20,14 @@ class HelpCommand(BaseCommand):
     
     def execute(self, args: str, context: CommandContext) -> CommandResult:
         """执行帮助命令"""
-        commands = []
+        # 通过事件总线请求显示帮助信息
+        context.event_bus.emit(UIEventType.SHOW_HELP, {})
         
-        # 获取命令处理器中的注册中心
-        if hasattr(context, 'ui') and hasattr(context.ui, 'parent_handler'):
-            registry = context.ui.parent_handler.registry
-            for command in registry.list_commands():
-                commands.append([
-                    f"/{command.name}", command.description
-                ])
-        
-        if commands:
-            context.ui.help(commands)
-        else:
-            context.ui.info("暂无可用命令")
-        
-        return CommandResult(continue_loop=True)
+        return CommandResult(
+            continue_loop=True,
+            message="显示帮助信息",
+            success=True
+        )
 
 
 class ClearCommand(BaseCommand):
@@ -48,8 +41,13 @@ class ClearCommand(BaseCommand):
     
     def execute(self, args: str, context: CommandContext) -> CommandResult:
         """执行清屏命令"""
-        context.ui.clear()
-        return CommandResult(continue_loop=True)
+        context.event_bus.emit(UIEventType.CLEAR_SCREEN, {})
+        
+        return CommandResult(
+            continue_loop=True,
+            message="屏幕已清空",
+            success=True
+        )
 
 
 def get_builtin_commands() -> List[BaseCommand]:

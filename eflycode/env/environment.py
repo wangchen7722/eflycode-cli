@@ -10,7 +10,7 @@ from threading import Lock
 from eflycode.env.config_loader import ConfigLoader
 from eflycode.util.file_watcher import FileWatcher
 from eflycode.util.logger import configure_logging, logger
-from eflycode.schema.config import AppConfig, LoggingConfig, ModelConfig, LLMConfig, ModelEntry, RuntimeConfig
+from eflycode.schema.config import AppConfig, ModelConfig, LLMConfig, ModelEntry, RuntimeConfig
 from eflycode.llm.advisor import initialize_advisors
 
 
@@ -99,8 +99,8 @@ class Environment:
         self._initialize_logging()
         self._setup_file_watching()
 
-        # 重新初始化内置 Advisor 注册
-        initialize_advisors()
+        # 注意：不在这里初始化 Advisor，避免循环依赖
+        # initialize_advisors() 将在 ApplicationContext 中调用
 
     def save_workspace_settings(self) -> None:
         """

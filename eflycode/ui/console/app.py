@@ -12,43 +12,23 @@ from prompt_toolkit.keys import Keys
 from prompt_toolkit.completion import Completer, Completion, CompleteEvent
 from prompt_toolkit.buffer import Buffer
 
-from eflycode.ui.event import UIEventType
+from eflycode.ui.event import UIEventType, AgentUIEventType, AgentUIEventHandlerMixin
 from eflycode.ui.console.ui import ConsoleUI
 from eflycode.ui.components import GlowingTextWidget, ThinkingWidget, InputWidget
 from eflycode.ui.colors import PTK_STYLE
-from eflycode.ui.event import AgentUIEventHandlerMixin
 from eflycode.util.event_bus import EventBus
+from eflycode.util.logger import logger
 from eflycode.env import Environment
 from eflycode.ui.command import BaseCommand, get_builtin_commands
+from eflycode.ui.console.completer import SmartCompleter
 
-
-class SmartCompleter(Completer):
-
-    def __init__(self):
-        self.commands: List[BaseCommand] = get_builtin_commands()
-        self.skills: List[str] = []
-        self.files: List[str] = []
-        self.max_command_length = max(len(cmd.name) for cmd in self.commands) if self.commands else 0
-
-    def get_completions(self, document: Document, complete_event: CompleteEvent) -> Iterable[Completion]:
-        text = document.text_before_cursor
-        if len(text) > 0:
-            # 从当前光标位置向前取出与最大命令长度相同的文本进行匹配
-            start_pos = max(0, len(text) - self.max_command_length)
-            text = text[start_pos:]
-            # 判断这段文本中是否含有 "/"，若含有找到 "/" 后的内容
-            slash_index = text.rfind("/")
-            if slash_index != -1:
-                text = text[slash_index + 1:]
-                for cmd in self.commands:
-                    if cmd.name.startswith(text):
-                        yield Completion(cmd.name, display=cmd.description, start_position=-len(text))
 
 class UIState(Enum):
     """UI 状态"""
     INPUT = "input"
     TOOL_CALL = "tool_call"
     THINKING = "thinking"
+
 
 class ConsoleUIApplication(ConsoleUI):
     """控制台 UI 应用"""
@@ -90,95 +70,154 @@ class ConsoleUIApplication(ConsoleUI):
         self._app_thread = threading.Thread(target=_run, daemon=True)
         self._app_thread.start()
 
-    def stop(self):
-        """安全停止"""
-        with self._lock:
-            if self._running and self._app.is_running:
-                self._app.exit()
+    def run(self) -> None:
+        """
+        启动UI应用程序（阻塞式运行）
+        
+        Raises:
+            KeyboardInterrupt: 用户中断
+            Exception: 其他运行时异常
+        """
+        self._running = True
+        try:
+            # 使用handle_sigint=False，通过按键绑定处理Ctrl+C
+            self._app.run(handle_sigint=False)
+        finally:
             self._running = False
-            if self._app_thread:
-                self._app_thread.join(timeout=1.0)
-                self._app_thread = None
+
+    def exit(self) -> None:
+        """
+        安全退出UI应用程序
+        可以从任何线程调用
+        """
+        if self._app and self._app.is_running:
+            self._app.exit()
+
+    def is_running(self) -> bool:
+        """
+        检查UI应用程序是否正在运行
+        
+        Returns:
+            bool: 是否正在运行
+        """
+        return self._running and self._app and self._app.is_running
+
+    def run_ui(self, fn: Callable[[], None]) -> None:
+        """
+        在UI线程中安全执行函数
+        可以从任何线程调用，确保UI操作在正确的线程中执行
+        
+        Args:
+            fn: 要在UI线程中执行的函数
+        """
+        if self._app and self._app.is_running:
+            # 使用prompt_toolkit的call_from_executor将操作封送到UI线程
+            self._app.call_from_executor(fn)
+        else:
+            # 如果UI未运行，直接执行（通常在初始化阶段）
+            fn()
+
+    def stop(self) -> None:
+        """
+        停止UI应用程序（别名方法）
+        """
+        self.exit()
 
     def start_tool_call(self, name: str):
         """开始工具调用"""
-        with self._lock:
-            self._state = UIState.TOOL_CALL
-            self._app.layout = self._create_tool_call_layout(f"Calling {name}")
-            if self._tool_call_widget:
-                self._tool_call_widget.start()
-            self._app.invalidate()
+        def _start_tool_call():
+            with self._lock:
+                self._state = UIState.TOOL_CALL
+                self._app.layout = self._create_tool_call_layout(f"Calling {name}")
+                if self._tool_call_widget:
+                    self._tool_call_widget.start()
+                self._app.invalidate()
+        
+        self.run_ui(_start_tool_call)
 
     def execute_tool_call(self, name: str, args: str):
         """执行工具调用"""
-        with self._lock:
-            if self._state != UIState.TOOL_CALL:
-                return
+        def _execute_tool_call():
+            with self._lock:
+                if self._state != UIState.TOOL_CALL:
+                    return
 
-            if self._tool_call_widget:
-                # 将内容替换为执行信息
-                self._tool_call_widget.update_text(f"Running {name}")
+                if self._tool_call_widget:
+                    # 将内容替换为执行信息
+                    self._tool_call_widget.update_text(f"Running {name}")
+        
+        self.run_ui(_execute_tool_call)
 
     def finish_tool_call(self, name: str, args: str, result: str):
         """完成工具调用"""
-        with self._lock:
-            if self._state != UIState.TOOL_CALL:
-                return
+        def _finish_tool_call():
+            with self._lock:
+                if self._state != UIState.TOOL_CALL:
+                    return
 
-            if self._tool_call_widget:
-                # 停止动画线程
-                self._tool_call_widget.stop()
-                # 将内容替换为执行信息
-                self._tool_call_widget.update_text(f"{name} completed")
-                # 手动刷新
-                self._app.invalidate()
+                if self._tool_call_widget:
+                    # 停止动画线程
+                    self._tool_call_widget.stop()
+                    # 将内容替换为执行信息
+                    self._tool_call_widget.update_text(f"{name} completed")
+                    # 手动刷新
+                    self._app.invalidate()
 
-        if result:
-            self.panel(
-                titles=["Tool Call - " + name],
-                content="\n".join([f"Args: {args}", f"Result: {result}"]),
-                color="green",
-            )
+            if result:
+                self.panel(
+                    titles=["Tool Call - " + name],
+                    content="\n".join([f"Args: {args}", f"Result: {result}"]),
+                    color="green",
+                )
+
+            self.show_input()
         
-        self.show_input()
+        self.run_ui(_finish_tool_call)
 
     def fail_tool_call(self, name: str, args: str, error: str):
         """失败工具调用"""
-        with self._lock:
-            if self._state != UIState.TOOL_CALL:
-                return
+        def _fail_tool_call():
+            with self._lock:
+                if self._state != UIState.TOOL_CALL:
+                    return
 
-            if self._tool_call_widget:
-                # 停止动画线程
-                self._tool_call_widget.stop()
-                # 将内容替换为执行信息
-                self._tool_call_widget.update_text(f"{name} failed")
-                # 手动刷新
-                self._app.invalidate()
+                if self._tool_call_widget:
+                    # 停止动画线程
+                    self._tool_call_widget.stop()
+                    # 将内容替换为执行信息
+                    self._tool_call_widget.update_text(f"{name} failed")
+                    # 手动刷新
+                    self._app.invalidate()
 
-        if error:
-            self.panel(
-                titles=["Tool Call - " + name],
-                content="\n".join([f"Args: {args}", f"Error: {error}"]),
-                color="red",
-            )
+            if error:
+                self.panel(
+                    titles=["Tool Call - " + name],
+                    content="\n".join([f"Args: {args}", f"Error: {error}"]),
+                    color="red",
+                )
 
-        self.show_input()
+            self.show_input()
+        
+        self.run_ui(_fail_tool_call)
 
     def show_input(self):
         """显示输入窗口"""
-        with self._lock:
-            self._state = UIState.INPUT
-            self._app.layout = self._create_input_layout()
-            self._app.invalidate()
+        def _show_input():
+            with self._lock:
+                self._state = UIState.INPUT
+                self._app.layout = self._create_input_layout()
+                self._app.invalidate()
+        
+        self.run_ui(_show_input)
 
     def _mount_key_bindings(self) -> None:
         """挂载按键绑定"""
         key_bindings = KeyBindings()
-         # Ctrl + C 用于取消输入
+
+        # Ctrl + C 用于优雅退出应用
         @key_bindings.add(Keys.ControlC)
         def _handle_ctrl_c(event: KeyPressEvent):
-            print("Ctrl+C pressed, exiting...")
+            logger.info("收到中断信号，正在关闭...")
             self._event_bus.emit(UIEventType.STOP_APP)
 
         # Alt + Enter 用于插入换行
@@ -210,6 +249,7 @@ class ConsoleUIApplication(ConsoleUI):
                 buffer.delete_before_cursor(count=1)
                 if len(buffer.text) > 0 and buffer.text[-1] in ["/", "#", "@"]:
                     buffer.start_completion(select_first=False)
+
         self._app.key_bindings = key_bindings
 
     def _create_tool_call_layout(self, text: str) -> Layout:
@@ -226,7 +266,7 @@ class ConsoleUIApplication(ConsoleUI):
         input_window = self._create_input_window()
         return Layout(input_window)
 
-    def _create_tool_call_window(self, text: str) -> None:
+    def _create_tool_call_window(self, text: str):
         self._tool_call_widget = GlowingTextWidget(
             get_app=lambda: self._app,
             text=text,
@@ -235,14 +275,14 @@ class ConsoleUIApplication(ConsoleUI):
         )
         return self._tool_call_widget
 
-    def _create_thinking_window(self) -> None:
+    def _create_thinking_window(self):
         self._thinking_widget = ThinkingWidget(
             get_app=lambda: self._app,
             title="Thinking...",
         )
         return self._thinking_widget
 
-    def _create_input_window(self, placeholder: str = "ask, code, or command...") -> None:
+    def _create_input_window(self, placeholder: str = "ask, code, or command..."):
         """创建输入窗口"""
 
         def accept_handler(buffer: Buffer):
@@ -269,7 +309,7 @@ class ConsoleUIApplication(ConsoleUI):
             placeholder=placeholder
         )
         return self._input_widget
-        
+
 
 class ConsoleAgentEventUI(AgentUIEventHandlerMixin):
     """
@@ -279,87 +319,195 @@ class ConsoleAgentEventUI(AgentUIEventHandlerMixin):
     def __init__(self, event_bus: EventBus) -> None:
         AgentUIEventHandlerMixin.__init__(self, event_bus)
         self.app = ConsoleUIApplication(on_input_callback=self._emit_user_input, event_bus=self._event_bus)
+        
+        # 显式订阅Agent相关事件
+        self._event_bus.subscribe(AgentUIEventType.MESSAGE_START, self.handle_event)
+        self._event_bus.subscribe(AgentUIEventType.MESSAGE_UPDATE, self.handle_event)
+        self._event_bus.subscribe(AgentUIEventType.MESSAGE_END, self.handle_event)
+        self._event_bus.subscribe(AgentUIEventType.TOOL_CALL_START, self.handle_event)
+        self._event_bus.subscribe(AgentUIEventType.TOOL_CALL_END, self.handle_event)
+        self._event_bus.subscribe(AgentUIEventType.TOOL_CALL_FINISH, self.handle_event)
+        self._event_bus.subscribe(AgentUIEventType.TOOL_CALL_ERROR, self.handle_event)
+        
+        # 订阅UI相关事件
+        self._event_bus.subscribe(UIEventType.START_APP, self.handle_event)
+        self._event_bus.subscribe(UIEventType.SHOW_WELCOME, self.handle_event)
+        self._event_bus.subscribe(UIEventType.SHOW_HELP, self.handle_event)
+        self._event_bus.subscribe(UIEventType.CLEAR_SCREEN, self.handle_event)
+        self._event_bus.subscribe(UIEventType.INFO, self.handle_event)
+        self._event_bus.subscribe(UIEventType.WARNING, self.handle_event)
+        self._event_bus.subscribe(UIEventType.ERROR, self.handle_event)
 
     def _emit_user_input(self, text: str) -> None:
         self._event_bus.emit(UIEventType.USER_INPUT_RECEIVED, {"text": text})
 
     def _handle_start_app(self, data: dict) -> None:
-        self.app.run_in_background()
+        """处理启动应用事件"""
+        # UI现在直接在主线程运行，不需要额外启动
+        pass
 
     def _handle_stop_app(self, data: dict) -> None:
-        self.app.stop()
+        """处理停止应用事件"""
+        logger.info("收到停止应用事件，发送UI退出信号...")
+        # 不直接退出UI，而是发送QUIT_UI事件让主线程处理
+        self._event_bus.emit(UIEventType.QUIT_UI)
 
     def _handle_show_welcome(self, data: dict) -> None:
-        self.app.welcome()
+        """处理显示欢迎事件"""
+        def _show_welcome():
+            self.app.welcome()
+        self.app.run_ui(_show_welcome)
+
+    def _handle_show_help(self, data: dict) -> None:
+        """处理显示帮助事件"""
+        def _show_help():
+            self.app.help()
+        self.app.run_ui(_show_help)
+
+    def _handle_clear_screen(self, data: dict) -> None:
+        """处理清屏事件"""
+        def _clear_screen():
+            self.app.clear()
+        self.app.run_ui(_clear_screen)
 
     def _handle_think_start(self, data: dict) -> None:
-        print("handle_think_start", data)
+        """处理思考开始事件"""
+        # TODO: 实现思考状态UI显示
+        pass
 
     def _handle_think_update(self, data: dict) -> None:
-        print("handle_think_update", data)
+        """处理思考更新事件"""
+        # TODO: 实现思考内容更新
+        pass
 
     def _handle_think_end(self, data: dict) -> None:
-        print("handle_think_end", data)
+        """处理思考结束事件"""
+        # TODO: 实现思考状态结束
+        pass
 
     def _handle_message_start(self, data: dict) -> None:
-        print("handle_message_start", data)
+        """处理消息开始事件"""
+        # TODO: 实现消息显示开始
+        pass
 
     def _handle_message_update(self, data: dict) -> None:
-        print("handle_message_update", data)
+        """处理消息更新事件"""
+        text = data.get("text", "")
+        if text:
+            # 通过安全接口显示消息内容
+            def _show_message():
+                self.app.info(text)
+            self.app.run_ui(_show_message)
 
     def _handle_message_end(self, data: dict) -> None:
-        print("handle_message_end", data)
+        """处理消息结束事件"""
+        # TODO: 实现消息显示结束
+        pass
 
     def _handle_tool_call_start(self, data: dict) -> None:
-        self.app.start_tool_call(data["name"])
+        """处理工具调用开始事件"""
+        name = data.get("name", "")
+        if name:
+            self.app.start_tool_call(name)
 
     def _handle_tool_call_end(self, data: dict) -> None:
-        self.app.execute_tool_call(data["name"], data["args"])
+        """处理工具调用结束事件"""
+        name = data.get("name", "")
+        args = data.get("args", {})
+        if name:
+            self.app.execute_tool_call(name, str(args))
 
     def _handle_tool_call_finish(self, data: dict) -> None:
-        self.app.finish_tool_call(data["name"], data["args"], data["result"])
+        """处理工具调用完成事件"""
+        name = data.get("name", "")
+        args = data.get("args", {})
+        result = data.get("result", "")
+        if name:
+            self.app.finish_tool_call(name, str(args), result)
 
     def _handle_tool_call_error(self, data: dict) -> None:
-        self.app.fail_tool_call(data["name"], data["args"], data["error"])
+        """处理工具调用错误事件"""
+        name = data.get("name", "")
+        args = data.get("args", {})
+        error = data.get("error", "")
+        if name:
+            self.app.fail_tool_call(name, str(args), error)
 
     def _handle_code_diff(self, data: dict) -> None:
-        print("handle_code_diff", data)
+        """处理代码差异事件"""
+        # TODO: 实现代码差异显示
+        pass
 
     def _handle_terminal_exec_start(self, data: dict) -> None:
-        print("handle_terminal_exec_start", data)
+        """处理终端执行开始事件"""
+        # TODO: 实现终端执行状态显示
+        pass
 
     def _handle_terminal_exec_running(self, data: dict) -> None:
-        print("handle_terminal_exec_running", data)
+        """处理终端执行运行事件"""
+        # TODO: 实现终端执行进度显示
+        pass
 
     def _handle_terminal_exec_end(self, data: dict) -> None:
-        print("handle_terminal_exec_end", data)
+        """处理终端执行结束事件"""
+        # TODO: 实现终端执行结果显示
+        pass
 
     def _handle_progress_start(self, data: dict) -> None:
-        print("handle_progress_start", data)
+        """处理进度开始事件"""
+        # TODO: 实现进度条显示
+        pass
 
     def _handle_progress_update(self, data: dict) -> None:
-        print("handle_progress_update", data)
+        """处理进度更新事件"""
+        # TODO: 实现进度更新
+        pass
 
     def _handle_progress_end(self, data: dict) -> None:
-        print("handle_progress_end", data)
+        """处理进度结束事件"""
+        # TODO: 实现进度完成
+        pass
 
     def _handle_file_open(self, data: dict) -> None:
-        print("handle_file_open", data)
+        """处理文件打开事件"""
+        # TODO: 实现文件打开显示
+        pass
 
     def _handle_file_update(self, data: dict) -> None:
-        print("handle_file_update", data)
-
-    def _handle_info(self, data: dict) -> None:
-        print("handle_info", data)
-
-    def _handle_warning(self, data: dict) -> None:
-        print("handle_warning", data)
-
-    def _handle_error(self, data: dict) -> None:
-        self.app.error(data["error"])
+        """处理文件更新事件"""
+        # TODO: 实现文件更新显示
+        pass
 
     def _handle_user_input(self, data: dict) -> None:
-        print("handle_user_input", data)
+        """处理用户输入事件"""
+        # TODO: 实现用户输入处理
+        pass
+
+    def _handle_info(self, data: dict) -> None:
+        """处理信息事件"""
+        message = data.get("message", "")
+        if message:
+            def _show_info():
+                self.app.info(message)
+            self.app.run_ui(_show_info)
+
+    def _handle_warning(self, data: dict) -> None:
+        """处理警告事件"""
+        message = data.get("message", "")
+        if message:
+            def _show_warning():
+                self.app.warning(message)
+            self.app.run_ui(_show_warning)
+
+    def _handle_error(self, data: dict) -> None:
+        """处理错误事件"""
+        error = data.get("error", "")
+        if error:
+            def _show_error():
+                self.app.error(error)
+            self.app.run_ui(_show_error)
 
     def _handle_user_confirm(self, data: dict) -> None:
-        print("handle_user_confirm", data)
+        """处理用户确认事件"""
+        # TODO: 实现用户确认对话框
+        pass

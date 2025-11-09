@@ -21,15 +21,17 @@ class EventBus:
     """
     
     def __init__(self, max_queue_size: int = 10000, max_workers: int = 10) -> None:
-        self._subscribers: DefaultDict[str, List[Callable[..., None]]] = defaultdict(list)
+        self._subscribers: DefaultDict[str, List[Sub]] = defaultdict(list)
         self._queue = queue.Queue(maxsize=max_queue_size)
         self._pool = ThreadPoolExecutor(max_workers=max_workers)
         self._running = True
+        self._lock = threading.RLock()  # 添加读写锁保证线程安全
 
         self._dispatcher = threading.Thread(target=self._worker, daemon=True, name="eventbus-dispatcher")
         self._dispatcher.start()
         
-    def subscribe(self, event: str, listener: Callable[..., None], *, threaded: bool = False, pass_event: bool = True) -> None:
+    def subscribe(self, event: str, listener: Callable[..., None], *, 
+                  threaded: bool = False, pass_event: bool = True) -> None:
         """
         订阅事件
         
@@ -39,7 +41,8 @@ class EventBus:
             threaded: 是否在线程池中执行回调
             pass_event: 是否传递事件名给回调，True 时签名需为 (event, data)，False 时签名为 (data)
         """
-        self._subscribers[event].append(Sub(listener, threaded=threaded, pass_event=pass_event))
+        with self._lock:
+            self._subscribers[event].append(Sub(listener, threaded=threaded, pass_event=pass_event))
         
     def unsubscribe(self, event: str, listener: Callable[..., None]) -> None:
         """
@@ -49,8 +52,9 @@ class EventBus:
             event: 事件名称
             listener: 需要取消的回调函数
         """
-        subs = self._subscribers.get(event, [])
-        self._subscribers[event] = [sub for sub in subs if sub.listener != listener]
+        with self._lock:
+            subs = self._subscribers.get(event, [])
+            self._subscribers[event] = [sub for sub in subs if sub.listener != listener]
         
     def emit(self, event: str, data: Optional[dict] = None) -> None:
         """
@@ -77,7 +81,7 @@ class EventBus:
             data: 事件数据，默认为空字典
         """
         self._dispatch_to_listeners(event, data or {})
-            
+              
     def _worker(self):
         """
         后台线程，从队列中取出事件并处理
@@ -105,24 +109,36 @@ class EventBus:
 
     def _dispatch_to_listeners(self, event: str, data: dict) -> None:
         """
-        调用订阅者
+        分发事件到所有订阅者
         
         Args:
             event: 事件名称
             data: 事件数据
         """
-        subs = list(self._subscribers.get(event, []))
+        # 获取订阅者快照，避免在遍历时被修改
+        with self._lock:
+            subs = list(self._subscribers.get(event, []))
+        
+        if not subs:
+            return
+            
         for sub in subs:
-            fn = sub.listener
-            if sub.pass_event:
-                call = functools.partial(fn, event, data)
-            else:
-                call = functools.partial(fn, data)
-
-            if sub.threaded:
-                self._pool.submit(self._safe_call, fn, call, event)
-            else:
-                self._safe_call(fn, call, event)
+            try:
+                # 构造回调参数
+                if sub.pass_event:
+                    call = functools.partial(sub.listener, event, data)
+                else:
+                    call = functools.partial(sub.listener, data)
+                
+                # 决定执行方式
+                if sub.threaded:
+                    # 在线程池中执行
+                    self._pool.submit(self._safe_call, sub.listener, call, event)
+                else:
+                    # 在当前线程执行
+                    self._safe_call(sub.listener, call, event)
+            except Exception as e:
+                logger.exception(f"分发事件 {event} 到订阅者 {sub.listener} 时发生异常: {e}")
 
     @staticmethod
     def _safe_call(fn: Callable[..., None], call: Callable[[], None], event: str) -> None:

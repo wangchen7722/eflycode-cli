@@ -4,10 +4,12 @@
 """
 
 from typing import Dict, Optional, List, Callable
+
 from eflycode.ui.command.command import BaseCommand, CommandContext, CommandResult
 from eflycode.ui.command.builtin_commands import get_builtin_commands
 from eflycode.util.logger import logger
-from eflycode.ui.base_ui import BaseUI
+from eflycode.util.event_bus import EventBus
+from eflycode.ui.event import UIEventType
 
 
 class CommandRegistry:
@@ -80,14 +82,11 @@ class CommandRegistry:
 class CommandHandler:
     """控制台命令处理器"""
 
-    def __init__(self, ui: BaseUI, run_loop: Callable[[], None]):
-        self.ui = ui
+    def __init__(self, event_bus: EventBus, run_loop: Callable[[], None]):
+        self.event_bus = event_bus
         self.run_loop = run_loop
         self.command_prefix = "/"
         self.registry = CommandRegistry()
-
-        # 为了让内置命令能够访问命令处理器
-        self.ui.parent_handler = self
 
         # 注册内置命令
         self._register_builtin_commands()
@@ -136,6 +135,10 @@ class CommandHandler:
         # 获取命令
         command = self.registry.get_command(command_name)
         if not command:
+            # 通过事件总线发送错误信息
+            self.event_bus.emit(UIEventType.ERROR, {
+                "error": f"未知命令: {command_name}"
+            })
             return CommandResult(
                 continue_loop=True,
                 message=f"未知命令: {command_name}",
@@ -144,16 +147,27 @@ class CommandHandler:
 
         # 创建命令上下文
         context = CommandContext(
-            ui=self.ui,
+            event_bus=self.event_bus,
             run_loop=self.run_loop
         )
 
         # 执行命令
         try:
-            return command.execute(args, context)
+            result = command.execute(args, context)
+            
+            # 如果命令有消息，通过事件总线发送
+            if result.message:
+                if result.success:
+                    self.event_bus.emit(UIEventType.INFO, {"message": result.message})
+                else:
+                    self.event_bus.emit(UIEventType.ERROR, {"error": result.message})
+                    
+            return result
         except Exception as e:
+            error_msg = f"命令执行错误: {str(e)}"
+            self.event_bus.emit(UIEventType.ERROR, {"error": error_msg})
             return CommandResult(
                 continue_loop=True,
-                message=f"命令执行错误: {str(e)}",
+                message=error_msg,
                 success=False
             )

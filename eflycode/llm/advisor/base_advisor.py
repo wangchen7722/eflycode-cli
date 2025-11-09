@@ -1,3 +1,4 @@
+import re
 from abc import ABC, abstractmethod
 from typing import Callable, List, Dict, Type
 from functools import reduce
@@ -18,15 +19,6 @@ class Advisor(ABC):
         
         Returns:
             int: 优先级，数值越大优先级越高
-        """
-        ...
-    
-    @abstractmethod
-    def is_builtin_advisor(self) -> bool:
-        """判断是否为系统内置 Advisor
-        
-        Returns:
-            bool: True 表示系统内置，False 表示用户自定义
         """
         ...
 
@@ -184,17 +176,43 @@ class AdvisorChain:
         return reduce(_wrap, reversed(self.advisors), final_handler)
 
 
+def camel_to_snake(name: str) -> str:
+    """将驼峰命名转为下划线命名"""
+    s1 = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', name)
+    return re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
+
 class AdvisorRegistry:
     """Advisor注册表，用于管理所有注册的Advisor类"""
     
     _instance = None
     # {name: Type[Advisor]}
     _advisors: Dict[str, Type[Advisor]] = {}
+
+    def __init__(self) -> None:
+        self.scan_advisors("eflycode.llm.advisor", is_builtin=True)
     
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
+    
+    def scan_advisors(self, module: str, is_builtin: bool = False):
+        """扫描指定模块中的Advisor类
+        
+        Args:
+            module: 模块名，如 'eflycode.llm.advisor'
+            is_builtin: 是否只扫描系统内置的 Advisor
+        """
+        import importlib
+        module = importlib.import_module(module)
+        for name in dir(module):
+            obj = getattr(module, name)
+            if isinstance(obj, type) and issubclass(obj, Advisor) and obj != Advisor:
+                snake_name = camel_to_snake(name)
+                if is_builtin:
+                    self.register_advisor(f"buildin_{snake_name}", obj, overwrite=True)
+                self.register_advisor(snake_name, obj)
+        
     
     @classmethod
     def register_advisor(cls, name: str, advisor_class: Type[Advisor], overwrite: bool = False):

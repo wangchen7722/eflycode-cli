@@ -1,9 +1,7 @@
 from pathlib import Path
 
-from eflycode.llm.advisor import Advisor, register_advisor
-from eflycode.schema.llm import LLMRequest, Message
-from eflycode.util.system import get_system_environment
-from eflycode.prompt.prompt_loader import PromptLoader
+from eflycode.llm.advisor import Advisor
+from eflycode.schema.llm import LLMRequest
 
 class LoggingAdvisor(Advisor):
     """日志记录 Advisor
@@ -21,9 +19,6 @@ class LoggingAdvisor(Advisor):
     
     def get_priority(self) -> int:
         return -101
-    
-    def is_builtin_advisor(self) -> bool:
-        return True
     
     def before_call(self, request: LLMRequest) -> LLMRequest:
         with open("logging.txt", "a", encoding="utf-8") as f:

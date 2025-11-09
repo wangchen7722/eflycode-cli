@@ -49,10 +49,14 @@ def get_workspace_info(path: Optional[str] = None, ignores: Optional[List[str]] 
         "path": workspace_path.as_posix(),
         "files": workspace_files,
     }
+    
+def get_user_home() -> Path:
+    """获取用户主目录"""
+    return Path.home()
 
 
 if __name__ == "__main__":
-    system_info = get_system_info()
+    system_info = get_system_environment()
     workspace_info = get_workspace_info()
     print("System info:", system_info)
     # print("Workspace info:", workspace_info)

@@ -1,4 +1,4 @@
-from eflycode.llm.advisor import Advisor, register_advisor
+from eflycode.llm.advisor import Advisor
 from eflycode.schema.llm import LLMRequest, Message
 from eflycode.util.system import get_system_environment
 from eflycode.prompt.prompt_loader import PromptLoader
@@ -10,10 +10,6 @@ class EnvironmentAdvisor(Advisor):
     def get_priority(self) -> int:
         """获取 Advisor 的优先级"""
         return -100
-    
-    def is_builtin_advisor(self) -> bool:
-        """判断是否为系统内置 Advisor"""
-        return True
     
     def _append_system_info(self, messages: list[Message]) -> list[Message]:
         """将系统环境信息拼接到消息末尾"""

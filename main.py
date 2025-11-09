@@ -7,7 +7,7 @@ def main():
     # 获取应用程序上下文
     app_context = get_application_context()
     
-    # 启动应用程序上下文（会自动初始化Environment和EventBus）
+    # 启动应用程序上下文
     app_context.start()
     
     # 使用AgentRegistry创建developer agent

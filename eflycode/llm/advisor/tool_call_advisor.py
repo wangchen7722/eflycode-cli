@@ -1,5 +1,5 @@
 from typing import List, Union
-from eflycode.llm.advisor import Advisor, register_advisor
+from eflycode.llm.advisor import Advisor
 from eflycode.schema.llm import LLMRequest, Message
 from eflycode.prompt.prompt_loader import PromptLoader
 from eflycode.schema.llm import LLMCallResponse, LLMStreamResponse, ToolDefinition
@@ -17,10 +17,6 @@ class ToolCallAdvisor(Advisor):
     def get_priority(self) -> int:
         """获取 Advisor 的优先级"""
         return 10
-    
-    def is_builtin_advisor(self) -> bool:
-        """判断是否为系统内置 Advisor"""
-        return True
 
     def _convert_messages(self, messages: List[Message], tools: List[ToolDefinition], parser: Union[ToolCallStreamParser, ToolCallParser]) -> List[Message]:
         if not tools:

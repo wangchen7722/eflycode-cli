@@ -1,7 +1,8 @@
 from typing import Optional, Callable, List
-from threading import Lock
+from threading import Lock, RLock
 import atexit
 
+from eflycode.llm.advisor.base_advisor import AdvisorRegistry
 from eflycode.util.event_bus import EventBus
 from eflycode.env.environment import Environment
 from eflycode.util.logger import logger
@@ -27,6 +28,7 @@ class ApplicationContext:
         # 核心组件
         self._event_bus: Optional[EventBus] = None
         self._environment: Optional[Environment] = None
+        self._advisor_registry: Optional[AdvisorRegistry] = None
 
         # 生命周期回调
         self._startup_callbacks: List[Callable[[], None]] = []
@@ -35,13 +37,12 @@ class ApplicationContext:
         # 状态管理
         self._started = False
         self._shutdown = False
-        self._component_lock = Lock()
+        
+        self._component_lock = RLock()
 
         # 注册关闭钩子
         atexit.register(self.shutdown)
-
-        logger.info("ApplicationContext 初始化完成")
-
+        
     @classmethod
     def get_instance(cls) -> "ApplicationContext":
         """获取ApplicationContext单例实例
@@ -54,19 +55,32 @@ class ApplicationContext:
                 if cls._instance is None:
                     cls._instance = cls()
         return cls._instance
+    
+    def _init_environment(self) -> None:
+        """初始化环境配置"""
+        self._environment = Environment()
+        logger.info("Environment 组件已初始化")
 
+    def _init_event_bus(self) -> None:
+        """初始化事件总线"""
+        self._event_bus = EventBus()
+        logger.info("EventBus 组件已初始化")
+        
+    def _init_llm_advisors(self) -> None:
+        """初始化LLM Advisors"""
+        self._advisor_registry = AdvisorRegistry()
+        logger.info("Advisors 已初始化")
+        
     def get_event_bus(self) -> EventBus:
         """获取事件总线实例
 
         Returns:
             EventBus实例
         """
-        if self._event_bus is None:
-            with self._component_lock:
-                if self._event_bus is None:
-                    self._event_bus = EventBus()
-                    logger.info("EventBus 组件已创建")
-        return self._event_bus
+        with self._component_lock:
+            if not self._started:
+                raise RuntimeError("ApplicationContext 未启动，无法获取 EventBus")
+            return self._event_bus
 
     def get_environment(self) -> Environment:
         """获取环境配置实例
@@ -74,12 +88,10 @@ class ApplicationContext:
         Returns:
             Environment实例
         """
-        if self._environment is None:
-            with self._component_lock:
-                if self._environment is None:
-                    self._environment = Environment.get_instance()
-                    logger.info("Environment 组件已获取")
-        return self._environment
+        with self._component_lock:
+            if not self._started:
+                raise RuntimeError("ApplicationContext 未启动，无法获取 Environment")
+            return self._environment
 
     def add_startup_callback(self, callback: Callable[[], None]) -> None:
         """添加启动回调
@@ -99,32 +111,18 @@ class ApplicationContext:
 
     def start(self) -> None:
         """启动应用程序上下文"""
-        if self._started:
-            logger.warning("ApplicationContext 已经启动")
-            return
-
         with self._component_lock:
             if self._started:
+                logger.warning("ApplicationContext 已经启动")
                 return
-
-            logger.info("正在启动 ApplicationContext...")
 
             try:
                 # 初始化核心组件
-                environment = self.get_environment()
-                logger.info("Environment 组件已初始化")
-                
-                event_bus = self.get_event_bus()
-                logger.info("EventBus 组件已初始化")
-                
-                # 初始化Advisors
-                from eflycode.llm.advisor import initialize_advisors
-                initialize_advisors()
-                logger.info("Advisors 已初始化")
-                
+                self._init_environment()
+                self._init_event_bus()
+                self._init_llm_advisors()
             except Exception as e:
-                logger.error(f"核心组件初始化失败: {e}")
-                raise
+                raise RuntimeError("ApplicationContext 启动失败") from e
 
             # 执行启动回调
             for callback in self._startup_callbacks:
@@ -138,10 +136,9 @@ class ApplicationContext:
 
     def shutdown(self) -> None:
         """关闭应用程序上下文"""
-        if self._shutdown:
-            return
-
         with self._component_lock:
+            if not self._started:
+                raise RuntimeError("ApplicationContext 未启动，无法关闭")
             if self._shutdown:
                 return
 

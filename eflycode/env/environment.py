@@ -11,7 +11,6 @@ from eflycode.env.config_loader import ConfigLoader
 from eflycode.util.file_watcher import FileWatcher
 from eflycode.util.logger import configure_logging, logger
 from eflycode.schema.config import AppConfig, ModelConfig, LLMConfig, ModelEntry, RuntimeConfig
-from eflycode.llm.advisor import initialize_advisors
 
 
 def get_nested_value(config: Dict[str, Any], key: str) -> Any:
@@ -56,15 +55,12 @@ def set_nested_value(config: Dict[str, Any], key: str, value: Any) -> None:
     current[keys[-1]] = value
 
 class Environment:
-    """配置环境管理器（单例）"""
+    """配置环境管理器"""
     
     _instance: Optional["Environment"] = None
     _lock = Lock()
     
     def __init__(self):
-        if Environment._instance is not None:
-            raise RuntimeError("Environment 是单例类，请使用 get_instance() 方法")
-        
         self._config_loader = ConfigLoader()
         self._file_watcher = FileWatcher()
         self._change_callbacks: List[Callable[[Dict[str, Any]], None]] = []
@@ -75,6 +71,13 @@ class Environment:
         self._initialized = False
         self.reload()
         self._initialized = True
+        
+    def __new__(cls, *args, **kwargs) -> "Environment":
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+        return cls._instance
     
     @classmethod
     def get_instance(cls) -> "Environment":
@@ -98,9 +101,6 @@ class Environment:
         self._runtime_config = self._config_loader.get_runtime_config()
         self._initialize_logging()
         self._setup_file_watching()
-
-        # 注意：不在这里初始化 Advisor，避免循环依赖
-        # initialize_advisors() 将在 ApplicationContext 中调用
 
     def save_workspace_settings(self) -> None:
         """
@@ -136,7 +136,7 @@ class Environment:
             if self._app_config is None:
                 logger.error("应用配置为空，无法初始化日志配置")
                 return
-            configure_logging(self._app_config.logging.model_dump())
+            configure_logging(self._app_config.logging)
         except Exception as e:
             logger.exception(f"日志配置初始化失败: {e}")
 

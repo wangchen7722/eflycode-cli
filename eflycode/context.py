@@ -2,7 +2,8 @@ from typing import Optional, Callable, List
 from threading import Lock, RLock
 import atexit
 
-from eflycode.llm.advisor.base_advisor import AdvisorRegistry
+from eflycode.llm.advisor.registry import AdvisorRegistry
+from eflycode.agent.registry import AgentRegistry
 from eflycode.util.event_bus import EventBus
 from eflycode.env.environment import Environment
 from eflycode.util.logger import logger
@@ -29,6 +30,7 @@ class ApplicationContext:
         self._event_bus: Optional[EventBus] = None
         self._environment: Optional[Environment] = None
         self._advisor_registry: Optional[AdvisorRegistry] = None
+        self._agent_registry: Optional[AgentRegistry] = None
 
         # 生命周期回调
         self._startup_callbacks: List[Callable[[], None]] = []
@@ -37,12 +39,12 @@ class ApplicationContext:
         # 状态管理
         self._started = False
         self._shutdown = False
-        
+
         self._component_lock = RLock()
 
         # 注册关闭钩子
         atexit.register(self.shutdown)
-        
+
     @classmethod
     def get_instance(cls) -> "ApplicationContext":
         """获取ApplicationContext单例实例
@@ -55,7 +57,7 @@ class ApplicationContext:
                 if cls._instance is None:
                     cls._instance = cls()
         return cls._instance
-    
+
     def _init_environment(self) -> None:
         """初始化环境配置"""
         self._environment = Environment()
@@ -65,12 +67,17 @@ class ApplicationContext:
         """初始化事件总线"""
         self._event_bus = EventBus()
         logger.info("EventBus 组件已初始化")
-        
+
     def _init_llm_advisors(self) -> None:
         """初始化LLM Advisors"""
         self._advisor_registry = AdvisorRegistry()
         logger.info("Advisors 已初始化")
-        
+
+    def _init_agent_registry(self) -> None:
+        """初始化Agent Registry"""
+        self._agent_registry = AgentRegistry()
+        logger.info("AgentRegistry 组件已初始化")
+
     def get_event_bus(self) -> EventBus:
         """获取事件总线实例
 
@@ -92,6 +99,17 @@ class ApplicationContext:
             if not self._started:
                 raise RuntimeError("ApplicationContext 未启动，无法获取 Environment")
             return self._environment
+
+    def get_agent_registry(self):
+        """获取Agent注册中心
+
+        Returns:
+            AgentRegistry实例
+        """
+        with self._component_lock:
+            if not self._started:
+                raise RuntimeError("ApplicationContext 未启动，无法获取 AgentRegistry")
+            return self._agent_registry
 
     def add_startup_callback(self, callback: Callable[[], None]) -> None:
         """添加启动回调
@@ -121,6 +139,7 @@ class ApplicationContext:
                 self._init_environment()
                 self._init_event_bus()
                 self._init_llm_advisors()
+                self._init_agent_registry()
             except Exception as e:
                 raise RuntimeError("ApplicationContext 启动失败") from e
 
@@ -188,7 +207,7 @@ class ApplicationContext:
             MainUIApplication实例
         """
         from eflycode.ui.console.main_app import MainUIApplication
-        
+
         event_bus = self.get_event_bus()
         return MainUIApplication(event_bus)
 
@@ -204,28 +223,16 @@ class ApplicationContext:
             OpenAIEngine实例
         """
         from eflycode.llm.openai_engine import OpenAIEngine
-        
+
         if advisors is None:
             advisors = [
-                "buildin_environment_advisor", 
-                "buildin_tool_call_advisor", 
-                "buildin_logging_advisor"
+                "buildin_environment_advisor",
+                "buildin_tool_call_advisor",
+                "buildin_logging_advisor",
             ]
-        
+
         environment = self.get_environment()
-        return OpenAIEngine(
-             llm_config=environment.get_llm_config(),
-             advisors=advisors
-         )
-
-    def get_agent_registry(self):
-        """获取Agent注册中心
-
-        Returns:
-            AgentRegistry实例
-        """
-        from eflycode.agent.registry import AgentRegistry
-        return AgentRegistry()
+        return OpenAIEngine(llm_config=environment.get_llm_config(), advisors=advisors)
 
     def create_agent_run_loop(self, agent=None, stream_output=True):
         """创建Agent运行循环实例
@@ -240,15 +247,13 @@ class ApplicationContext:
             AgentRunLoop实例
         """
         from eflycode.agent.run_loop import AgentRunLoop
-        
+
         if agent is None:
             agent = self.create_developer_agent()
-        
+
         event_bus = self.get_event_bus()
         return AgentRunLoop(
-            agent=agent,
-            event_bus=event_bus,
-            stream_output=stream_output
+            agent=agent, event_bus=event_bus, stream_output=stream_output
         )
 
 

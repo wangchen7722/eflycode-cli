@@ -1,10 +1,9 @@
 import re
 from abc import ABC, abstractmethod
-from typing import Callable, List, Dict, Type
+from typing import Callable, List, Type
 from functools import reduce
 
 from eflycode.schema.llm import LLMRequest, LLMCallResponse, LLMStreamResponse
-from eflycode.util.logger import logger
 
 AdvisorCallHandler = Callable[[LLMRequest], LLMCallResponse]
 AdvisorStreamHandler = Callable[[LLMRequest], LLMStreamResponse]
@@ -131,7 +130,7 @@ class AdvisorChain:
 
     def _get_sorted_advisors(self) -> List[Advisor]:
         """获取按优先级排序的 Advisor 列表"""
-        return sorted(self._advisors, key=lambda advisor: (not advisor.is_builtin_advisor(), -advisor.get_priority()))
+        return sorted(self._advisors, key=lambda advisor: -advisor.get_priority())
 
     def add_advisor(self, advisor: Advisor):
         """添加 Advisor 到链中
@@ -174,150 +173,3 @@ class AdvisorChain:
             return lambda req: advisor.handle_stream(req, next_handler)
 
         return reduce(_wrap, reversed(self.advisors), final_handler)
-
-
-def camel_to_snake(name: str) -> str:
-    """将驼峰命名转为下划线命名"""
-    s1 = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', name)
-    return re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
-
-class AdvisorRegistry:
-    """Advisor注册表，用于管理所有注册的Advisor类"""
-    
-    _instance = None
-    # {name: Type[Advisor]}
-    _advisors: Dict[str, Type[Advisor]] = {}
-
-    def __init__(self) -> None:
-        self.scan_advisors("eflycode.llm.advisor", is_builtin=True)
-    
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
-    
-    def scan_advisors(self, module: str, is_builtin: bool = False):
-        """扫描指定模块中的Advisor类
-        
-        Args:
-            module: 模块名，如 'eflycode.llm.advisor'
-            is_builtin: 是否只扫描系统内置的 Advisor
-        """
-        import importlib
-        module = importlib.import_module(module)
-        for name in dir(module):
-            obj = getattr(module, name)
-            if isinstance(obj, type) and issubclass(obj, Advisor) and obj != Advisor:
-                snake_name = camel_to_snake(name)
-                if is_builtin:
-                    self.register_advisor(f"buildin_{snake_name}", obj, overwrite=True)
-                self.register_advisor(snake_name, obj)
-        
-    
-    @classmethod
-    def register_advisor(cls, name: str, advisor_class: Type[Advisor], overwrite: bool = False):
-        """注册Advisor类
-        
-        Args:
-            name: Advisor名称
-            advisor_class: Advisor类
-            overwrite: 是否覆盖已有 Advisor
-        """
-        if name in cls._advisors and not overwrite:
-            raise ValueError(f"Advisor名称 '{name}' 已被注册")
-        else:
-            cls._advisors[name] = advisor_class
-    
-    @classmethod
-    def get_advisor(cls, name: str) -> Type[Advisor]:
-        """获取指定名称的Advisor类
-        
-        Args:
-            name: Advisor名称
-            
-        Returns:
-            type: Advisor类
-            
-        Raises:
-            KeyError: 当指定名称的Advisor不存在时
-        """
-        if name not in cls._advisors:
-            raise KeyError(f"未找到名称为 '{name}' 的Advisor")
-        return cls._advisors[name]
-
-    @classmethod
-    def contain_advisor(cls, name: str) -> bool:
-        """检查是否包含指定名称的Advisor
-
-        Args:
-            name: Advisor名称
-
-        Returns:
-            bool: True表示存在，False表示不存在
-        """
-        return name in cls._advisors
-    
-    @classmethod
-    def get_advisor_priority(cls, name: str) -> int:
-        """获取指定名称的Advisor的优先级
-        
-        Args:
-            name: Advisor名称
-            
-        Returns:
-            int: Advisor的优先级
-            
-        Raises:
-            KeyError: 当指定名称的Advisor不存在时
-        """
-        if name not in cls._advisors:
-            raise KeyError(f"未找到名称为 '{name}' 的Advisor")
-        # 创建临时实例来获取优先级
-        advisor_instance = cls._advisors[name]()
-        return advisor_instance.get_priority()
-    
-    @classmethod
-    def get_sorted_advisors(cls) -> list:
-        """获取按优先级排序的Advisor列表（系统内置优先级最高）
-        
-        Returns:
-            list: 按优先级排序的Advisor信息列表
-        """
-        advisors = list(cls._advisors.items())
-        # 按优先级排序，系统内置优先级最高，然后按priority数值排序
-        advisors.sort(key=lambda x: (not x[1]().is_builtin_advisor(), -x[1]().get_priority()))
-        return advisors
-    
-    @classmethod
-    def clear(cls):
-        """清空所有注册的Advisor"""
-        cls._advisors.clear()
-
-
-def register_advisor(advisor_name: str = None, advisor_class: Type[Advisor] = None, overwrite: bool = False):
-    """Advisor注册装饰器
-    
-    Args:
-        advisor_name: Advisor名称，如果不指定则使用类名
-        advisor_class: Advisor类
-        overwrite: 是否覆盖已存在的注册, 默认为 False
-    """
-    if AdvisorRegistry.contain_advisor(advisor_name):
-        raise ValueError(f"Advisor名称 '{advisor_name}' 已被注册")
-    else:
-        AdvisorRegistry.register_advisor(advisor_name, advisor_class, overwrite)
-
-def get_advisor(name: str) -> Type[Advisor]:
-    """获取指定名称的Advisor类
-
-    Args:
-        name: Advisor名称
-
-    Returns:
-        type: Advisor类
-    """
-    return AdvisorRegistry.get_advisor(name)
-
-def clear_advisors():
-    """清空所有注册的Advisor"""
-    AdvisorRegistry.clear()

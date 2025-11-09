@@ -1,13 +1,11 @@
 from typing import Optional
 
 from eflycode.agent.core.agent import ConversationAgent
-from eflycode.agent.registry import register_agent
 from eflycode.llm.llm_engine import LLMEngine
 from eflycode.prompt import PromptLoader
 from eflycode.tool import FILE_TOOL_GROUP
 
 
-@register_agent("developer")
 class Developer(ConversationAgent):
     ROLE = "developer"
     DESCRIPTION = """

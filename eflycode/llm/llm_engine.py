@@ -11,7 +11,8 @@ from eflycode.schema.llm import (
     LLMPrompt
 )
 from eflycode.schema.config import LLMConfig
-from eflycode.llm.advisor import Advisor, AdvisorChain, AdvisorRegistry
+from eflycode.llm.advisor import Advisor, AdvisorChain
+from eflycode.llm.advisor.registry import AdvisorRegistry
 
 
 ALLOWED_GENERATE_CONFIG_KEYS = [

@@ -12,8 +12,8 @@ from eflycode.util.event_bus import EventBus
 from eflycode.util.logger import logger
 
 
-class RunLoopState(Enum):
-    """运行循环状态"""
+class EventControllerState(Enum):
+    """事件控制器状态"""
 
     # 初始化中
     INITIALIZING = "initializing"
@@ -38,14 +38,34 @@ class CancelToken:
         self._event = threading.Event()
 
     def cancel(self) -> None:
+        """取消令牌
+
+        Returns:
+            None
+
+        异常:
+            无
+        """
         self._event.set()
 
     def cancelled(self) -> bool:
+        """检查令牌是否已被取消
+
+        Returns:
+            bool: 是否已取消
+
+        异常:
+            无
+        """
         return self._event.is_set()
 
 
-class AgentRunLoop:
-    """Agent 运行循环"""
+class AgentEventController:
+    """Agent 事件控制器
+
+    负责订阅 UI 事件、调度 Agent 的调用（支持流式输出），并通过事件总线反馈进度与结果。
+    不再维护独立的后台主线程，整体为纯事件驱动模型。
+    """
 
     def __init__(
             self,
@@ -53,85 +73,78 @@ class AgentRunLoop:
             event_bus: EventBus,
             stream_output: bool = True,
     ):
-        """初始化运行循环
+        """初始化事件控制器
         
         Args:
             agent: 对话智能体实例
             event_bus: 事件总线实例
             stream_output: 是否使用流式输出
+        
+        Returns:
+            None
+        
+        异常:
+            无
         """
         self.agent = agent
         self.event_bus = event_bus
         self.stream_output = stream_output
 
-        self._state = RunLoopState.INITIALIZING
-        self._running = False
+        self._state = EventControllerState.RUNNING
         self.command_handler = CommandHandler(event_bus, self)
 
         self._current_job_thread: Optional[threading.Thread] = None
         self._current_cancel: Optional[CancelToken] = None
 
         self._stopped_event = threading.Event()
-        self._agent_thread: Optional[threading.Thread] = None
 
         # 订阅事件
         self.event_bus.subscribe(UIEventType.USER_INPUT_RECEIVED, self._on_user_input_received, pass_event=False)
         self.event_bus.subscribe(UIEventType.STOP_APP, self._on_stop_app, pass_event=False)
 
-        self._state = RunLoopState.READY
+        self._state = EventControllerState.READY
 
     @property
-    def state(self) -> RunLoopState:
-        """获取当前状态"""
+    def state(self) -> EventControllerState:
+        """获取当前状态
+
+        Returns:
+            EventControllerState: 当前控制器状态
+        
+        异常:
+            无
+        """
         return self._state
 
-    @property
-    def is_running(self) -> bool:
-        """检查是否正在运行"""
-        return self._running
+    def _on_stop_app(self, data: dict) -> None:
+        """收到停止应用事件
 
-    def start_in_background(self) -> None:
-        """
-        在后台线程中启动Agent运行循环
-        """
-        if self._running:
-            return
+        Args:
+            data: 事件数据
 
-        def _run_agent():
-            self._running = True
-            self._state = RunLoopState.RUNNING
-            
-            # 移除启动时的事件发送，由UI主动控制
-            # self.event_bus.emit(UIEventType.START_APP)
-            # self.event_bus.emit(UIEventType.SHOW_WELCOME)
-            
-            # 等待停止信号
-            self._stopped_event.wait()
-
-        self._agent_thread = threading.Thread(target=_run_agent, daemon=True, name="agent-runloop")
-        self._agent_thread.start()
-
-    def run(self) -> None:
-        """启动运行循环（保持向后兼容）"""
-        self.start_in_background()
+        Returns:
+            None
         
-        # 如果在主线程调用，等待完成
-        if self._agent_thread and threading.current_thread() == threading.main_thread():
-            try:
-                self._agent_thread.join()
-            except KeyboardInterrupt:
-                self.stop()
-
-    def _on_stop_app(self, data: dict):
-        """收到停止应用事件"""
-        self._state = RunLoopState.INTERRUPTING
+        异常:
+            无
+        """
+        self._state = EventControllerState.INTERRUPTING
         self._cancel_current_job()
-        self._state = RunLoopState.STOPPED
-        self._running = False
+        self._state = EventControllerState.STOPPED
         self._stopped_event.set()
 
     def _on_user_input_received(self, data: dict) -> None:
-        """收到来自 UI 的输入事件"""
+        """处理来自 UI 的用户输入事件
+
+        Args:
+            data: 包含用户输入文本的事件数据，键为 "text"
+
+        Returns:
+            None
+        
+        异常:
+            无
+        """
         user_input = (data or {}).get("text", "").strip()
         if not user_input:
             return
@@ -142,7 +155,18 @@ class AgentRunLoop:
 
         self._start_agent_job(user_input)
 
-    def _start_agent_job(self, user_input: str):
+    def _start_agent_job(self, user_input: str) -> None:
+        """启动一次 Agent 任务（在独立任务线程中处理，支持流式输出）
+
+        Args:
+            user_input: 用户输入的文本
+
+        Returns:
+            None
+        
+        异常:
+            无；内部异常将转换为 UI 错误事件
+        """
         self._cancel_current_job()
         cancel = CancelToken()
         self._current_cancel = cancel
@@ -170,7 +194,14 @@ class AgentRunLoop:
         thread.start()
 
     def _cancel_current_job(self) -> None:
-        """取消当前正在运行的任务"""
+        """取消当前正在运行的 Agent 任务
+
+        Returns:
+            None
+        
+        异常:
+            无
+        """
         if self._current_cancel:
             self._current_cancel.cancel()
             self._current_cancel = None
@@ -182,18 +213,38 @@ class AgentRunLoop:
             self._current_job_thread = None
 
     def _emit_response_chunk(self, chunk: AgentResponseChunk) -> None:
-        """发送响应块"""
+        """发送流式响应块到 UI
+
+        Args:
+            chunk: 流式响应块
+
+        Returns:
+            None
+        
+        异常:
+            无
+        """
         if chunk.type == AgentResponseChunkType.TEXT and chunk.content:
             self.event_bus.emit(AgentUIEventType.MESSAGE_UPDATE, {"text": chunk.content})
         elif chunk.type in [AgentResponseChunkType.TOOL_CALL_START,
                             AgentResponseChunkType.TOOL_CALL_END] and chunk.tool_calls:
             self._emit_tool_calls(chunk.type, chunk.tool_calls)
         elif chunk.type == AgentResponseChunkType.DONE:
-            # 移除self.ui.print()调用，通过事件发送结束信号
+            # 通过 DONE 信号结束消息，无需直接输出
             pass
 
     def _emit_response(self, response: AgentResponse) -> None:
-        """发送完整响应"""
+        """发送完整响应到 UI
+
+        Args:
+            response: 完整的 Agent 响应
+
+        Returns:
+            None
+        
+        异常:
+            无
+        """
         if response.content:
             self.event_bus.emit(AgentUIEventType.MESSAGE_UPDATE, {"text": response.content})
         if response.tool_calls:
@@ -202,7 +253,18 @@ class AgentRunLoop:
     def _emit_tool_calls(self, tool_call_type: Literal[
         AgentResponseChunkType.TOOL_CALL_START, AgentResponseChunkType.TOOL_CALL_END],
                          tool_calls: List[ToolCall]) -> None:
-        """发送工具调用信息"""
+        """发送工具调用信息到 UI
+
+        Args:
+            tool_call_type: 工具调用事件类型（开始或结束）
+            tool_calls: 工具调用列表
+
+        Returns:
+            None
+        
+        异常:
+            无
+        """
         for tool_call in tool_calls:
             tool_name = tool_call.function.name
             try:
@@ -221,30 +283,30 @@ class AgentRunLoop:
                 })
 
     def stop(self) -> None:
-        """停止运行循环"""
-        if not self._running:
-            return
-            
-        logger.info("正在停止Agent运行循环...")
+        """停止事件控制器，优雅取消任务并通知 UI 退出
+
+        Returns:
+            None
         
+        异常:
+            无
+        """
+        if self._state == EventControllerState.STOPPED:
+            return
+
+        logger.info("正在停止Agent事件控制器...")
+
         # 先取消当前任务
         self._cancel_current_job()
-        
+
         # 设置停止状态
-        self._state = RunLoopState.STOPPING
-        self._running = False
-        
-        # 发送停止事件
+        self._state = EventControllerState.STOPPING
+
+        # 发送停止事件，让 UI 主线程自行处理退出
         self.event_bus.emit(UIEventType.STOP_APP)
-        
-        # 设置停止事件
+
+        # 设置停止事件（用于取消当前流式任务等）
         self._stopped_event.set()
-        
-        # 等待Agent线程结束
-        if self._agent_thread and self._agent_thread.is_alive():
-            self._agent_thread.join(timeout=1.0)
-            if self._agent_thread.is_alive():
-                logger.warning("Agent主线程未能在1秒内结束")
-        
-        self._state = RunLoopState.STOPPED
-        logger.info("Agent运行循环已停止")
+
+        self._state = EventControllerState.STOPPED
+        logger.info("Agent事件控制器已停止")

@@ -110,6 +110,17 @@ class ApplicationContext:
             if not self._started:
                 raise RuntimeError("ApplicationContext 未启动，无法获取 AgentRegistry")
             return self._agent_registry
+        
+    def get_llm_advisor_registry(self) -> AdvisorRegistry:
+        """获取LLM Advisors
+
+        Returns:
+            AdvisorRegistry实例
+        """
+        with self._component_lock:
+            if not self._started:
+                raise RuntimeError("ApplicationContext 未启动，无法获取 Advisors")
+            return self._advisor_registry
 
     def add_startup_callback(self, callback: Callable[[], None]) -> None:
         """添加启动回调
@@ -196,65 +207,6 @@ class ApplicationContext:
             是否已关闭
         """
         return self._shutdown
-
-    def create_main_ui_app(self):
-        """创建主UI应用程序实例
-
-        工厂方法，负责创建MainUIApplication并注入所需依赖
-        这种方式既保持了依赖注入的优势，又将创建逻辑集中管理
-
-        Returns:
-            MainUIApplication实例
-        """
-        from eflycode.ui.console.main_app import MainUIApplication
-
-        event_bus = self.get_event_bus()
-        return MainUIApplication(event_bus)
-
-    def create_llm_engine(self, advisors=None):
-        """创建LLM引擎实例
-
-        工厂方法，负责创建OpenAIEngine并注入所需依赖
-
-        Args:
-            advisors: 顾问列表，默认使用标准顾问
-
-        Returns:
-            OpenAIEngine实例
-        """
-        from eflycode.llm.openai_engine import OpenAIEngine
-
-        if advisors is None:
-            advisors = [
-                "buildin_environment_advisor",
-                "buildin_tool_call_advisor",
-                "buildin_logging_advisor",
-            ]
-
-        environment = self.get_environment()
-        return OpenAIEngine(llm_config=environment.get_llm_config(), advisors=advisors)
-
-    def create_agent_run_loop(self, agent=None, stream_output=True):
-        """创建Agent运行循环实例
-
-        工厂方法，负责创建AgentRunLoop并注入所需依赖
-
-        Args:
-            agent: Agent实例，如果为None则自动创建Developer
-            stream_output: 是否启用流式输出
-
-        Returns:
-            AgentRunLoop实例
-        """
-        from eflycode.agent.run_loop import AgentRunLoop
-
-        if agent is None:
-            agent = self.create_developer_agent()
-
-        event_bus = self.get_event_bus()
-        return AgentRunLoop(
-            agent=agent, event_bus=event_bus, stream_output=stream_output
-        )
 
 
 def get_application_context() -> ApplicationContext:

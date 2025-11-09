@@ -26,13 +26,10 @@ class MainUIApplication:
         self._running = False
         self._shutdown_event = threading.Event()
         
-        # 设置当前线程为UI主线程（暂时保留注释）
-        # self.event_bus.set_ui_thread()
-        
         # 订阅应用控制事件
         self.event_bus.subscribe(UIEventType.STOP_APP, self._on_stop_app, pass_event=False)
         self.event_bus.subscribe(UIEventType.QUIT_UI, self._on_quit_ui, pass_event=False)
-
+        
     def initialize(self) -> None:
         """
         初始化UI组件

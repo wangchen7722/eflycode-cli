@@ -4,7 +4,6 @@ from typing import (
     Generator,
     List,
     Optional,
-    Sequence,
     Literal,
 )
 
@@ -16,7 +15,6 @@ from eflycode.prompt.prompt_loader import PromptLoader
 from eflycode.tool.base_tool import BaseTool
 from eflycode.schema.agent import (
     AgentResponseChunk,
-    AgentResponseChunkType,
     AgentResponse,
     ToolCallResponse
 )
@@ -28,9 +26,10 @@ class BaseAgent:
     ROLE = "base"
     DESCRIPTION = "所有智能体的基类，仅用来定义接口，没有任何功能。"
 
-    def __init__(self, name: Optional[str] = None, description: Optional[str] = None):
+    def __init__(self, name: Optional[str] = None, description: Optional[str] = None, tools: Optional[List[BaseTool]] = None):
         self._name = name or self.ROLE
         self._description = description or self.DESCRIPTION
+        self._tools = tools or []
 
     @property
     def role(self):
@@ -42,22 +41,13 @@ class BaseAgent:
 
     @property
     def description(self):
-        return self.DESCRIPTION.strip()
+        return self._description.strip()
 
     @abstractmethod
     def call(self, content: str) -> AgentResponse:
         """运行智能体"""
         pass
-
-
-class ToolCallMixin:
-    """工具调用混入类，为智能体提供工具调用能力"""
-
-    def __init__(self, tools: Optional[Sequence[BaseTool]] = None, **kwargs):
-        super().__init__(**kwargs)
-        self._tools = tools or []
-        self._tool_map = {tool.name: tool for tool in self._tools}
-
+    
     @property
     def tools(self) -> List[ToolDefinition]:
         """获取工具定义列表
@@ -66,7 +56,7 @@ class ToolCallMixin:
             List[ToolDefinition]: 工具定义列表
         """
         return [tool.definition for tool in self._tools]
-
+    
     def execute_tool(self, tool_call: ToolCall) -> ToolCallResponse:
         """执行工具调用
 
@@ -122,8 +112,7 @@ class ToolCallMixin:
                 message=tool_call_response_message,
             )
 
-
-class ConversationAgent(ToolCallMixin, BaseAgent):
+class ConversationAgent(BaseAgent):
     """对话智能体，支持工具调用"""
     
     ROLE = "conversation"

@@ -319,24 +319,6 @@ class ConsoleAgentEventUI(AgentUIEventHandlerMixin):
     def __init__(self, event_bus: EventBus) -> None:
         AgentUIEventHandlerMixin.__init__(self, event_bus)
         self.app = ConsoleUIApplication(on_input_callback=self._emit_user_input, event_bus=self._event_bus)
-        
-        # 显式订阅Agent相关事件
-        self._event_bus.subscribe(AgentUIEventType.MESSAGE_START, self.handle_event)
-        self._event_bus.subscribe(AgentUIEventType.MESSAGE_UPDATE, self.handle_event)
-        self._event_bus.subscribe(AgentUIEventType.MESSAGE_END, self.handle_event)
-        self._event_bus.subscribe(AgentUIEventType.TOOL_CALL_START, self.handle_event)
-        self._event_bus.subscribe(AgentUIEventType.TOOL_CALL_END, self.handle_event)
-        self._event_bus.subscribe(AgentUIEventType.TOOL_CALL_FINISH, self.handle_event)
-        self._event_bus.subscribe(AgentUIEventType.TOOL_CALL_ERROR, self.handle_event)
-        
-        # 订阅UI相关事件
-        self._event_bus.subscribe(UIEventType.START_APP, self.handle_event)
-        self._event_bus.subscribe(UIEventType.SHOW_WELCOME, self.handle_event)
-        self._event_bus.subscribe(UIEventType.SHOW_HELP, self.handle_event)
-        self._event_bus.subscribe(UIEventType.CLEAR_SCREEN, self.handle_event)
-        self._event_bus.subscribe(UIEventType.INFO, self.handle_event)
-        self._event_bus.subscribe(UIEventType.WARNING, self.handle_event)
-        self._event_bus.subscribe(UIEventType.ERROR, self.handle_event)
 
     def _emit_user_input(self, text: str) -> None:
         self._event_bus.emit(UIEventType.USER_INPUT_RECEIVED, {"text": text})

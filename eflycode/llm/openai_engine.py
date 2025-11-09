@@ -1,4 +1,4 @@
-from typing import Dict, Optional, Any, Generator
+from typing import Dict, Optional, Any
 import json
 
 import httpx

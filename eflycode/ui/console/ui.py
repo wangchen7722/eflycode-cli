@@ -34,8 +34,7 @@ from eflycode.ui.colors import PTK_STYLE
 from eflycode.ui.base_ui import BaseUI
 from eflycode.ui.event import AgentUIEventHandlerMixin
 from eflycode.util.event_bus import EventBus
-from eflycode.env import Environment
-from eflycode.ui.command import BaseCommand, get_builtin_commands
+
 
 EFLYCODE_BANNER = r"""
         _____  _          ____            _       
@@ -50,7 +49,6 @@ EFLYCODE_BANNER = r"""
 class SmartCompleter(Completer):
 
     def __init__(self):
-        self.commands: List[BaseCommand] = get_builtin_commands()
         self.skills: List[str] = []
         self.files: List[str] = []
         self.max_command_length = max(len(cmd.name) for cmd in self.commands) if self.commands else 0
@@ -94,7 +92,6 @@ class ConsoleUI(BaseUI):
     def welcome(self) -> None:
         """显示欢迎信息"""
         self.clear()
-        environment = Environment.get_instance()
 
         # 版本信息
         product = Text()
@@ -106,10 +103,11 @@ class ConsoleUI(BaseUI):
         # 模型和工作目录等基本信息
         info = Text()
         info.append("model:     ", style="grey50")
-        info.append(environment.get_llm_config().name, style="white")
+        info.append("Temp Model", style="white")
         info.append("\n", style="")
         info.append("directory: ", style="grey50")
-        info.append(f"{environment.get_runtime_config().workspace_dir}", style="white")
+        # TODO: 修改为工作目录
+        info.append(f"{os.getcwd()}", style="white")
 
         panel_content = Text.assemble(product, "\n\n", info)
         panel = Panel(
@@ -195,7 +193,8 @@ class ConsoleUI(BaseUI):
         input_buffer = Buffer(
             completer=SmartCompleter(),
             complete_while_typing=True,
-            history=FileHistory(Environment.get_instance().get_runtime_config().settings_dir / ".eflycode_history"),
+            # TODO: 修改为正式工作目录
+            history=FileHistory(os.path.join(os.getcwd(), ".eflycode_history")),
             auto_suggest=AutoSuggestFromHistory(),
             multiline=True,
             accept_handler=accept_handler,

@@ -1,5 +1,6 @@
 from enum import Enum
 import threading
+import os
 from typing import Iterable, List, Optional, Callable
 
 from prompt_toolkit.document import Document
@@ -18,9 +19,6 @@ from eflycode.ui.components import GlowingTextWidget, ThinkingWidget, InputWidge
 from eflycode.ui.colors import PTK_STYLE
 from eflycode.util.event_bus import EventBus
 from eflycode.util.logger import logger
-from eflycode.env import Environment
-from eflycode.ui.command import BaseCommand, get_builtin_commands
-from eflycode.ui.console.completer import SmartCompleter
 
 
 class UIState(Enum):
@@ -295,9 +293,10 @@ class ConsoleUIApplication(ConsoleUI):
             return True
 
         input_buffer = Buffer(
-            completer=SmartCompleter(),
+            # completer=SmartCompleter(),
             complete_while_typing=True,
-            history=FileHistory(Environment.get_instance().get_runtime_config().settings_dir / ".eflycode_history"),
+            # TODO: 修改为正式工作目录
+            history=FileHistory(os.path.join(os.getcwd(), ".eflycode_history")),
             auto_suggest=AutoSuggestFromHistory(),
             multiline=True,
             accept_handler=accept_handler,

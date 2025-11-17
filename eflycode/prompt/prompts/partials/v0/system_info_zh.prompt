@@ -1,7 +1,0 @@
-# 系统信息
-
-操作系统: {{ system_info.os_type }}-{{ system_info.os_release }}
-默认命令行程序: {{ system_info.default_shell }}
-工作目录: {{ system_info.work_dir }}
-当前时区: {{ system_info.timezone }}
-当前时间: {{ system_info.current_time }}

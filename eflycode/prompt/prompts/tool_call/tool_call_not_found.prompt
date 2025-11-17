@@ -1,2 +1,0 @@
-The tool {{ tool_name }} is not found.
-You have access to the following tools [{% for tool_name in tools.keys() %}{{ tool_name }}{% if not loop.last %}, {% endif %}{% endfor %}]. Please check the tool name and try again.

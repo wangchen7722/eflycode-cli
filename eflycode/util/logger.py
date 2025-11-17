@@ -1,35 +1,38 @@
 from loguru import logger
+from pathlib import Path
 
-from eflycode.schema.config import LoggingConfig
 
-def configure_logging(logging_config: LoggingConfig) -> None:
+def configure_logging() -> None:
     """配置日志记录器"""
+    dirpath = Path("logs")
 
     # 确保日志目录存在
-    logging_config.dirpath.mkdir(parents=True, exist_ok=True)
+    dirpath.mkdir(parents=True, exist_ok=True)
 
     # 移除默认的控制台输出
     logger.remove()
     
     # 只添加文件输出
     logger.add(
-        logging_config.dirpath / logging_config.filename,
-        rotation=logging_config.rotation,
-        retention=logging_config.retention,
-        encoding=logging_config.encoding,
-        level=logging_config.level,
-        format=logging_config.format
+        dirpath / "eflycode.log",
+        rotation="10 MB",
+        retention="1 week",
+        encoding="utf-8",
+        level="INFO",
+        format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}"
     )
 
     # 专门记录 ERROR 的日志，追踪调用栈
     logger.add(
-        logging_config.dirpath / "error.log",
-        rotation=logging_config.rotation,
-        retention=logging_config.retention,
-        encoding=logging_config.encoding,
+        dirpath / "error.log",
+        rotation="10 MB",
+        retention="1 week",
+        encoding="utf-8",
         level="ERROR",
-        format=logging_config.format,
+        format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}",
         backtrace=True
     )
 
-    logger.debug(f"日志记录器已配置，日志文件路径: {logging_config.dirpath / logging_config.filename}")
+    logger.debug(f"日志记录器已配置，日志文件路径: {dirpath / 'eflycode.log'}")
+
+configure_logging()

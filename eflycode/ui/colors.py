@@ -63,6 +63,8 @@ PTK_STYLE = PTKStyle.from_dict({
     "warning": f"{UI_COLORS['warning']} bold",
     "error": f"{UI_COLORS['error']} bold",
     "info": f"{UI_COLORS['info']} bold",
+    "toolbar.key": "bold #9ca3af",
+    "toolbar.label": "#d1d5db",
     
     # 代码语法高亮
     "code": f"{UI_COLORS['code']} bold",

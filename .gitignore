@@ -1,5 +1,7 @@
 .idea
 .vscode
+.cursor
+.trae
 logs/
 **/__pycache__
 run_echo.bat
@@ -11,6 +13,4 @@ echoai_mcp_setting.json
 research/
 .echoignore
 cache/
-
 .eflycode/
-.trae

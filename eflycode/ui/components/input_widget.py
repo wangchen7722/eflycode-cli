@@ -110,11 +110,11 @@ class InputWidget(FloatContainer):
 
         def toolbar_content():
             return FormattedText([
-                ("", "[ @ ]"), ("", " Skills "),
+                ("class:toolbar.key", "[ @ ]"), ("class:toolbar.label", " Skills "),
                 ("", "   "),
-                ("", "[ # ]"), ("", " Files "),
+                ("class:toolbar.key", "[ # ]"), ("class:toolbar.label", " Files "),
                 ("", "   "),
-                ("", "[ / ]"), ("", " Commands "),
+                ("class:toolbar.key", "[ / ]"), ("class:toolbar.label", " Commands "),
             ])
         
         toolbar_window = ConditionalContainer(
@@ -125,3 +125,8 @@ class InputWidget(FloatContainer):
             filter=toolbar_condition
         )
         return toolbar_window
+
+    @property
+    def input_window(self) -> Window:
+        """返回用于聚焦的输入窗口"""
+        return self._input_window

@@ -20,7 +20,7 @@ class ThinkingWidget(ConditionalContainer):
     """思考组件
     """
 
-    def __init__(self, get_app: Callable[[], Application], title: str, content: str):
+    def __init__(self, get_app: Callable[[], Application], title: str, content: str = ""):
         """初始化思考组件
 
         Args:
@@ -32,7 +32,7 @@ class ThinkingWidget(ConditionalContainer):
         self._thinking = False
         self._lock = threading.Lock()
         self.title = title
-        self.content = content
+        self.content = content or ""
         # 思考标题区域
         self.glow_title = GlowingTextWidget(get_app, self.title, speed=0.05, radius=1)
         # 思考内容区域
@@ -56,7 +56,7 @@ class ThinkingWidget(ConditionalContainer):
         """
         with self._lock:
             self._thinking = True
-            self.buffer.text = ""
+            self.buffer.text = self.content or ""
             self.glow_title.start()
             self.glow_title.resume()
         self._invalidate()

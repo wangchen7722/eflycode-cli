@@ -27,6 +27,7 @@ class UIEventType:
     USER_INPUT = "user_input"
     USER_INPUT_RECEIVED = "user_input_received"
     USER_CONFIRM = "user_confirm"
+    INTERRUPT = "interrupt"
 
 
 class AgentUIEventType(UIEventType):
@@ -86,7 +87,7 @@ class UIEventHandlerMixin(ABC):
         
     def handle_event(self, event: str, data: dict) -> None:
         """处理事件"""
-        print(f"handle_event: {event} {data}")
+        # print(f"handle_event: {event} {data}")
         handler = self._event_handlers.get(event)
         if handler:
             handler(data)

@@ -1,6 +1,8 @@
 from enum import Enum
 import threading
 import os
+import sys
+from io import StringIO
 from typing import Iterable, List, Optional, Callable
 
 from prompt_toolkit.document import Document
@@ -12,9 +14,17 @@ from prompt_toolkit.application import Application
 from prompt_toolkit.keys import Keys
 from prompt_toolkit.completion import Completer, Completion, CompleteEvent
 from prompt_toolkit.buffer import Buffer
+from prompt_toolkit.shortcuts import print_formatted_text
+from prompt_toolkit.formatted_text import ANSI
+try:
+    from prompt_toolkit.eventloop import get_event_loop  # type: ignore
+except ImportError:  # pragma: no cover
+    get_event_loop = None  # type: ignore
+
+from rich.console import Console
 
 from eflycode.ui.event import UIEventType, AgentUIEventType, AgentUIEventHandlerMixin
-from eflycode.ui.console.ui import ConsoleUI
+from eflycode.ui.console.ui import ConsoleUI as BaseConsoleUI
 from eflycode.ui.components import GlowingTextWidget, ThinkingWidget, InputWidget
 from eflycode.ui.colors import PTK_STYLE
 from eflycode.util.event_bus import EventBus
@@ -28,30 +38,67 @@ class UIState(Enum):
     THINKING = "thinking"
 
 
-class ConsoleUIApplication(ConsoleUI):
-    """控制台 UI 应用"""
+try:
+    from prompt_toolkit.patch_stdout import patch_stdout
+except ImportError:
+    patch_stdout = None
 
-    def __init__(self, on_input_callback: Callable[[str], None], event_bus: EventBus) -> None:
+class ConsoleUI(BaseConsoleUI):
+    """
+    控制台 UI 实现
+
+    负责所有 UI 渲染和交互功能。
+    """
+
+    def __init__(self, event_bus: EventBus) -> None:
         super().__init__()
-        self._lock = threading.Lock()
         self._event_bus = event_bus
+        self._lock = threading.Lock()
         self._state: UIState = UIState.INPUT
         self._running = False
+        self._input_widget: InputWidget | None = None
+        self._tool_call_widget: GlowingTextWidget | None = None
+        self._thinking_widget: ThinkingWidget | None = None
+
+        # 创建专门用于渲染的 Console，渲染到字符串然后通过 prompt_toolkit 输出
+        self._render_buffer = StringIO()
+        self._render_console = Console(
+            file=self._render_buffer,
+            force_terminal=True,
+            width=None,
+            highlight=True,
+            legacy_windows=False,
+        )
+
         self._layout: Layout = self._create_input_layout()
         self._app: Application = Application(
             layout=self._layout,
             style=PTK_STYLE,
             mouse_support=True,
             full_screen=False,
-            erase_when_done=False
+            erase_when_done=True
         )
         self._mount_key_bindings()
-        self._on_input_callback = on_input_callback
-        self._input_widget: InputWidget | None = None
-        self._tool_call_widget: GlowingTextWidget | None = None
-        self._thinking_widget: ThinkingWidget | None = None
-
         self._app_thread: Optional[threading.Thread] = None
+
+    def _print_rich(self, *args, end: str = "\n", **kwargs) -> None:
+        """
+        使用 rich 渲染文本，然后通过 prompt_toolkit 的 print_formatted_text 输出。
+
+        这样可以保持 rich 的样式支持，同时避免干扰 prompt_toolkit 的屏幕管理。
+        """
+        self._render_buffer.seek(0)
+        self._render_buffer.truncate(0)
+        self._render_console.print(*args, end=end, **kwargs)
+        rendered = self._render_buffer.getvalue()
+        if rendered:
+            print_formatted_text(ANSI(rendered), end="")
+
+    @property
+    def is_busy(self) -> bool:
+        """当前UI是否处于忙碌状态"""
+        with self._lock:
+            return self._state in (UIState.TOOL_CALL, UIState.THINKING)
 
     def run_in_background(self):
         """后台运行应用"""
@@ -68,18 +115,18 @@ class ConsoleUIApplication(ConsoleUI):
         self._app_thread = threading.Thread(target=_run, daemon=True)
         self._app_thread.start()
 
+
     def run(self) -> None:
         """
-        启动UI应用程序（阻塞式运行）
-        
-        Raises:
-            KeyboardInterrupt: 用户中断
-            Exception: 其他运行时异常
+        启动UI应用程序（使用 patch_stdout 保持 REPL 体验）
         """
         self._running = True
         try:
-            # 使用handle_sigint=False，通过按键绑定处理Ctrl+C
-            self._app.run(handle_sigint=False)
+            if patch_stdout:
+                with patch_stdout():
+                    self._app.run(handle_sigint=False)
+            else:
+                self._app.run(handle_sigint=False)
         finally:
             self._running = False
 
@@ -109,10 +156,37 @@ class ConsoleUIApplication(ConsoleUI):
             fn: 要在UI线程中执行的函数
         """
         if self._app and self._app.is_running:
-            # 使用prompt_toolkit的call_from_executor将操作封送到UI线程
-            self._app.call_from_executor(fn)
+            name = getattr(fn, "__name__", repr(fn))
+
+            def _wrapped():
+                try:
+                    fn()
+                except Exception:
+                    logger.exception("run_ui callback %s failed", name)
+
+            dispatcher = getattr(self._app, "call_from_executor", None)
+            event_loop_dispatcher = getattr(
+                getattr(self._app, "event_loop", None), "call_from_executor", None
+            )
+            if callable(dispatcher):
+                dispatcher(_wrapped)
+            elif callable(event_loop_dispatcher):
+                event_loop_dispatcher(_wrapped)
+            elif get_event_loop:
+                loop = get_event_loop()
+                if hasattr(loop, "call_from_executor"):
+                    loop.call_from_executor(_wrapped)
+                elif hasattr(self._app, "pre_run_callables"):
+                    self._app.pre_run_callables.append(_wrapped)
+                    self._app.invalidate()
+                else:
+                    _wrapped()
+            elif hasattr(self._app, "pre_run_callables"):
+                self._app.pre_run_callables.append(_wrapped)
+                self._app.invalidate()
+            else:
+                _wrapped()
         else:
-            # 如果UI未运行，直接执行（通常在初始化阶段）
             fn()
 
     def stop(self) -> None:
@@ -120,6 +194,54 @@ class ConsoleUIApplication(ConsoleUI):
         停止UI应用程序（别名方法）
         """
         self.exit()
+
+
+    def start_thinking(self, title: str = "Thinking...", initial: str = "") -> None:
+        """进入思考状态"""
+
+        def _start():
+            with self._lock:
+                self._state = UIState.THINKING
+                self._app.layout = self._create_thinking_layout(title, initial)
+                if self._thinking_widget:
+                    self._thinking_widget.start_thinking()
+                self._app.invalidate()
+
+        self.run_ui(_start)
+        hint = "模拟 Agent 正在思考，按 Ctrl+C 可中断当前响应。\n"
+        self._print_rich(hint, style="dim")
+
+    def append_thinking(self, text: str) -> None:
+        """追加思考内容"""
+        if not text:
+            return
+
+        # 流式输出直接打印，不等待 UI 线程
+        self._print_rich(text, end="", markup=False)
+
+        def _append():
+            with self._lock:
+                if self._state != UIState.THINKING:
+                    return
+                if self._thinking_widget:
+                    self._thinking_widget.append_content(text)
+
+        self.run_ui(_append)
+
+    def stop_thinking(self, notice: str | None = None) -> None:
+        """结束思考并恢复输入"""
+        def _stop():
+            with self._lock:
+                if self._thinking_widget:
+                    self._thinking_widget.stop_thinking()
+                self._state = UIState.INPUT
+                self._app.layout = self._create_input_layout()
+                self._focus_input_window()
+                self._app.invalidate()
+
+        self.run_ui(_stop)
+        if notice:
+            self._print_rich(f"\n{notice}\n", style="dim")
 
     def start_tool_call(self, name: str):
         """开始工具调用"""
@@ -204,9 +326,23 @@ class ConsoleUIApplication(ConsoleUI):
             with self._lock:
                 self._state = UIState.INPUT
                 self._app.layout = self._create_input_layout()
+                self._focus_input_window()
                 self._app.invalidate()
         
         self.run_ui(_show_input)
+
+    def _focus_input_window(self) -> None:
+        """聚焦输入窗口"""
+        if not self._app:
+            return
+        if not self._input_widget:
+            return
+
+        window = self._input_widget.input_window
+        try:
+            self._app.layout.focus(window)
+        except Exception as exc:
+            logger.exception("Failed to focus input window: %s", exc)
 
     def _mount_key_bindings(self) -> None:
         """挂载按键绑定"""
@@ -215,8 +351,12 @@ class ConsoleUIApplication(ConsoleUI):
         # Ctrl + C 用于优雅退出应用
         @key_bindings.add(Keys.ControlC)
         def _handle_ctrl_c(event: KeyPressEvent):
-            logger.info("收到中断信号，正在关闭...")
-            self._event_bus.emit(UIEventType.STOP_APP)
+            if self.is_busy:
+                logger.info("收到中断信号，尝试中止当前任务...")
+                self._event_bus.emit(UIEventType.INTERRUPT)
+            else:
+                logger.info("收到停止信号，正在关闭...")
+                self._event_bus.emit(UIEventType.STOP_APP)
 
         # Alt + Enter 用于插入换行
         @key_bindings.add(Keys.Escape, Keys.Enter)
@@ -261,6 +401,7 @@ class ConsoleUIApplication(ConsoleUI):
 
     def _create_input_layout(self) -> Layout:
         """创建主布局"""
+        # REPL 模式不再需要 OutputWidget 占位，上方空白自然消除
         input_window = self._create_input_window()
         return Layout(input_window)
 
@@ -273,10 +414,16 @@ class ConsoleUIApplication(ConsoleUI):
         )
         return self._tool_call_widget
 
-    def _create_thinking_window(self):
+    def _create_thinking_layout(self, title: str, content: str) -> Layout:
+        """创建思考布局"""
+        thinking_window = self._create_thinking_window(title, content)
+        return Layout(thinking_window)
+
+    def _create_thinking_window(self, title: str, content: str):
         self._thinking_widget = ThinkingWidget(
             get_app=lambda: self._app,
-            title="Thinking...",
+            title=title,
+            content=content,
         )
         return self._thinking_widget
 
@@ -286,8 +433,8 @@ class ConsoleUIApplication(ConsoleUI):
         def accept_handler(buffer: Buffer):
             """处理输入确认"""
             text = buffer.text
-            if text and self._on_input_callback:
-                self._on_input_callback(text)
+            if text:
+                self._emit_user_input(text)
             # 清空输入缓冲区
             buffer.reset()
             return True
@@ -309,94 +456,94 @@ class ConsoleUIApplication(ConsoleUI):
         )
         return self._input_widget
 
-
-class ConsoleAgentEventUI(AgentUIEventHandlerMixin):
-    """
-    控制台事件UI
-    """
-
-    def __init__(self, event_bus: EventBus) -> None:
-        AgentUIEventHandlerMixin.__init__(self, event_bus)
-        self.app = ConsoleUIApplication(on_input_callback=self._emit_user_input, event_bus=self._event_bus)
-
     def _emit_user_input(self, text: str) -> None:
+        """发送用户输入事件"""
         self._event_bus.emit(UIEventType.USER_INPUT_RECEIVED, {"text": text})
+
+
+class UIEventHandler(AgentUIEventHandlerMixin):
+    """
+    UI 事件处理器
+
+    负责处理所有 UI 相关事件，通过 ConsoleUI 实例执行 UI 操作。
+    """
+
+    def __init__(self, event_bus: EventBus, console_ui: ConsoleUI) -> None:
+        AgentUIEventHandlerMixin.__init__(self, event_bus)
+        self._console_ui = console_ui
 
     def _handle_start_app(self, data: dict) -> None:
         """处理启动应用事件"""
-        # UI现在直接在主线程运行，不需要额外启动
         pass
 
     def _handle_stop_app(self, data: dict) -> None:
         """处理停止应用事件"""
         logger.info("收到停止应用事件，发送UI退出信号...")
-        # 不直接退出UI，而是发送QUIT_UI事件让主线程处理
         self._event_bus.emit(UIEventType.QUIT_UI)
 
     def _handle_show_welcome(self, data: dict) -> None:
         """处理显示欢迎事件"""
         def _show_welcome():
-            self.app.welcome()
-        self.app.run_ui(_show_welcome)
+            self._console_ui.welcome()
+        self._console_ui.run_ui(_show_welcome)
 
     def _handle_show_help(self, data: dict) -> None:
         """处理显示帮助事件"""
         def _show_help():
-            self.app.help()
-        self.app.run_ui(_show_help)
+            self._console_ui.help()
+        self._console_ui.run_ui(_show_help)
 
     def _handle_clear_screen(self, data: dict) -> None:
         """处理清屏事件"""
         def _clear_screen():
-            self.app.clear()
-        self.app.run_ui(_clear_screen)
+            self._console_ui.clear()
+        self._console_ui.run_ui(_clear_screen)
 
     def _handle_think_start(self, data: dict) -> None:
         """处理思考开始事件"""
-        # TODO: 实现思考状态UI显示
-        pass
+        title = data.get("title", "Thinking...")
+        content = data.get("content", "")
+        self._console_ui.start_thinking(title, content)
 
     def _handle_think_update(self, data: dict) -> None:
         """处理思考更新事件"""
-        # TODO: 实现思考内容更新
-        pass
+        text = data.get("content", "")
+        self._console_ui.append_thinking(text)
 
     def _handle_think_end(self, data: dict) -> None:
         """处理思考结束事件"""
-        # TODO: 实现思考状态结束
-        pass
+        notice = data.get("notice")
+        self._console_ui.stop_thinking(notice)
 
     def _handle_message_start(self, data: dict) -> None:
         """处理消息开始事件"""
-        # TODO: 实现消息显示开始
         pass
 
     def _handle_message_update(self, data: dict) -> None:
         """处理消息更新事件"""
         text = data.get("text", "")
         if text:
-            # 通过安全接口显示消息内容
-            def _show_message():
-                self.app.info(text)
-            self.app.run_ui(_show_message)
+            self._console_ui._print_rich(text, end="", markup=False)
 
     def _handle_message_end(self, data: dict) -> None:
         """处理消息结束事件"""
-        # TODO: 实现消息显示结束
-        pass
+        try:
+            self._console_ui.show_input()
+        except Exception as exc:  # pragma: no cover
+            logger.exception("show_input failed during message_end: %s", exc)
 
     def _handle_tool_call_start(self, data: dict) -> None:
         """处理工具调用开始事件"""
         name = data.get("name", "")
         if name:
-            self.app.start_tool_call(name)
+            self._console_ui.start_tool_call(name)
 
     def _handle_tool_call_end(self, data: dict) -> None:
         """处理工具调用结束事件"""
         name = data.get("name", "")
         args = data.get("args", {})
         if name:
-            self.app.execute_tool_call(name, str(args))
+            self._console_ui.execute_tool_call(name, str(args))
 
     def _handle_tool_call_finish(self, data: dict) -> None:
         """处理工具调用完成事件"""
@@ -404,7 +551,7 @@ class ConsoleAgentEventUI(AgentUIEventHandlerMixin):
         args = data.get("args", {})
         result = data.get("result", "")
         if name:
-            self.app.finish_tool_call(name, str(args), result)
+            self._console_ui.finish_tool_call(name, str(args), result)
 
     def _handle_tool_call_error(self, data: dict) -> None:
         """处理工具调用错误事件"""
@@ -412,83 +559,66 @@ class ConsoleAgentEventUI(AgentUIEventHandlerMixin):
         args = data.get("args", {})
         error = data.get("error", "")
         if name:
-            self.app.fail_tool_call(name, str(args), error)
+            self._console_ui.fail_tool_call(name, str(args), error)
 
     def _handle_code_diff(self, data: dict) -> None:
         """处理代码差异事件"""
-        # TODO: 实现代码差异显示
         pass
 
     def _handle_terminal_exec_start(self, data: dict) -> None:
         """处理终端执行开始事件"""
-        # TODO: 实现终端执行状态显示
         pass
 
     def _handle_terminal_exec_running(self, data: dict) -> None:
         """处理终端执行运行事件"""
-        # TODO: 实现终端执行进度显示
         pass
 
     def _handle_terminal_exec_end(self, data: dict) -> None:
         """处理终端执行结束事件"""
-        # TODO: 实现终端执行结果显示
         pass
 
     def _handle_progress_start(self, data: dict) -> None:
         """处理进度开始事件"""
-        # TODO: 实现进度条显示
         pass
 
     def _handle_progress_update(self, data: dict) -> None:
         """处理进度更新事件"""
-        # TODO: 实现进度更新
         pass
 
     def _handle_progress_end(self, data: dict) -> None:
         """处理进度结束事件"""
-        # TODO: 实现进度完成
         pass
 
     def _handle_file_open(self, data: dict) -> None:
         """处理文件打开事件"""
-        # TODO: 实现文件打开显示
         pass
 
     def _handle_file_update(self, data: dict) -> None:
         """处理文件更新事件"""
-        # TODO: 实现文件更新显示
         pass
 
     def _handle_user_input(self, data: dict) -> None:
         """处理用户输入事件"""
-        # TODO: 实现用户输入处理
         pass
 
     def _handle_info(self, data: dict) -> None:
         """处理信息事件"""
         message = data.get("message", "")
         if message:
-            def _show_info():
-                self.app.info(message)
-            self.app.run_ui(_show_info)
+            self._console_ui._print_rich(f"{message}\n")
 
     def _handle_warning(self, data: dict) -> None:
         """处理警告事件"""
         message = data.get("message", "")
         if message:
-            def _show_warning():
-                self.app.warning(message)
-            self.app.run_ui(_show_warning)
+            self._console_ui._print_rich(f"[yellow]⚠ {message}[/yellow]\n")
 
     def _handle_error(self, data: dict) -> None:
         """处理错误事件"""
         error = data.get("error", "")
         if error:
-            def _show_error():
-                self.app.error(error)
-            self.app.run_ui(_show_error)
+            self._console_ui._print_rich(f"[red]✗ {error}[/red]\n")
 
     def _handle_user_confirm(self, data: dict) -> None:
         """处理用户确认事件"""
-        # TODO: 实现用户确认对话框
         pass

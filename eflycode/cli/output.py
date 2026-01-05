@@ -56,7 +56,7 @@ class TerminalOutput(UIOutput):
     def end_task(self) -> None:
         """结束任务"""
         if self._current_task:
-            self._console.print("[bold green]任务完成[/bold green]")
+            self._console.print("\n[bold green]任务完成[/bold green]")
             self._current_task = None
 
     def show_tool_call(self, tool_name: str, arguments: Dict) -> None:

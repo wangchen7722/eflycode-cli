@@ -12,6 +12,7 @@ from eflycode.core.agent.run_loop import AgentRunLoop
 from eflycode.core.config import Config, load_config
 from eflycode.core.llm.providers.openai import OpenAiProvider
 from eflycode.core.tool.file_tool import create_file_tool_group
+from eflycode.core.tool.execute_command_tool import ExecuteCommandTool
 from eflycode.core.tool.finish_task_tool import FinishTaskTool
 from eflycode.core.ui.bridge import EventBridge
 from eflycode.core.ui.errors import UserCanceledError
@@ -39,13 +40,16 @@ def create_agent(config: Config) -> BaseAgent:
 
     # 创建完成任务工具
     finish_task_tool = FinishTaskTool()
+    
+    # 创建执行命令工具
+    execute_command_tool = ExecuteCommandTool()
 
     # 创建 Agent
     agent = BaseAgent(
         model=config.model_name,
         provider=provider,
         tool_groups=[file_tool_group],
-        tools=[finish_task_tool],
+        tools=[finish_task_tool, execute_command_tool],
     )
 
     return agent

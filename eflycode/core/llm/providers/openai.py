@@ -17,10 +17,10 @@ from eflycode.core.llm.protocol import (
     ToolDefinition,
     Usage,
 )
-from eflycode.core.llm.providers.base import BaseProvider, ProviderCapabilities
+from eflycode.core.llm.providers.base import LLMProvider, ProviderCapabilities
 
 
-class OpenAiProvider(BaseProvider):
+class OpenAiProvider(LLMProvider):
     """基于 OpenAI API 的 LLM Provider 实现"""
 
     def __init__(self, config: LLMConfig, advisors: Optional[List[Advisor]] = None):

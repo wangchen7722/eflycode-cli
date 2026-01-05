@@ -10,7 +10,7 @@ class ProviderCapabilities:
     supports_streaming: bool = True
     supports_tools: bool = True
 
-class BaseProvider(ABC):
+class LLMProvider(ABC):
     
     @property
     def capabilities(self) -> ProviderCapabilities:

@@ -1,0 +1,271 @@
+from typing import Dict, List, Optional
+
+from eflycode.core.agent.session import Session
+from eflycode.core.event.event_bus import EventBus
+from eflycode.core.llm.protocol import ChatCompletion, Message, ToolDefinition
+from eflycode.core.llm.providers.base import LLMProvider
+from eflycode.core.tool.base import BaseTool, ToolGroup
+from eflycode.core.tool.errors import ToolExecutionError
+
+
+class ChatConversation:
+    """聊天会话，包含当前的响应和全部对话信息"""
+
+    def __init__(self, completion: ChatCompletion, messages: List[Message]):
+        """初始化聊天会话
+
+        Args:
+            completion: 当前的 ChatCompletion 响应
+            messages: 全部对话消息列表
+        """
+        self.completion = completion
+        self.messages = messages
+
+    @property
+    def content(self) -> str:
+        """获取当前响应的内容"""
+        return self.completion.message.content or ""
+
+    @property
+    def tool_calls(self) -> Optional[List]:
+        """获取工具调用列表"""
+        return self.completion.message.tool_calls
+
+
+class TaskStatistics:
+    """任务统计信息"""
+
+    def __init__(
+        self,
+        total_tokens: int = 0,
+        prompt_tokens: int = 0,
+        completion_tokens: int = 0,
+        iterations: int = 0,
+        tool_calls_count: int = 0,
+    ):
+        """初始化任务统计信息
+
+        Args:
+            total_tokens: 总 token 数
+            prompt_tokens: 提示 token 数
+            completion_tokens: 完成 token 数
+            iterations: 迭代次数
+            tool_calls_count: 工具调用次数
+        """
+        self.total_tokens = total_tokens
+        self.prompt_tokens = prompt_tokens
+        self.completion_tokens = completion_tokens
+        self.iterations = iterations
+        self.tool_calls_count = tool_calls_count
+
+    def add_usage(self, usage) -> None:
+        """添加使用量统计
+
+        Args:
+            usage: Usage 对象
+        """
+        if usage:
+            self.prompt_tokens += usage.prompt_tokens
+            self.completion_tokens += usage.completion_tokens
+            self.total_tokens += usage.total_tokens
+
+
+class TaskConversation:
+    """任务会话，包含最终的响应、全部对话信息和任务统计"""
+
+    def __init__(self, conversation: ChatConversation, statistics: TaskStatistics):
+        """初始化任务会话
+
+        Args:
+            conversation: 最终的聊天会话
+            statistics: 任务统计信息
+        """
+        self.conversation = conversation
+        self.statistics = statistics
+
+    @property
+    def completion(self) -> ChatCompletion:
+        """获取最终的 ChatCompletion"""
+        return self.conversation.completion
+
+    @property
+    def messages(self) -> List[Message]:
+        """获取全部对话消息"""
+        return self.conversation.messages
+
+    @property
+    def content(self) -> str:
+        """获取最终响应的内容"""
+        return self.conversation.content
+
+
+class BaseAgent:
+    """Agent 基类，集成 LLMProvider 和工具系统"""
+
+    def __init__(
+        self,
+        model: str,
+        provider: LLMProvider,
+        tools: Optional[List[BaseTool]] = None,
+        tool_groups: Optional[List[ToolGroup]] = None,
+        event_bus: Optional[EventBus] = None,
+    ):
+        """初始化 Agent
+
+        Args:
+            model: 模型名称
+            provider: LLM Provider 实例
+            tools: 工具列表
+            tool_groups: 工具组列表
+            event_bus: 事件总线，如果为 None 则创建新的
+        """
+        self.provider = provider
+        self.model_name = model
+        self.event_bus = event_bus or EventBus()
+        self.session = Session()
+
+        self._tools: Dict[str, BaseTool] = {}
+        self._tool_groups: List[ToolGroup] = []
+
+        if tools:
+            for tool in tools:
+                self._tools[tool.name] = tool
+
+        if tool_groups:
+            self._tool_groups.extend(tool_groups)
+            for group in tool_groups:
+                for tool in group.tools:
+                    self._tools[tool.name] = tool
+
+    def chat(self, message: str = "") -> ChatConversation:
+        """发送消息并获取响应
+
+        Args:
+            message: 用户消息，如果为空则使用会话历史
+
+        Returns:
+            ChatConversation: 包含当前响应和全部对话信息的会话对象
+        """
+        if message:
+            self.session.add_message("user", message)
+
+        request = self.session.get_context(self.model_name)
+        request.tools = self.get_available_tools()
+
+        if message:
+            self.event_bus.emit("agent.message.start", agent=self, message=message)
+
+        try:
+            response = self.provider.call(request)
+            content = response.message.content or ""
+
+            self.session.add_message("assistant", content)
+
+            self.event_bus.emit("agent.message.stop", agent=self, response=response)
+
+            return ChatConversation(completion=response, messages=self.session.get_messages())
+        except Exception as e:
+            self.event_bus.emit("agent.error", agent=self, error=e)
+            raise
+
+    def run_tool(self, tool_name: str, **kwargs) -> str:
+        """执行工具
+
+        Args:
+            tool_name: 工具名称
+            **kwargs: 工具参数
+
+        Returns:
+            str: 工具执行结果
+
+        Raises:
+            ToolExecutionError: 当工具执行失败时抛出
+        """
+        tool = self._tools.get(tool_name)
+        if not tool:
+            raise ToolExecutionError(
+                message=f"工具不存在: {tool_name}",
+                tool_name=tool_name,
+            )
+
+        self.event_bus.emit("agent.tool.call", agent=self, tool_name=tool_name, arguments=kwargs)
+
+        try:
+            result = tool.run(**kwargs)
+            self.event_bus.emit("agent.tool.result", agent=self, tool_name=tool_name, result=result)
+            return result
+        except Exception as e:
+            self.event_bus.emit("agent.tool.error", agent=self, tool_name=tool_name, error=e)
+            raise
+
+    def get_available_tools(self) -> List[ToolDefinition]:
+        """获取可用工具列表
+
+        Returns:
+            List[ToolDefinition]: 工具定义列表
+        """
+        return [tool.definition for tool in self._tools.values()]
+
+    def add_tool(self, tool: BaseTool) -> None:
+        """添加工具
+
+        Args:
+            tool: 要添加的工具
+        """
+        self._tools[tool.name] = tool
+
+    def remove_tool(self, tool_name: str) -> bool:
+        """移除工具
+
+        Args:
+            tool_name: 工具名称
+
+        Returns:
+            bool: 是否成功移除
+        """
+        if tool_name in self._tools:
+            del self._tools[tool_name]
+            return True
+        return False
+
+    def add_tool_group(self, tool_group: ToolGroup) -> None:
+        """添加工具组
+
+        Args:
+            tool_group: 要添加的工具组
+        """
+        self._tool_groups.append(tool_group)
+        for tool in tool_group.tools:
+            self._tools[tool.name] = tool
+
+    def remove_tool_group(self, group_name: str) -> bool:
+        """移除工具组
+
+        Args:
+            group_name: 工具组名称
+
+        Returns:
+            bool: 是否成功移除
+        """
+        for i, group in enumerate(self._tool_groups):
+            if group.name == group_name:
+                removed_group = self._tool_groups.pop(i)
+                for tool in removed_group.tools:
+                    self._tools.pop(tool.name, None)
+                return True
+        return False
+
+    def get_tool(self, tool_name: str) -> Optional[BaseTool]:
+        """获取工具
+
+        Args:
+            tool_name: 工具名称
+
+        Returns:
+            Optional[BaseTool]: 找到的工具，如果不存在则返回 None
+        """
+        return self._tools.get(tool_name)
+
+    def shutdown(self) -> None:
+        """关闭 Agent，清理资源"""
+        self.event_bus.shutdown(wait=True)

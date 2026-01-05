@@ -1,21 +1,27 @@
+#!/usr/bin/env python3
+"""
+快速排序算法实现
+快速排序是一种高效的排序算法，平均时间复杂度为O(n log n)
+"""
+
 def quick_sort(arr):
     """
-    快速排序算法
+    快速排序主函数
     
     参数:
-    arr: 要排序的列表
-    
+        arr: 要排序的列表
+        
     返回:
-    排序后的列表
+        排序后的列表
     """
-    # 基本情况：如果列表长度小于等于1，直接返回
+    # 如果列表长度小于等于1，直接返回
     if len(arr) <= 1:
         return arr
     
     # 选择基准元素（这里选择中间元素）
     pivot = arr[len(arr) // 2]
     
-    # 将元素分为三部分：小于基准、等于基准、大于基准
+    # 将列表分为三部分：小于基准、等于基准、大于基准
     left = [x for x in arr if x < pivot]
     middle = [x for x in arr if x == pivot]
     right = [x for x in arr if x > pivot]
@@ -26,15 +32,15 @@ def quick_sort(arr):
 
 def quick_sort_in_place(arr, low=0, high=None):
     """
-    原地快速排序算法（不创建新列表）
+    原地快速排序（节省内存空间）
     
     参数:
-    arr: 要排序的列表
-    low: 起始索引
-    high: 结束索引
-    
+        arr: 要排序的列表
+        low: 起始索引
+        high: 结束索引
+        
     返回:
-    原地排序后的列表
+        原地排序后的列表
     """
     if high is None:
         high = len(arr) - 1
@@ -43,7 +49,7 @@ def quick_sort_in_place(arr, low=0, high=None):
         # 获取分区索引
         pi = partition(arr, low, high)
         
-        # 递归排序分区前后的元素
+        # 递归排序分区
         quick_sort_in_place(arr, low, pi - 1)
         quick_sort_in_place(arr, pi + 1, high)
     
@@ -55,12 +61,12 @@ def partition(arr, low, high):
     分区函数，用于原地快速排序
     
     参数:
-    arr: 要排序的列表
-    low: 起始索引
-    high: 结束索引
-    
+        arr: 要排序的列表
+        low: 起始索引
+        high: 结束索引
+        
     返回:
-    基准元素的最终位置
+        基准元素的最终位置
     """
     # 选择最右边的元素作为基准
     pivot = arr[high]
@@ -69,7 +75,7 @@ def partition(arr, low, high):
     i = low - 1
     
     for j in range(low, high):
-        # 如果当前元素小于或等于基准
+        # 如果当前元素小于等于基准
         if arr[j] <= pivot:
             i += 1
             # 交换元素
@@ -87,58 +93,57 @@ def test_quick_sort():
     
     # 测试用例
     test_cases = [
-        [64, 34, 25, 12, 22, 11, 90],
-        [5, 2, 8, 1, 9, 3],
-        [1, 2, 3, 4, 5],  # 已排序
-        [5, 4, 3, 2, 1],  # 逆序
-        [42],  # 单个元素
-        [],  # 空列表
-        [3, 3, 3, 3, 3],  # 所有元素相同
-        [38, 27, 43, 3, 9, 82, 10]
+        ([], []),  # 空列表
+        ([1], [1]),  # 单个元素
+        ([5, 2, 8, 1, 9], [1, 2, 5, 8, 9]),  # 普通列表
+        ([9, 8, 7, 6, 5], [5, 6, 7, 8, 9]),  # 逆序列表
+        ([3, 3, 3, 3], [3, 3, 3, 3]),  # 重复元素
+        ([64, 34, 25, 12, 22, 11, 90], [11, 12, 22, 25, 34, 64, 90]),  # 更多元素
     ]
     
-    for i, test_arr in enumerate(test_cases, 1):
-        print(f"\n测试用例 {i}: {test_arr}")
-        
-        # 复制列表用于原地排序测试
-        arr_copy1 = test_arr.copy()
-        arr_copy2 = test_arr.copy()
-        
-        # 使用普通快速排序
-        sorted_arr = quick_sort(arr_copy1)
-        print(f"普通快速排序结果: {sorted_arr}")
-        
-        # 使用原地快速排序
-        sorted_in_place = quick_sort_in_place(arr_copy2)
-        print(f"原地快速排序结果: {sorted_in_place}")
-        
-        # 验证排序结果是否正确
-        expected = sorted(test_arr)
-        if sorted_arr == expected and sorted_in_place == expected:
-            print("✓ 排序正确")
-        else:
-            print("✗ 排序错误")
+    # 测试标准快速排序
+    print("1. 测试标准快速排序（非原地）:")
+    for i, (input_arr, expected) in enumerate(test_cases):
+        result = quick_sort(input_arr.copy())
+        status = "✓" if result == expected else "✗"
+        print(f"   测试用例 {i+1}: {status} 输入: {input_arr} -> 输出: {result}")
+    
+    print("\n2. 测试原地快速排序:")
+    for i, (input_arr, expected) in enumerate(test_cases):
+        arr_copy = input_arr.copy()
+        result = quick_sort_in_place(arr_copy)
+        status = "✓" if result == expected else "✗"
+        print(f"   测试用例 {i+1}: {status} 输入: {input_arr} -> 输出: {result}")
+    
+    # 性能测试
+    print("\n3. 性能测试:")
+    import random
+    import time
+    
+    # 生成随机列表
+    random_list = [random.randint(1, 10000) for _ in range(1000)]
+    
+    # 测试标准快速排序性能
+    start_time = time.time()
+    sorted_list1 = quick_sort(random_list.copy())
+    time1 = time.time() - start_time
+    
+    # 测试原地快速排序性能
+    start_time = time.time()
+    sorted_list2 = quick_sort_in_place(random_list.copy())
+    time2 = time.time() - start_time
+    
+    # 验证排序结果
+    is_sorted1 = all(sorted_list1[i] <= sorted_list1[i+1] for i in range(len(sorted_list1)-1))
+    is_sorted2 = all(sorted_list2[i] <= sorted_list2[i+1] for i in range(len(sorted_list2)-1))
+    
+    print(f"   随机列表长度: 1000")
+    print(f"   标准快速排序: {time1:.6f} 秒, 排序正确: {'✓' if is_sorted1 else '✗'}")
+    print(f"   原地快速排序: {time2:.6f} 秒, 排序正确: {'✓' if is_sorted2 else '✗'}")
     
     print("\n" + "=" * 50)
-    print("所有测试完成！")
+    print("快速排序算法实现完成！")
 
 
 if __name__ == "__main__":
-    # 运行测试
     test_quick_sort()
-    
-    # 示例使用
-    print("\n\n示例使用:")
-    print("-" * 30)
-    
-    # 示例1：普通快速排序
-    numbers = [64, 34, 25, 12, 22, 11, 90]
-    print(f"原始列表: {numbers}")
-    sorted_numbers = quick_sort(numbers)
-    print(f"排序后: {sorted_numbers}")
-    
-    # 示例2：原地快速排序
-    numbers2 = [38, 27, 43, 3, 9, 82, 10]
-    print(f"\n原始列表: {numbers2}")
-    quick_sort_in_place(numbers2)
-    print(f"原地排序后: {numbers2}")

@@ -3,6 +3,7 @@ import re
 from pathlib import Path
 from typing import Annotated, Any, Dict, List, Optional, Union
 
+from eflycode.core.config.ignore import load_ignore_patterns, should_ignore_path
 from eflycode.core.llm.protocol import ToolFunctionParameters
 from eflycode.core.tool.base import BaseTool, ToolGroup, ToolType
 from eflycode.core.tool.errors import ToolExecutionError
@@ -101,7 +102,7 @@ class ListFilesTool(BaseTool):
 
     @property
     def description(self) -> str:
-        return "递归列出目录下的所有文件和子目录，以树状文本返回。文本文件会显示行数。"
+        return "列出目录下的文件和子目录，以树状文本返回。默认递归深度为1，可通过 max_depth 参数调整。文本文件会显示行数，文件夹会显示包含的项目数量。"
 
     def display(self, directory: str = "", **kwargs) -> str:
         """工具显示名称"""
@@ -117,17 +118,62 @@ class ListFilesTool(BaseTool):
                     "type": "string",
                     "description": "要列出的目录路径",
                 },
+                "max_depth": {
+                    "type": "integer",
+                    "description": "最大递归深度，默认为1，即只列出当前目录和直接子目录",
+                    "default": 1,
+                },
             },
             required=["directory"],
         )
 
-    def _build_tree(self, directory: Path, prefix: str = "", is_last: bool = True) -> str:
+    def _count_items(self, directory: Path, max_depth: int, current_depth: int = 0) -> int:
+        """统计目录中的项目数量（包括子目录中的文件）
+
+        Args:
+            directory: 目录路径
+            max_depth: 最大递归深度
+            current_depth: 当前深度
+
+        Returns:
+            int: 项目数量
+        """
+        if current_depth >= max_depth:
+            return 0
+
+        count = 0
+        try:
+            for item in directory.iterdir():
+                if item.is_file():
+                    count += 1
+                elif item.is_dir():
+                    count += 1  # 目录本身算一个
+                    count += self._count_items(item, max_depth, current_depth + 1)
+        except (PermissionError, OSError):
+            pass
+
+        return count
+
+    def _build_tree(
+        self,
+        directory: Path,
+        prefix: str = "",
+        is_last: bool = True,
+        current_depth: int = 0,
+        max_depth: int = 1,
+        ignore_patterns: Optional[List[str]] = None,
+        base_dir: Optional[Path] = None,
+    ) -> str:
         """构建目录树
 
         Args:
             directory: 目录路径
             prefix: 前缀字符串
             is_last: 是否为最后一个节点
+            current_depth: 当前递归深度
+            max_depth: 最大递归深度
+            ignore_patterns: 忽略模式列表
+            base_dir: 基础目录，用于计算相对路径
 
         Returns:
             str: 树状文本
@@ -135,6 +181,15 @@ class ListFilesTool(BaseTool):
         result = []
         try:
             items = sorted(directory.iterdir(), key=lambda x: (x.is_file(), x.name))
+
+            # 过滤被忽略的项目
+            if ignore_patterns and base_dir:
+                filtered_items = []
+                for item in items:
+                    if not should_ignore_path(item, ignore_patterns, base_dir):
+                        filtered_items.append(item)
+                items = filtered_items
+
             for i, item in enumerate(items):
                 is_last_item = i == len(items) - 1
                 current_prefix = "└── " if is_last_item else "├── "
@@ -147,20 +202,38 @@ class ListFilesTool(BaseTool):
                     else:
                         result.append(f"{full_prefix}{item.name}")
                 else:
-                    result.append(f"{full_prefix}{item.name}/")
-                    next_prefix = prefix + ("    " if is_last_item else "│   ")
-                    result.append(self._build_tree(item, next_prefix, is_last_item))
+                    # 如果是目录
+                    if current_depth >= max_depth:
+                        # 达到最大深度，只显示目录名和项目数量
+                        item_count = self._count_items(item, max_depth, current_depth)
+                        result.append(f"{full_prefix}{item.name}/ ({item_count} items)")
+                    else:
+                        # 继续递归
+                        result.append(f"{full_prefix}{item.name}/")
+                        next_prefix = prefix + ("    " if is_last_item else "│   ")
+                        result.append(
+                            self._build_tree(
+                                item,
+                                next_prefix,
+                                is_last_item,
+                                current_depth + 1,
+                                max_depth,
+                                ignore_patterns,
+                                base_dir,
+                            )
+                        )
 
         except PermissionError:
             result.append(f"{prefix}└── [权限不足]")
 
         return "\n".join(result)
 
-    def do_run(self, directory: str, **kwargs) -> str:
+    def do_run(self, directory: str, max_depth: int = 1, **kwargs) -> str:
         """执行列出文件操作
 
         Args:
             directory: 目录路径
+            max_depth: 最大递归深度，默认为1
 
         Returns:
             str: 树状文件列表
@@ -177,7 +250,25 @@ class ListFilesTool(BaseTool):
                 tool_name=self.name,
             )
 
-        tree = self._build_tree(safe_path)
+        # 确定基础目录
+        # 尝试从配置中获取工作区目录，否则使用 safe_path 的父目录
+        try:
+            from eflycode.core.config import load_config
+            config = load_config()
+            base_dir = config.workspace_dir
+        except Exception:
+            # 如果获取配置失败，使用 safe_path 的父目录
+            base_dir = safe_path.parent if safe_path.parent != safe_path else safe_path
+
+        # 加载忽略模式
+        ignore_patterns = load_ignore_patterns(workspace_dir=base_dir)
+
+        tree = self._build_tree(
+            safe_path,
+            max_depth=max_depth,
+            ignore_patterns=ignore_patterns,
+            base_dir=base_dir,
+        )
         return f"{directory}/\n{tree}"
 
 
@@ -591,7 +682,10 @@ class CreateFileTool(BaseTool):
         """
         safe_path = _safe_path(filepath)
         if safe_path.exists():
-            raise FileExistsError(f"文件已存在: {filepath}")
+            raise ToolExecutionError(
+                message=f"文件已存在: {filepath}",
+                tool_name=self.name,
+            )
 
         try:
             safe_path.parent.mkdir(parents=True, exist_ok=True)

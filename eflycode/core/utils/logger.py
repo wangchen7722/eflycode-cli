@@ -20,7 +20,7 @@ _LOGGER_CONFIGURED = False
 _DEFAULT_FORMAT = (
     "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
     "<level>{level: <8}</level> | "
-    "{process.name}:{process.id} | {thread.name}:{thread.id} | "
+    "{thread.name}:{thread.id} | "
     "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - "
     "<level>{message}</level>"
 )

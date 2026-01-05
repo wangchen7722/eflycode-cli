@@ -12,5 +12,3 @@ build/
 cache/
 
 .env
-.eflycodeignore
-eflycode_mcp_setting.json

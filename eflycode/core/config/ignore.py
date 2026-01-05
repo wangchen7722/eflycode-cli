@@ -1,0 +1,199 @@
+"""忽略文件管理模块
+
+负责查找和解析 .eflycodeignore 文件，提供路径忽略判断功能
+"""
+
+import fnmatch
+from pathlib import Path
+from typing import List, Optional
+
+
+def find_ignore_file(workspace_dir: Optional[Path] = None) -> Optional[Path]:
+    """查找 .eflycodeignore 文件
+
+    查找逻辑：
+    1. 如果提供了 workspace_dir，直接在该目录查找
+    2. 否则从当前目录开始，向上查找最多 2 级（与 find_config_file 逻辑一致）
+    3. 返回找到的文件路径，如果没找到返回 None
+
+    Args:
+        workspace_dir: 工作区根目录，如果提供则直接在该目录查找
+
+    Returns:
+        Optional[Path]: 找到的 .eflycodeignore 文件路径，如果没找到返回 None
+    """
+    if workspace_dir:
+        ignore_file = workspace_dir / ".eflycodeignore"
+        if ignore_file.exists() and ignore_file.is_file():
+            return ignore_file
+        return None
+
+    # 从当前目录开始，向上查找最多 2 级
+    current_dir = Path.cwd().resolve()
+    for _ in range(3):  # 当前目录 + 向上 2 级 = 3 个目录
+        ignore_file = current_dir / ".eflycodeignore"
+        if ignore_file.exists() and ignore_file.is_file():
+            return ignore_file
+        current_dir = current_dir.parent
+
+    return None
+
+
+def load_ignore_patterns(
+    ignore_file_path: Optional[Path] = None, workspace_dir: Optional[Path] = None
+) -> List[str]:
+    """加载忽略模式列表
+
+    从 .eflycodeignore 文件中加载忽略模式，去除空行和注释行
+
+    Args:
+        ignore_file_path: 忽略文件路径，如果提供则直接读取该文件
+        workspace_dir: 工作区根目录，如果提供了则用于查找忽略文件
+
+    Returns:
+        List[str]: 忽略模式列表，如果文件不存在返回空列表
+    """
+    if ignore_file_path is None:
+        ignore_file_path = find_ignore_file(workspace_dir)
+
+    if ignore_file_path is None or not ignore_file_path.exists():
+        return []
+
+    patterns = []
+    try:
+        with open(ignore_file_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                # 跳过空行和注释行
+                if line and not line.startswith("#"):
+                    patterns.append(line)
+    except Exception:
+        # 如果读取失败，返回空列表
+        return []
+
+    return patterns
+
+
+def should_ignore_path(path: Path, ignore_patterns: List[str], base_dir: Path) -> bool:
+    """判断路径是否应该被忽略
+
+    使用 fnmatch 进行模式匹配，支持 *、**、! 等模式（类似 .gitignore）
+
+    Args:
+        path: 要判断的路径
+        ignore_patterns: 忽略模式列表
+        base_dir: 基础目录，用于计算相对路径
+
+    Returns:
+        bool: True 表示应该忽略，False 表示不忽略
+    """
+    if not ignore_patterns:
+        return False
+
+    try:
+        # 将路径转换为相对于 base_dir 的路径
+        if path.is_absolute() and base_dir.is_absolute():
+            try:
+                relative_path = path.relative_to(base_dir)
+            except ValueError:
+                # 如果 path 不在 base_dir 下，使用绝对路径
+                path_str = str(path)
+            else:
+                path_str = str(relative_path)
+        else:
+            path_str = str(path)
+
+        # 标准化路径分隔符（统一使用 /）
+        path_str = path_str.replace("\\", "/")
+
+        # 检查每个忽略模式
+        for pattern in ignore_patterns:
+            # 处理否定模式（! 开头）
+            if pattern.startswith("!"):
+                negate_pattern = pattern[1:].strip()
+                if _match_pattern(path_str, negate_pattern, base_dir):
+                    return False
+            else:
+                if _match_pattern(path_str, pattern, base_dir):
+                    return True
+
+        return False
+    except Exception:
+        # 如果匹配过程中出错，默认不忽略
+        return False
+
+
+def _match_pattern(path_str: str, pattern: str, base_dir: Path) -> bool:
+    """匹配单个模式
+
+    Args:
+        path_str: 要匹配的路径字符串（相对路径，使用 / 作为分隔符）
+        pattern: 匹配模式
+        base_dir: 基础目录
+
+    Returns:
+        bool: 是否匹配
+    """
+    # 标准化模式中的路径分隔符
+    pattern = pattern.replace("\\", "/")
+
+    # 处理 ** 模式（匹配任意路径）
+    if "**" in pattern:
+        # 简化处理：如果模式以 ** 开头或结尾，使用通配符匹配
+        if pattern.startswith("**"):
+            # **/pattern 或 **pattern
+            if pattern == "**":
+                return True
+            remaining = pattern[2:].lstrip("/")
+            if remaining:
+                return fnmatch.fnmatch(path_str, f"*{remaining}") or fnmatch.fnmatch(
+                    path_str, remaining
+                )
+        elif pattern.endswith("**"):
+            # pattern/**
+            remaining = pattern[:-2].rstrip("/")
+            if remaining:
+                return path_str.startswith(remaining + "/") or fnmatch.fnmatch(
+                    path_str, remaining
+                )
+        else:
+            # pattern/**/pattern
+            parts = pattern.split("**")
+            if len(parts) == 2:
+                prefix = parts[0].rstrip("/")
+                suffix = parts[1].lstrip("/")
+                if prefix and suffix:
+                    return (
+                        path_str.startswith(prefix + "/")
+                        and path_str.endswith("/" + suffix)
+                    ) or fnmatch.fnmatch(path_str, f"{prefix}/*{suffix}")
+                elif prefix:
+                    return path_str.startswith(prefix + "/") or fnmatch.fnmatch(
+                        path_str, prefix
+                    )
+                elif suffix:
+                    return path_str.endswith("/" + suffix) or fnmatch.fnmatch(
+                        path_str, suffix
+                    )
+
+    # 处理目录模式（以 / 结尾）
+    if pattern.endswith("/"):
+        pattern = pattern[:-1]
+        # 对于目录模式，检查路径是否为目录或路径以该模式开头
+        return fnmatch.fnmatch(path_str, pattern) or path_str.startswith(
+            pattern + "/"
+        )
+
+    # 处理普通模式
+    # 支持从根目录开始的模式（以 / 开头）
+    if pattern.startswith("/"):
+        pattern = pattern[1:]
+        return fnmatch.fnmatch(path_str, pattern) or path_str == pattern
+
+    # 支持匹配任意位置的模式
+    return (
+        fnmatch.fnmatch(path_str, pattern)
+        or fnmatch.fnmatch(path_str, f"*/{pattern}")
+        or path_str.endswith(f"/{pattern}")
+    )
+

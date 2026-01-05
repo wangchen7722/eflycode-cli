@@ -1,6 +1,8 @@
+import time
 from typing import Dict, Optional
 
 from eflycode.core.agent.base import BaseAgent, ChatConversation, TaskConversation, TaskStatistics
+from eflycode.core.tool.errors import ToolExecutionError
 from eflycode.core.utils.logger import logger
 
 
@@ -53,7 +55,7 @@ class AgentRunLoop:
                         last_chunk = chunk
                     
                     # 流式完成后，从 session 获取最后的消息来构建 completion
-                    # BaseAgent.stream() 已经将完整内容添加到 session 并触发了 stop 事件
+                    # BaseAgent.stream 已经将完整内容添加到 session 并触发了 stop 事件
                     messages = self.agent.session.get_messages()
                     if messages and last_chunk:
                         # 获取最后一条 assistant 消息
@@ -111,6 +113,37 @@ class AgentRunLoop:
 
                 if not tool_name:
                     continue
+
+                # 特殊处理 finish_task 工具
+                if tool_name == "finish_task":
+                    content = arguments.get("content", "")
+                    logger.info("调用 finish_task 工具，任务完成")
+                    
+                    # 将工具执行结果作为工具消息添加到 session 中
+                    # 当 assistant 消息包含 tool_calls 时，必须紧接着发送工具消息
+                    self.agent.session.add_message("tool", content="", tool_call_id=tool_call_id)
+                    
+                    # 流式输出 content
+                    if content:
+                        # 通过事件系统流式输出 content
+                        # 按块输出，每块 20 个字符，模拟流式效果
+                        chunk_size = 20
+                        for i in range(0, len(content), chunk_size):
+                            chunk = content[i:i + chunk_size]
+                            self.agent.event_bus.emit(
+                                "agent.message.delta",
+                                agent=self.agent,
+                                delta=chunk,
+                            )
+                            # 添加小延迟，模拟流式输出效果
+                            time.sleep(0.05)
+                        # 触发消息结束事件
+                        self.agent.event_bus.emit("agent.message.stop", agent=self.agent, response=conversation.completion)
+                    
+                    statistics.tool_calls_count = self.current_iteration
+                    # 触发任务结束事件，这会立即输出任务完成
+                    self.agent.event_bus.emit("agent.task.stop", agent=self.agent, result=content)
+                    return TaskConversation(conversation=conversation, statistics=statistics)
 
                 logger.info(f"执行工具: {tool_name}, 参数: {arguments}")
 
@@ -177,9 +210,22 @@ class AgentRunLoop:
             tool_call_id: 工具调用 ID
 
         Returns:
-            str: 工具执行结果
+            str: 工具执行结果，如果执行失败则返回错误信息
+
+        Raises:
+            Exception: 如果不是 ToolExecutionError，则重新抛出异常
         """
-        return self.agent.run_tool(tool_name, tool_call_id=tool_call_id, **arguments)
+        try:
+            return self.agent.run_tool(tool_name, tool_call_id=tool_call_id, **arguments)
+        except ToolExecutionError as e:
+            # 捕获工具执行错误，将错误信息作为结果返回给模型
+            error_message = str(e)
+            logger.error(f"工具 {tool_name} 执行失败: {e}")
+            return error_message
+        except Exception as e:
+            # 其他异常，如代码 bug，应该直接抛出，让程序报错
+            logger.error(f"工具 {tool_name} 执行时发生意外错误: {e}", exc_info=True)
+            raise
 
     def _should_continue(self) -> bool:
         """判断是否继续循环

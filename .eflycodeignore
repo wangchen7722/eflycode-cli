@@ -1,0 +1,29 @@
+# 版本控制
+.git/
+.cursor/
+.idea/
+.vscode/
+
+# 构建产物
+__pycache__/
+.pytest_cache/
+*.pyc
+*.pyo
+*.egg-info/
+build/
+dist/
+
+# 日志和临时文件
+*.log
+logs/
+*.tmp
+
+# 依赖
+node_modules/
+.venv/
+venv/
+
+# 配置文件
+.env
+*.key
+

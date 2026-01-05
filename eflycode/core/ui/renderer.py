@@ -34,7 +34,8 @@ class Renderer:
         self._message_index: int = 0
         self._chars_per_tick: int = 20
         self._last_output_time: float = 0.0
-        self._output_interval: float = 0.05  # 每次输出的间隔（秒）
+        self._output_interval: float = 0.05  # 每次输出的间隔，单位为秒
+        self._message_stopped: bool = False
 
         self._subscribe_events()
 
@@ -61,10 +62,12 @@ class Renderer:
         task_name = kwargs.get("user_input", "未知任务")
         self.current_task = task_name
         self._task_started = False
-        # 清空消息缓冲区
+        # 清空消息缓冲区和工具调用记录
         self._message_buffer = ""
         self._message_index = 0
         self._last_output_time = 0.0
+        self._message_stopped = False
+        self.tool_calls.clear()
 
     def handle_task_stop(self, **kwargs) -> None:
         """处理任务结束事件
@@ -74,8 +77,14 @@ class Renderer:
         Args:
             **kwargs: 事件参数，包含 result 等
         """
-        # 任务结束时，确保所有待处理的文本都被处理
-        pass
+        # 输出任务完成
+        if self.current_task and self._task_started:
+            self._output.end_task()
+        
+        # 刷新任务状态，但不重置消息记录
+        self.current_task = None
+        self._task_started = False
+        self.tool_calls.clear()
 
     def handle_message_start(self, **kwargs) -> None:
         """处理消息开始事件
@@ -103,19 +112,19 @@ class Renderer:
     def handle_message_stop(self, **kwargs) -> None:
         """处理消息结束事件
 
-        消息结束时，确保所有缓冲区内容都已输出，然后添加换行
+        消息结束时，标记消息已结束，剩余内容会在 tick 中继续输出
+        当消息完全输出后，显示待显示的工具调用
 
         Args:
             **kwargs: 事件参数，包含 response 等
         """
         # 流式响应中，内容已经通过 delta 事件累积到缓冲区
-        # 确保所有缓冲区内容都已输出后，添加换行
-        # 如果缓冲区还有内容，会在 tick 中继续输出
-        # 当缓冲区为空时，说明所有内容都已输出，此时添加换行
+        # 标记消息已结束，剩余内容会在 tick 中继续输出
+        self._message_stopped = True
+        
+        # 如果缓冲区已经为空，说明所有内容都已输出，立即显示待显示的工具调用
         if not self._message_buffer or self._message_index >= len(self._message_buffer):
-            self._output.write("\n")
-            self._message_buffer = ""
-            self._message_index = 0
+            self._show_pending_tool_calls()
 
     def handle_tool_call_start(self, **kwargs) -> None:
         """处理工具调用开始事件
@@ -128,6 +137,10 @@ class Renderer:
         tool_name = kwargs.get("tool_name", "")
         tool_call_id = kwargs.get("tool_call_id", "")
         if tool_name:
+            # finish_task 工具不显示工具调用信息，直接跳过
+            if tool_name == "finish_task":
+                return
+            
             # 检查是否已存在该工具调用
             existing = None
             for tc in self.tool_calls:
@@ -140,6 +153,17 @@ class Renderer:
                     "id": tool_call_id,
                     "status": "detected",
                 })
+                # 立即显示"检测到工具调用"
+                # 如果消息还在输出，标记为待显示，等消息结束后再显示
+                buffer_empty = not self._message_buffer or self._message_index >= len(self._message_buffer)
+                # 如果缓冲区为空，且消息已停止或没有任务或任务已开始但没有消息在输出，立即显示
+                if buffer_empty and (self._message_stopped or not self.current_task or (self._task_started and not self._message_buffer)):
+                    # 消息已停止或没有消息在输出，立即显示
+                    self._output.show_tool_call_detected(tool_name)
+                    self.tool_calls[-1]["_detected_shown"] = True
+                else:
+                    # 消息还在输出，标记为待显示
+                    self.tool_calls[-1]["_pending_display"] = True
 
     def handle_tool_call_ready(self, **kwargs) -> None:
         """处理工具调用就绪事件
@@ -153,6 +177,10 @@ class Renderer:
         tool_call_id = kwargs.get("tool_call_id", "")
         arguments = kwargs.get("arguments", {})
         if tool_name:
+            # finish_task 工具不显示工具调用信息，直接跳过
+            if tool_name == "finish_task":
+                return
+            
             # 更新工具调用状态为正在执行
             for tc in self.tool_calls:
                 if tc.get("id") == tool_call_id:
@@ -212,6 +240,19 @@ class Renderer:
                 self._output.show_error(error)
             else:
                 self._output.write(f"[错误] {error}\n")
+    
+    def _show_pending_tool_calls(self) -> None:
+        """显示待显示的工具调用
+        
+        在消息完全输出后调用，显示所有待显示的工具调用
+        """
+        # 检查是否有待显示的工具调用
+        for tc in self.tool_calls:
+            if tc.get("_pending_display") and not tc.get("_detected_shown") and tc.get("status") == "detected":
+                # show_tool_call_detected 已经在输出内容前添加了换行符
+                self._output.show_tool_call_detected(tc.get("name", ""))
+                tc["_detected_shown"] = True
+                tc["_pending_display"] = False
 
     def tick(self, time_budget_ms: Optional[int] = None) -> None:
         """刷新显示
@@ -219,7 +260,7 @@ class Renderer:
         每次只做少量工作，不阻塞主循环
 
         Args:
-            time_budget_ms: 时间预算（毫秒）
+            time_budget_ms: 时间预算，单位为毫秒
         """
         start_time = time.time() if time_budget_ms is not None else None
         current_time = time.time()
@@ -248,33 +289,53 @@ class Renderer:
                 if self._message_index >= len(self._message_buffer):
                     self._message_buffer = ""
                     self._message_index = 0
+                    # 如果消息已结束，添加换行，并显示待显示的工具调用
+                    if self._message_stopped:
+                        # 显示待显示的工具调用，工具调用输出方法中已经包含了换行
+                        self._show_pending_tool_calls()
+                        # 只有在显示完工具调用后，才重置 _message_stopped
+                        # 这样可以确保后续的新消息内容不会与工具调用显示混淆
+                        self._message_stopped = False
 
             if start_time is not None:
                 elapsed_ms = (time.time() - start_time) * 1000
                 if elapsed_ms >= time_budget_ms:
                     return
 
-        for tool_call in self.tool_calls:
-            status = tool_call.get("status", "executing")
-            tool_name = tool_call.get("name", "")
-            
-            if status == "detected" and not tool_call.get("_detected_shown"):
-                self._output.write("\n")
-                self._output.show_tool_call_detected(tool_name)
-                tool_call["_detected_shown"] = True
-            elif status == "executing" and not tool_call.get("_executing_shown"):
-                self._output.show_tool_call_executing(tool_name, tool_call.get("arguments", {}))
-                tool_call["_executing_shown"] = True
-            elif status == "completed" and tool_call.get("result") and not tool_call.get("_result_shown"):
-                self._output.show_tool_result(
-                    tool_call.get("name", ""), tool_call.get("result", "")
-                )
-                tool_call["_result_shown"] = True
+        # 处理工具调用显示，只在消息输出完成后处理
+        # 只有当消息缓冲区为空且消息已结束时，才处理工具调用显示
+        buffer_empty = not self._message_buffer or self._message_index >= len(self._message_buffer)
+        if buffer_empty:
+            # 消息已输出完成，处理工具调用显示
+            for tool_call in self.tool_calls:
+                status = tool_call.get("status", "executing")
+                tool_name = tool_call.get("name", "")
+                
+                if status == "detected" and not tool_call.get("_detected_shown"):
+                    # 如果消息还在输出，即 _message_stopped 为 False，标记待显示，等消息结束后再显示
+                    if not self._message_stopped:
+                        if not tool_call.get("_pending_display"):
+                            tool_call["_pending_display"] = True
+                    else:
+                        # 消息已停止，立即显示工具调用
+                        # show_tool_call_detected 已经在输出内容前添加了换行符
+                        self._output.show_tool_call_detected(tool_name)
+                        tool_call["_detected_shown"] = True
+                elif status == "executing" and not tool_call.get("_executing_shown"):
+                    # show_tool_call_executing 已经在输出内容前添加了换行符
+                    self._output.show_tool_call_executing(tool_name, tool_call.get("arguments", {}))
+                    tool_call["_executing_shown"] = True
+                elif status == "completed" and tool_call.get("result") and not tool_call.get("_result_shown"):
+                    # show_tool_result 已经在输出内容前添加了换行符
+                    self._output.show_tool_result(
+                        tool_call.get("name", ""), tool_call.get("result", "")
+                    )
+                    tool_call["_result_shown"] = True
 
-            if start_time is not None:
-                elapsed_ms = (time.time() - start_time) * 1000
-                if elapsed_ms >= time_budget_ms:
-                    return
+                if start_time is not None:
+                    elapsed_ms = (time.time() - start_time) * 1000
+                    if elapsed_ms >= time_budget_ms:
+                        return
 
         self._output.flush()
 

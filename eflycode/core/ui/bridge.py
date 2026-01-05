@@ -1,7 +1,7 @@
 from typing import Callable, List, Optional
 
 from eflycode.core.event.event_bus import EventBus
-from eflycode.core.event.ui_event_queue import UIEventQueue
+from eflycode.core.ui.ui_event_queue import UIEventQueue
 from eflycode.core.utils.logger import logger
 
 

@@ -2,9 +2,9 @@ import time
 import unittest
 import unittest.mock as mock
 
-from eflycode.core.event.bridge import EventBridge
+from eflycode.core.ui.bridge import EventBridge
 from eflycode.core.event.event_bus import EventBus
-from eflycode.core.event.ui_event_queue import UIEventQueue
+from eflycode.core.ui.ui_event_queue import UIEventQueue
 
 
 class TestEventBridge(unittest.TestCase):

@@ -3,7 +3,7 @@ import time
 import unittest
 import unittest.mock as mock
 
-from eflycode.core.event.ui_event_queue import UIEventQueue
+from eflycode.core.ui.ui_event_queue import UIEventQueue
 
 
 class TestUIEventQueue(unittest.TestCase):

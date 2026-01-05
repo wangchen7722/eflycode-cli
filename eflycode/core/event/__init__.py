@@ -1,4 +1,3 @@
-from eflycode.core.event.bridge import EventBridge
 from eflycode.core.event.event_bus import EventBus
 from eflycode.core.event.events import (
     AgentEvent,
@@ -14,12 +13,9 @@ from eflycode.core.event.events import (
     AppStartUpEvent,
     BaseEvent,
 )
-from eflycode.core.event.ui_event_queue import UIEventQueue
 
 __all__ = [
     "EventBus",
-    "UIEventQueue",
-    "EventBridge",
     "BaseEvent",
     "AppStartUpEvent",
     "AppShutDownEvent",

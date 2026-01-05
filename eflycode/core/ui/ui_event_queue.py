@@ -140,21 +140,29 @@ class UIEventQueue:
             self._debounce_timers[event_type] = timer
             timer.start()
 
-    def process_events(self, max_events: Optional[int] = None) -> int:
+    def process_events(self, max_events: Optional[int] = None, time_budget_ms: Optional[int] = None) -> int:
         """处理队列中的事件
 
         顺序处理队列中的事件，按照优先级执行 handler
 
         Args:
             max_events: 最多处理的事件数量，None 表示处理所有事件
+            time_budget_ms: 时间预算（毫秒），超时后立即返回
 
         Returns:
             int: 实际处理的事件数量
         """
+        start_time = time.time() if time_budget_ms is not None else None
         processed = 0
+
         while True:
             if max_events is not None and processed >= max_events:
                 break
+
+            if start_time is not None:
+                elapsed_ms = (time.time() - start_time) * 1000
+                if elapsed_ms >= time_budget_ms:
+                    break
 
             try:
                 queued_event = self._event_queue.get_nowait()

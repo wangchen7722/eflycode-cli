@@ -18,7 +18,7 @@ from prompt_toolkit.layout.controls import BufferControl, FormattedTextControl
 from prompt_toolkit.layout.dimension import Dimension
 
 from eflycode.core.ui.style import build_prompt_toolkit_style
-from eflycode.core.ui.error import UserCanceledError
+from eflycode.core.ui.errors import UserCanceledError
 
 def build_get_line_prefix(
     prompt_text: str,

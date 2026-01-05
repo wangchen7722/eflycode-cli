@@ -10,7 +10,7 @@ from prompt_toolkit.layout import HSplit, Layout
 from prompt_toolkit.layout.containers import ScrollOffsets, Window
 from prompt_toolkit.layout.controls import FormattedTextControl
 
-from eflycode.core.ui.error import UserCanceledError
+from eflycode.core.ui.errors import UserCanceledError
 from eflycode.core.ui.style import build_prompt_toolkit_style
 
 

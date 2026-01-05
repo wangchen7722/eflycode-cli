@@ -1,5 +1,3 @@
-from concurrent.futures import thread
-from mimetypes import init
 import os
 from pathlib import Path
 from typing import Optional, Union
@@ -30,7 +28,7 @@ _DEFAULT_FORMAT = (
 def init_logger(
     *,
     level: Optional[str] = None,
-    log_dir: Optional[Union[str, Path]],
+    log_dir: Optional[Union[str, Path]] = None,
     log_file: Optional[str] = None,
     rotation: Optional[str] = None,
     retention: Optional[str] = None,

@@ -1,8 +1,8 @@
-from typing import Dict, List, Optional
+from typing import Dict, Iterator, List, Optional
 
 from eflycode.core.agent.session import Session
 from eflycode.core.event.event_bus import EventBus
-from eflycode.core.llm.protocol import ChatCompletion, Message, ToolDefinition
+from eflycode.core.llm.protocol import ChatCompletion, ChatCompletionChunk, Message, ToolDefinition
 from eflycode.core.llm.providers.base import LLMProvider
 from eflycode.core.tool.base import BaseTool, ToolGroup
 from eflycode.core.tool.errors import ToolExecutionError
@@ -158,8 +158,9 @@ class BaseAgent:
         try:
             response = self.provider.call(request)
             content = response.message.content or ""
+            tool_calls = response.message.tool_calls
 
-            self.session.add_message("assistant", content)
+            self.session.add_message("assistant", content=content, tool_calls=tool_calls)
 
             self.event_bus.emit("agent.message.stop", agent=self, response=response)
 
@@ -168,11 +169,117 @@ class BaseAgent:
             self.event_bus.emit("agent.error", agent=self, error=e)
             raise
 
-    def run_tool(self, tool_name: str, **kwargs) -> str:
+    def stream(self, message: str = "") -> Iterator[ChatCompletionChunk]:
+        """流式发送消息并获取响应
+
+        Args:
+            message: 用户消息，如果为空则使用会话历史
+
+        Yields:
+            ChatCompletionChunk: 流式响应块
+        """
+        if message:
+            self.session.add_message("user", message)
+
+        request = self.session.get_context(self.model_name)
+        request.tools = self.get_available_tools()
+
+        if message:
+            self.event_bus.emit("agent.message.start", agent=self, message=message)
+
+        try:
+            full_content = ""
+            last_chunk = None
+            accumulated_tool_calls = {}
+            
+            for chunk in self.provider.stream(request):
+                # 提取 delta 内容
+                if chunk.delta and chunk.delta.content:
+                    delta_content = chunk.delta.content
+                    full_content += delta_content
+                    # 触发增量事件
+                    self.event_bus.emit("agent.message.delta", agent=self, delta=delta_content)
+                
+                # 累积 tool_calls（流式响应中 tool_calls 可能分布在多个 chunk 中）
+                if chunk.delta and chunk.delta.tool_calls:
+                    for delta_tc in chunk.delta.tool_calls:
+                        if delta_tc.index not in accumulated_tool_calls:
+                            from eflycode.core.llm.protocol import ToolCall, ToolCallFunction
+                            tool_call = ToolCall(
+                                id=delta_tc.id or "",
+                                type=delta_tc.type or "function",
+                                function=ToolCallFunction(
+                                    name=delta_tc.function.name if delta_tc.function else "",
+                                    arguments=delta_tc.function.arguments if delta_tc.function else "",
+                                ),
+                            )
+                            accumulated_tool_calls[delta_tc.index] = tool_call
+                            # 当检测到新的工具调用时，立即触发事件显示工具调用提示
+                            if delta_tc.function and delta_tc.function.name:
+                                self.event_bus.emit(
+                                    "agent.tool.call.start",
+                                    agent=self,
+                                    tool_name=delta_tc.function.name,
+                                    tool_call_id=delta_tc.id or "",
+                                )
+                        else:
+                            # 累积 arguments
+                            if delta_tc.function and delta_tc.function.arguments:
+                                existing = accumulated_tool_calls[delta_tc.index]
+                                existing.function.arguments += delta_tc.function.arguments
+                
+                last_chunk = chunk
+                yield chunk
+            
+            # 流式完成后，将完整内容添加到会话
+            if full_content or accumulated_tool_calls:
+                # 将累积的 tool_calls 转换为列表
+                tool_calls_list = None
+                if accumulated_tool_calls:
+                    tool_calls_list = [accumulated_tool_calls[i] for i in sorted(accumulated_tool_calls.keys())]
+                    # 当工具调用完整时，触发工具正在执行事件
+                    for tool_call in tool_calls_list:
+                        self.event_bus.emit(
+                            "agent.tool.call.ready",
+                            agent=self,
+                            tool_name=tool_call.function.name,
+                            tool_call_id=tool_call.id,
+                            arguments=tool_call.function.arguments_dict,
+                        )
+                self.session.add_message("assistant", content=full_content, tool_calls=tool_calls_list)
+            
+            # 构建完整的 ChatCompletion 用于触发 stop 事件
+            if last_chunk:
+                from eflycode.core.llm.protocol import ChatCompletion, Message as LLMMessage
+                # 将累积的 tool_calls 转换为列表
+                tool_calls_list = None
+                if accumulated_tool_calls:
+                    tool_calls_list = [accumulated_tool_calls[i] for i in sorted(accumulated_tool_calls.keys())]
+                
+                completion = ChatCompletion(
+                    id=last_chunk.id,
+                    object="chat.completion",
+                    created=last_chunk.created,
+                    model=last_chunk.model,
+                    message=LLMMessage(
+                        role="assistant",
+                        content=full_content,
+                        tool_calls=tool_calls_list,
+                    ),
+                    finish_reason=last_chunk.finish_reason,
+                    usage=last_chunk.usage,
+                )
+                self.event_bus.emit("agent.message.stop", agent=self, response=completion)
+        except Exception as e:
+            self.event_bus.emit("agent.error", agent=self, error=e)
+            raise
+
+    def run_tool(self, tool_name: str, tool_call_id: str = "", **kwargs) -> str:
         """执行工具
 
         Args:
             tool_name: 工具名称
+            tool_call_id: 工具调用 ID
             **kwargs: 工具参数
 
         Returns:
@@ -188,14 +295,14 @@ class BaseAgent:
                 tool_name=tool_name,
             )
 
-        self.event_bus.emit("agent.tool.call", agent=self, tool_name=tool_name, arguments=kwargs)
+        self.event_bus.emit("agent.tool.call", agent=self, tool_name=tool_name, arguments=kwargs, tool_call_id=tool_call_id)
 
         try:
             result = tool.run(**kwargs)
-            self.event_bus.emit("agent.tool.result", agent=self, tool_name=tool_name, result=result)
+            self.event_bus.emit("agent.tool.result", agent=self, tool_name=tool_name, result=result, tool_call_id=tool_call_id)
             return result
         except Exception as e:
-            self.event_bus.emit("agent.tool.error", agent=self, tool_name=tool_name, error=e)
+            self.event_bus.emit("agent.tool.error", agent=self, tool_name=tool_name, error=e, tool_call_id=tool_call_id)
             raise
 
     def get_available_tools(self) -> List[ToolDefinition]:

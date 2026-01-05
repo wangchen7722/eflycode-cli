@@ -10,6 +10,7 @@ from eflycode.core.tool.file_tool import (
     MoveFileTool,
     ReadFileTool,
     ReplaceEditFileTool,
+    create_file_tool_group,
 )
 
 __all__ = [
@@ -27,5 +28,6 @@ __all__ = [
     "DeleteFileContentTool",
     "DeleteFileTool",
     "MoveFileTool",
+    "create_file_tool_group",
 ]
 

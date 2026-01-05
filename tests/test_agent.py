@@ -37,14 +37,79 @@ class MockProvider(LLMProvider):
         )
 
     def stream(self, request):
-        from eflycode.core.llm.protocol import ChatCompletionChunk, DeltaMessage
-        yield ChatCompletionChunk(
-            id="chatcmpl-1",
-            object="chat.completion.chunk",
-            created=1234567890,
-            model="gpt-4",
-            delta=DeltaMessage(content="chunk"),
-        )
+        from eflycode.core.llm.protocol import ChatCompletionChunk, DeltaMessage, Usage, DeltaToolCall, DeltaToolCallFunction
+        # 根据 request 中的消息推断期望的响应内容
+        content = "chunk"  # 默认内容
+        if request.messages:
+            last_user_msg = None
+            for msg in reversed(request.messages):
+                if msg.role == "user":
+                    last_user_msg = msg.content
+                    break
+            if last_user_msg == "Hello":
+                content = "Done"
+            elif last_user_msg == "Use tool":
+                # 第一次调用返回工具调用
+                if self._call_count == 1:
+                    yield ChatCompletionChunk(
+                        id=f"chatcmpl-{self._call_count}",
+                        object="chat.completion.chunk",
+                        created=1234567890,
+                        model="gpt-4",
+                        delta=DeltaMessage(
+                            tool_calls=[
+                                DeltaToolCall(
+                                    index=0,
+                                    id="call_1",
+                                    type="function",
+                                    function=DeltaToolCallFunction(name="test_tool", arguments="{}")
+                                )
+                            ]
+                        ),
+                        finish_reason="tool_calls",
+                    )
+                    return
+                else:
+                    content = "Task completed"
+            elif last_user_msg and "Test" in last_user_msg:
+                # 对于工具调用场景，第一次返回工具调用，后续返回完成消息
+                if self._call_count <= 3:
+                    # 返回工具调用
+                    yield ChatCompletionChunk(
+                        id=f"chatcmpl-{self._call_count}",
+                        object="chat.completion.chunk",
+                        created=1234567890,
+                        model="gpt-4",
+                        delta=DeltaMessage(
+                            tool_calls=[
+                                DeltaToolCall(
+                                    index=0,
+                                    id=f"call_{self._call_count}",
+                                    type="function",
+                                    function=DeltaToolCallFunction(name="test_tool", arguments="{}")
+                                )
+                            ]
+                        ),
+                        finish_reason="tool_calls",
+                    )
+                    return
+                else:
+                    content = f"Response {self._call_count}"
+            elif last_user_msg and "工具" in last_user_msg:
+                # 工具执行后的响应
+                content = f"Response {self._call_count}"
+        
+        # 将内容分块返回
+        for i, char in enumerate(content):
+            yield ChatCompletionChunk(
+                id=f"chatcmpl-{self._call_count}",
+                object="chat.completion.chunk",
+                created=1234567890,
+                model="gpt-4",
+                delta=DeltaMessage(content=char),
+                finish_reason="stop" if i == len(content) - 1 else None,
+                usage=Usage(prompt_tokens=10, completion_tokens=5, total_tokens=15) if i == len(content) - 1 else None,
+            )
 
 
 class MockTool(BaseTool):
@@ -347,7 +412,7 @@ class TestAgentRunLoop(unittest.TestCase):
         agent = BaseAgent(provider=provider, tools=[tool], model="gpt-4")
         run_loop = AgentRunLoop(agent)
 
-        result = run_loop.run("Use tool")
+        result = run_loop.run("Use tool", stream=False)
         agent.shutdown()
 
         self.assertIsInstance(result, TaskConversation)

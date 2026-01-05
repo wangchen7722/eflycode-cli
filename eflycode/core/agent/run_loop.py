@@ -1,8 +1,7 @@
-import json
-import re
 from typing import Dict, Optional
 
-from eflycode.core.agent.base import BaseAgent, TaskConversation, TaskStatistics
+from eflycode.core.agent.base import BaseAgent, ChatConversation, TaskConversation, TaskStatistics
+from eflycode.core.utils.logger import logger
 
 
 class AgentRunLoop:
@@ -18,15 +17,18 @@ class AgentRunLoop:
         self.max_iterations = 50
         self.current_iteration = 0
 
-    def run(self, user_input: str) -> TaskConversation:
+    def run(self, user_input: str, stream: bool = True) -> TaskConversation:
         """主运行循环
 
         Args:
             user_input: 用户输入
+            stream: 是否使用流式对话，默认为 True
 
         Returns:
             TaskConversation: 包含最终响应、全部对话信息和任务统计的会话对象
         """
+        logger.info(f"开始执行任务，流式模式: {stream}")
+        
         self.current_iteration = 0
         self.agent.event_bus.emit("agent.task.start", agent=self.agent, user_input=user_input)
 
@@ -38,12 +40,64 @@ class AgentRunLoop:
                 self.current_iteration += 1
                 statistics.iterations = self.current_iteration
 
-                conversation = self.agent.chat(user_input if self.current_iteration == 1 else "")
-                last_conversation = conversation
-                response_content = conversation.content
-
-                if conversation.completion.usage:
-                    statistics.add_usage(conversation.completion.usage)
+                if stream:
+                    # 使用流式对话
+                    full_content = ""
+                    last_chunk = None
+                    
+                    for chunk in self.agent.stream(user_input if self.current_iteration == 1 else ""):
+                        if chunk.delta and chunk.delta.content:
+                            full_content += chunk.delta.content
+                        if chunk.usage:
+                            statistics.add_usage(chunk.usage)
+                        last_chunk = chunk
+                    
+                    # 流式完成后，从 session 获取最后的消息来构建 completion
+                    # BaseAgent.stream() 已经将完整内容添加到 session 并触发了 stop 事件
+                    messages = self.agent.session.get_messages()
+                    if messages and last_chunk:
+                        # 获取最后一条 assistant 消息
+                        last_message = None
+                        for msg in reversed(messages):
+                            if msg.role == "assistant":
+                                last_message = msg
+                                break
+                        
+                        if last_message:
+                            from eflycode.core.llm.protocol import ChatCompletion
+                            completion = ChatCompletion(
+                                id=last_chunk.id,
+                                object="chat.completion",
+                                created=last_chunk.created,
+                                model=last_chunk.model,
+                                message=last_message,
+                                finish_reason=last_chunk.finish_reason,
+                                usage=last_chunk.usage,
+                            )
+                            conversation = ChatConversation(completion=completion, messages=messages)
+                            last_conversation = conversation
+                            response_content = full_content or last_message.content or ""
+                        else:
+                            # 回退到非流式
+                            conversation = self.agent.chat(user_input if self.current_iteration == 1 else "")
+                            last_conversation = conversation
+                            response_content = conversation.content
+                            if conversation.completion.usage:
+                                statistics.add_usage(conversation.completion.usage)
+                    else:
+                        # 如果没有流式响应，回退到非流式
+                        conversation = self.agent.chat(user_input if self.current_iteration == 1 else "")
+                        last_conversation = conversation
+                        response_content = conversation.content
+                        if conversation.completion.usage:
+                            statistics.add_usage(conversation.completion.usage)
+                else:
+                    # 使用非流式对话
+                    conversation = self.agent.chat(user_input if self.current_iteration == 1 else "")
+                    last_conversation = conversation
+                    response_content = conversation.content
+                    if conversation.completion.usage:
+                        statistics.add_usage(conversation.completion.usage)
 
                 tool_call = self._parse_tool_call(conversation.completion)
                 if not tool_call:
@@ -53,12 +107,21 @@ class AgentRunLoop:
 
                 tool_name = tool_call.get("name")
                 arguments = tool_call.get("arguments", {})
+                tool_call_id = tool_call.get("id", "")
 
                 if not tool_name:
                     continue
 
+                logger.info(f"执行工具: {tool_name}, 参数: {arguments}")
+
                 statistics.tool_calls_count += 1
-                tool_result = self._execute_tool(tool_name, arguments)
+                tool_result = self._execute_tool(tool_name, arguments, tool_call_id)
+                
+                logger.info(f"工具 {tool_name} 执行完成，结果长度: {len(tool_result)} 字符")
+
+                # 将工具执行结果作为工具消息添加到 session 中
+                # 这是 OpenAI API 的要求：当 assistant 消息包含 tool_calls 时，必须紧接着发送工具消息
+                self.agent.session.add_message("tool", content=tool_result, tool_call_id=tool_call_id)
 
                 user_input = f"工具 {tool_name} 的执行结果：\n{tool_result}\n\n请根据工具执行结果继续处理任务。"
 
@@ -83,13 +146,13 @@ class AgentRunLoop:
     def _parse_tool_call(self, completion) -> Optional[Dict]:
         """解析响应中的工具调用
 
-        优先从 ChatCompletion 的 tool_calls 中提取，如果没有则从 content 中解析 JSON
+        从 ChatCompletion 的 tool_calls 中提取工具调用信息
 
         Args:
             completion: ChatCompletion 对象
 
         Returns:
-            Optional[Dict]: 工具调用信息，格式为 {"name": str, "arguments": dict}，如果不存在则返回 None
+            Optional[Dict]: 工具调用信息，格式为 {"name": str, "arguments": dict, "id": str}，如果不存在则返回 None
         """
         if completion.message.tool_calls:
             tool_call = completion.message.tool_calls[0]
@@ -98,54 +161,25 @@ class AgentRunLoop:
                 return {
                     "name": tool_call.function.name,
                     "arguments": arguments,
+                    "id": tool_call.id,
                 }
             except Exception:
                 pass
 
-        content = completion.message.content or ""
-        if not content:
-            return None
-
-        json_pattern = r"\{[^{}]*\"tool\"[^{}]*\"tool_name\"[^{}]*\}"
-        json_match = re.search(json_pattern, content, re.IGNORECASE)
-        if json_match:
-            try:
-                tool_call = json.loads(json_match.group())
-                return {
-                    "name": tool_call.get("tool") or tool_call.get("tool_name"),
-                    "arguments": tool_call.get("arguments", {}),
-                }
-            except json.JSONDecodeError:
-                pass
-
-        tool_call_pattern = r"tool_call[:\s]*\{[^}]+\}"
-        tool_call_match = re.search(tool_call_pattern, content, re.IGNORECASE)
-        if tool_call_match:
-            try:
-                matched_content = tool_call_match.group()
-                json_str = re.search(r"\{[^}]+\}", matched_content)
-                if json_str:
-                    tool_call = json.loads(json_str.group())
-                    return {
-                        "name": tool_call.get("name") or tool_call.get("tool"),
-                        "arguments": tool_call.get("arguments", {}),
-                    }
-            except (json.JSONDecodeError, AttributeError):
-                pass
-
         return None
 
-    def _execute_tool(self, tool_name: str, arguments: Dict) -> str:
+    def _execute_tool(self, tool_name: str, arguments: Dict, tool_call_id: str = "") -> str:
         """执行工具
 
         Args:
             tool_name: 工具名称
             arguments: 工具参数
+            tool_call_id: 工具调用 ID
 
         Returns:
             str: 工具执行结果
         """
-        return self.agent.run_tool(tool_name, **arguments)
+        return self.agent.run_tool(tool_name, tool_call_id=tool_call_id, **arguments)
 
     def _should_continue(self) -> bool:
         """判断是否继续循环

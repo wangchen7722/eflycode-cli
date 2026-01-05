@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 from eflycode.core.llm.protocol import LLMRequest, Message, MessageRole
 
@@ -10,14 +10,23 @@ class Session:
         """初始化会话"""
         self._messages: List[Message] = []
 
-    def add_message(self, role: MessageRole, content: str) -> None:
+    def add_message(
+        self,
+        role: MessageRole,
+        content: str = None,
+        tool_calls: List = None,
+        tool_call_id: str = None,
+    ) -> None:
         """添加消息到会话历史
 
         Args:
             role: 消息角色（user、assistant、system、tool）
             content: 消息内容
+            tool_calls: 工具调用列表（仅用于 assistant 角色）
+            tool_call_id: 工具调用 ID（仅用于 tool 角色）
         """
-        message = Message(role=role, content=content)
+        from eflycode.core.llm.protocol import Message
+        message = Message(role=role, content=content, tool_calls=tool_calls, tool_call_id=tool_call_id)
         self._messages.append(message)
 
     def get_messages(self) -> List[Message]:

@@ -59,7 +59,7 @@ class ComposerComponent:
         self,
         *,
         prompt_text: str = "> ",
-        busy_prompt_text: str = "🤔> ",
+        busy_prompt_text: str = "> ",
         placeholder: str = "share your ideas...",
         toolbar_text: Optional[str] = None,
         multiline: bool = True,
@@ -120,7 +120,7 @@ class ComposerComponent:
                     return
             event.current_buffer.insert_text("\n")
         
-        @kb.add(Keys.ControlJ)
+        @kb.add(Keys.ControlM)
         def _on_submit(event: KeyPressEvent):
             event.app.exit(result=event.current_buffer.text)
         

@@ -56,6 +56,25 @@ class UIOutput(ABC):
         pass
 
     @abstractmethod
+    def show_tool_call_detected(self, tool_name: str) -> None:
+        """显示工具调用检测到
+
+        Args:
+            tool_name: 工具名称
+        """
+        pass
+
+    @abstractmethod
+    def show_tool_call_executing(self, tool_name: str, arguments: Dict) -> None:
+        """显示工具正在执行
+
+        Args:
+            tool_name: 工具名称
+            arguments: 工具参数
+        """
+        pass
+
+    @abstractmethod
     def show_tool_result(self, tool_name: str, result: str) -> None:
         """显示工具执行结果
 

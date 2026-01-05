@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Annotated, Any, Dict, List, Optional, Union
 
 from eflycode.core.llm.protocol import ToolFunctionParameters
-from eflycode.core.tool.base import BaseTool, ToolType
+from eflycode.core.tool.base import BaseTool, ToolGroup, ToolType
 from eflycode.core.tool.errors import ToolExecutionError
 
 
@@ -1048,4 +1048,29 @@ class MoveFileTool(BaseTool):
                 tool_name=self.name,
                 error_details=e,
             ) from e
+
+
+def create_file_tool_group() -> ToolGroup:
+    """创建文件工具组
+
+    Returns:
+        ToolGroup: 包含所有文件操作工具的工具组
+    """
+    tools = [
+        ListFilesTool(),
+        ReadFileTool(),
+        GrepSearchTool(),
+        CreateFileTool(),
+        InsertFileContentTool(),
+        ReplaceEditFileTool(),
+        DeleteFileContentTool(),
+        DeleteFileTool(),
+        MoveFileTool(),
+    ]
+
+    return ToolGroup(
+        name="file_tools",
+        description="文件操作工具组，包含文件的读取、创建、编辑、删除等操作",
+        tools=tools,
+    )
 

@@ -13,6 +13,8 @@ from eflycode.core.config import Config, get_max_context_length, load_config, lo
 from eflycode.core.context.manager import ContextManager
 from eflycode.core.llm.protocol import DEFAULT_MAX_CONTEXT_LENGTH
 from eflycode.core.llm.providers.openai import OpenAiProvider
+from eflycode.core.mcp import MCPClient, MCPToolGroup, load_mcp_config
+from eflycode.core.mcp.errors import MCPConnectionError, MCPConfigError
 from eflycode.core.tool.file_tool import create_file_tool_group
 from eflycode.core.tool.execute_command_tool import ExecuteCommandTool
 from eflycode.core.tool.finish_task_tool import FinishTaskTool
@@ -55,11 +57,91 @@ def create_agent(config: Config) -> BaseAgent:
         except Exception:
             pass
 
+    # 加载MCP工具
+    tool_groups = [file_tool_group]
+    mcp_clients = []
+    
+    try:
+        mcp_server_configs = load_mcp_config(config.workspace_dir)
+        # 先启动所有MCP服务器的连接，不阻塞
+        for server_config in mcp_server_configs:
+            try:
+                mcp_client = MCPClient(server_config)
+                logger.info(f"启动MCP服务器连接: {server_config.name}")
+                mcp_client.start_connect()
+                mcp_clients.append(mcp_client)
+            except Exception as e:
+                logger.warning(
+                    f"启动MCP服务器连接失败: {server_config.name}，"
+                    f"错误类型: {type(e).__name__}，"
+                    f"错误信息: {str(e)}，"
+                    f"跳过该服务器"
+                )
+                continue
+        
+        # 等待所有连接完成并加载工具
+        for mcp_client in mcp_clients:
+            try:
+                # 等待连接完成，超时时间5秒
+                if not mcp_client.wait_for_connection(timeout=5):
+                    logger.warning(
+                        f"MCP服务器连接超时: {mcp_client.server_name}，跳过"
+                    )
+                    mcp_client.disconnect()
+                    continue
+                
+                # 创建MCP工具组
+                mcp_tool_group = MCPToolGroup(mcp_client)
+                
+                # 如果工具组中有工具，添加到工具组列表
+                if mcp_tool_group.tools:
+                    tool_groups.append(mcp_tool_group)
+                    logger.info(
+                        f"MCP工具组已加载: {mcp_client.server_name}，共{len(mcp_tool_group.tools)}个工具"
+                    )
+                else:
+                    # 如果没有工具，断开连接
+                    mcp_client.disconnect()
+                    mcp_clients.remove(mcp_client)
+                    logger.warning(f"MCP服务器未提供工具: {mcp_client.server_name}")
+            except MCPConnectionError as e:
+                logger.warning(
+                    f"连接MCP服务器失败: {mcp_client.server_name}，"
+                    f"错误: {e.message}，"
+                    f"详情: {e.details if e.details else '无'}，"
+                    f"跳过该服务器"
+                )
+                try:
+                    mcp_client.disconnect()
+                    mcp_clients.remove(mcp_client)
+                except Exception:
+                    pass
+                continue
+            except Exception as e:
+                logger.warning(
+                    f"加载MCP服务器失败: {mcp_client.server_name}，"
+                    f"错误类型: {type(e).__name__}，"
+                    f"错误信息: {str(e)}，"
+                    f"跳过该服务器"
+                )
+                try:
+                    mcp_client.disconnect()
+                    mcp_clients.remove(mcp_client)
+                except Exception:
+                    pass
+                continue
+    except MCPConfigError as e:
+        logger.warning(f"加载MCP配置失败: {e.message}，继续使用内置工具")
+    except Exception as e:
+        logger.warning(
+            f"加载MCP配置时发生未知错误: {type(e).__name__}: {str(e)}，继续使用内置工具"
+        )
+
     # 创建 Agent
     agent = BaseAgent(
         model=config.model_name,
         provider=provider,
-        tool_groups=[file_tool_group],
+        tool_groups=tool_groups,
         tools=[finish_task_tool, execute_command_tool],
     )
     agent.max_context_length = max_context_length
@@ -69,6 +151,9 @@ def create_agent(config: Config) -> BaseAgent:
         agent.session.context_config = config.context_config
         if not agent.session.context_manager:
             agent.session.context_manager = ContextManager()
+
+    # 保存MCP客户端引用，以便在shutdown时清理
+    agent._mcp_clients = mcp_clients
 
     return agent
 
@@ -198,6 +283,15 @@ def main() -> None:
         # 清理资源
         event_bridge.stop()
         renderer.close()
+        
+        # 断开MCP客户端连接
+        if hasattr(agent, "_mcp_clients"):
+            for mcp_client in agent._mcp_clients:
+                try:
+                    mcp_client.disconnect()
+                except Exception as e:
+                    logger.warning(f"断开MCP客户端连接失败: {e}")
+        
         agent.shutdown()
 
 

@@ -1,4 +1,3 @@
-import time
 from typing import Dict, Optional
 
 from eflycode.core.agent.base import BaseAgent, ChatConversation, TaskConversation, TaskStatistics
@@ -113,37 +112,6 @@ class AgentRunLoop:
 
                 if not tool_name:
                     continue
-
-                # 特殊处理 finish_task 工具
-                if tool_name == "finish_task":
-                    content = arguments.get("content", "")
-                    logger.info("调用 finish_task 工具，任务完成")
-
-                    # 将工具执行结果作为工具消息添加到 session 中
-                    # 当 assistant 消息包含 tool_calls 时，必须紧接着发送工具消息
-                    self.agent.session.add_message("tool", content="", tool_call_id=tool_call_id)
-
-                    # 流式输出 content
-                    if content:
-                        # 通过事件系统流式输出 content
-                        # 按块输出，每块 20 个字符，模拟流式效果
-                        chunk_size = 20
-                        for i in range(0, len(content), chunk_size):
-                            chunk = content[i:i + chunk_size]
-                            self.agent.event_bus.emit(
-                                "agent.message.delta",
-                                agent=self.agent,
-                                delta=chunk,
-                            )
-                            # 添加小延迟，模拟流式输出效果
-                            time.sleep(0.05)
-                        # 触发消息结束事件
-                        self.agent.event_bus.emit("agent.message.stop", agent=self.agent, response=conversation.completion)
-                    
-                    statistics.tool_calls_count = self.current_iteration
-                    # 触发任务结束事件，这会立即输出任务完成
-                    self.agent.event_bus.emit("agent.task.stop", agent=self.agent, result=content)
-                    return TaskConversation(conversation=conversation, statistics=statistics)
 
                 logger.info(f"执行工具: {tool_name}, 参数: {arguments}")
 

@@ -310,15 +310,11 @@ class BaseAgent:
                 tool_name=tool_name,
             )
 
-        # finish_task 工具不触发 tool.call 事件，避免显示工具调用信息
-        if tool_name != "finish_task":
-            self.event_bus.emit("agent.tool.call", agent=self, tool_name=tool_name, arguments=kwargs, tool_call_id=tool_call_id)
+        self.event_bus.emit("agent.tool.call", agent=self, tool_name=tool_name, arguments=kwargs, tool_call_id=tool_call_id)
 
         try:
             result = tool.run(**kwargs)
-            # finish_task 工具不触发 tool.result 事件
-            if tool_name != "finish_task":
-                self.event_bus.emit("agent.tool.result", agent=self, tool_name=tool_name, result=result, tool_call_id=tool_call_id)
+            self.event_bus.emit("agent.tool.result", agent=self, tool_name=tool_name, result=result, tool_call_id=tool_call_id)
             return result
         except Exception as e:
             self.event_bus.emit("agent.tool.error", agent=self, tool_name=tool_name, error=e, tool_call_id=tool_call_id)

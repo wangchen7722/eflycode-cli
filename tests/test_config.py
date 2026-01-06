@@ -4,6 +4,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from eflycode.core.config import (
     Config,
@@ -78,13 +79,17 @@ class TestConfig(unittest.TestCase):
         finally:
             os.chdir(original_cwd)
 
-    def test_find_config_file_in_home(self):
+    @patch('pathlib.Path.home')
+    def test_find_config_file_in_home(self, mock_home):
         """测试在用户目录查找配置文件"""
         # 在用户目录创建配置
         home_config_dir = Path(self.temp_dir) / ".eflycode"
         home_config_dir.mkdir()
         home_config_file = home_config_dir / "config.yaml"
         home_config_file.write_text("model:\n  default: gpt-4\n  entries:\n    - model: gpt-4\n")
+
+        # 模拟 Path.home() 返回临时目录
+        mock_home.return_value = Path(self.temp_dir)
 
         # 创建一个独立的目录，确保向上查找时不会找到配置
         import tempfile as tf

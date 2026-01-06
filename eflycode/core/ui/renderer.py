@@ -153,10 +153,6 @@ class Renderer:
         tool_name = kwargs.get("tool_name", "")
         tool_call_id = kwargs.get("tool_call_id", "")
         if tool_name:
-            # finish_task 工具不显示工具调用信息，直接跳过
-            if tool_name == "finish_task":
-                return
-            
             # 检查是否已存在该工具调用
             existing = None
             for tc in self.tool_calls:
@@ -193,10 +189,6 @@ class Renderer:
         tool_call_id = kwargs.get("tool_call_id", "")
         arguments = kwargs.get("arguments", {})
         if tool_name:
-            # finish_task 工具不显示工具调用信息，直接跳过
-            if tool_name == "finish_task":
-                return
-            
             # 更新工具调用状态为正在执行
             for tc in self.tool_calls:
                 if tc.get("id") == tool_call_id:

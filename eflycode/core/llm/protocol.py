@@ -3,6 +3,8 @@ from typing import Any, Dict, List, Literal, Optional, TypeAlias, Union
 
 from pydantic import BaseModel, Field
 
+# 默认最大上下文长度（64k tokens）
+DEFAULT_MAX_CONTEXT_LENGTH = 65536
 
 MessageRole: TypeAlias = Literal["system", "user", "assistant", "tool"]
 ToolCallType: TypeAlias = Literal["function"]

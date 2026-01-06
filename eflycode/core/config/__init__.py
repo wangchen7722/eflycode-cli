@@ -7,9 +7,11 @@
 from eflycode.core.config.config_manager import (
     Config,
     find_config_file,
+    get_max_context_length,
     get_model_name_from_config,
     load_config,
     load_config_from_file,
+    parse_context_config,
     parse_model_config,
 )
 
@@ -24,9 +26,11 @@ __all__ = [
     # 配置管理
     "Config",
     "find_config_file",
+    "get_max_context_length",
     "get_model_name_from_config",
     "load_config",
     "load_config_from_file",
+    "parse_context_config",
     "parse_model_config",
     # 忽略文件管理
     "find_ignore_file",

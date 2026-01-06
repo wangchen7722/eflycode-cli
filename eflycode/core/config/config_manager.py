@@ -9,7 +9,8 @@ from typing import Optional
 
 import yaml
 
-from eflycode.core.llm.protocol import LLMConfig
+from eflycode.core.llm.protocol import DEFAULT_MAX_CONTEXT_LENGTH, LLMConfig
+from eflycode.core.context.strategies import ContextStrategyConfig
 
 
 class Config:
@@ -21,6 +22,7 @@ class Config:
         model_name: str,
         workspace_dir: Path,
         config_file_path: Optional[Path] = None,
+        context_config: Optional[ContextStrategyConfig] = None,
     ):
         """初始化配置
 
@@ -29,11 +31,14 @@ class Config:
             model_name: 模型名称
             workspace_dir: 工作区根目录
             config_file_path: 配置文件路径（如果是从文件加载的）
+            context_config: 上下文管理配置
         """
         self.model_config = model_config
         self.model_name = model_name
         self.workspace_dir = workspace_dir
         self.config_file_path = config_file_path
+        self.context_config = context_config
+        self.context_config = context_config
 
 
 def find_config_file() -> tuple[Optional[Path], Optional[Path]]:
@@ -163,6 +168,55 @@ def get_model_name_from_config(config_data: dict) -> str:
     return "gpt-4"
 
 
+def parse_context_config(config_data: dict) -> Optional[ContextStrategyConfig]:
+    """解析上下文管理配置
+
+    Args:
+        config_data: 配置字典
+
+    Returns:
+        Optional[ContextStrategyConfig]: 上下文策略配置，如果未配置则返回 None
+    """
+    context_section = config_data.get("context")
+    if not context_section:
+        return None
+
+    strategy_type = context_section.get("strategy", "summary")
+    summary_section = context_section.get("summary", {})
+    sliding_window_section = context_section.get("sliding_window", {})
+
+    return ContextStrategyConfig(
+        strategy_type=strategy_type,
+        summary_threshold=summary_section.get("threshold", 0.8),
+        summary_keep_recent=summary_section.get("keep_recent", 10),
+        summary_model=summary_section.get("model"),
+        sliding_window_size=sliding_window_section.get("size", 10),
+    )
+
+
+def get_max_context_length(config_data: dict) -> int:
+    """从配置中获取模型的最大上下文长度
+
+    Args:
+        config_data: 配置字典
+
+    Returns:
+        int: 最大上下文长度，如果未配置则返回默认值
+    """
+    model_section = config_data.get("model", {})
+    default_model = model_section.get("default", "")
+    
+    entries = model_section.get("entries", [])
+    if isinstance(entries, list):
+        for entry in entries:
+            if entry.get("model") == default_model:
+                return entry.get("max_context_length", DEFAULT_MAX_CONTEXT_LENGTH)
+        if entries:
+            return entries[0].get("max_context_length", DEFAULT_MAX_CONTEXT_LENGTH)
+    
+    return DEFAULT_MAX_CONTEXT_LENGTH
+
+
 def load_config() -> Config:
     """加载配置
 
@@ -179,12 +233,14 @@ def load_config() -> Config:
             config_data = load_config_from_file(config_path)
             model_config = parse_model_config(config_data)
             model_name = get_model_name_from_config(config_data)
+            context_config = parse_context_config(config_data)
             
             return Config(
                 model_config=model_config,
                 model_name=model_name,
                 workspace_dir=workspace_dir,
                 config_file_path=config_path,
+                context_config=context_config,
             )
         except Exception as e:
             # 如果加载失败，使用默认配置
@@ -207,5 +263,6 @@ def load_config() -> Config:
         model_name="gpt-4",
         workspace_dir=default_workspace,
         config_file_path=None,
+        context_config=None,
     )
 

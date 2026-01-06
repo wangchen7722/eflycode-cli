@@ -9,7 +9,9 @@ import time
 
 from eflycode.core.agent.base import BaseAgent
 from eflycode.core.agent.run_loop import AgentRunLoop
-from eflycode.core.config import Config, load_config
+from eflycode.core.config import Config, get_max_context_length, load_config, load_config_from_file
+from eflycode.core.context.manager import ContextManager
+from eflycode.core.llm.protocol import DEFAULT_MAX_CONTEXT_LENGTH
 from eflycode.core.llm.providers.openai import OpenAiProvider
 from eflycode.core.tool.file_tool import create_file_tool_group
 from eflycode.core.tool.execute_command_tool import ExecuteCommandTool
@@ -44,6 +46,15 @@ def create_agent(config: Config) -> BaseAgent:
     # 创建执行命令工具
     execute_command_tool = ExecuteCommandTool()
 
+    # 获取最大上下文长度
+    max_context_length = DEFAULT_MAX_CONTEXT_LENGTH
+    if config.config_file_path:
+        try:
+            config_data = load_config_from_file(config.config_file_path)
+            max_context_length = get_max_context_length(config_data)
+        except Exception:
+            pass
+
     # 创建 Agent
     agent = BaseAgent(
         model=config.model_name,
@@ -51,6 +62,13 @@ def create_agent(config: Config) -> BaseAgent:
         tool_groups=[file_tool_group],
         tools=[finish_task_tool, execute_command_tool],
     )
+    agent.max_context_length = max_context_length
+    
+    # 设置 Session 的上下文配置
+    if config.context_config:
+        agent.session.context_config = config.context_config
+        if not agent.session.context_manager:
+            agent.session.context_manager = ContextManager()
 
     return agent
 

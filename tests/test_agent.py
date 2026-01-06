@@ -5,6 +5,7 @@ from eflycode.core.agent.run_loop import AgentRunLoop
 from eflycode.core.agent.session import Session
 from eflycode.core.llm.protocol import (
     ChatCompletion,
+    DEFAULT_MAX_CONTEXT_LENGTH,
     Message,
     Usage,
 )
@@ -177,7 +178,7 @@ class TestSession(unittest.TestCase):
         self.session.add_message("user", "Hello")
         self.session.add_message("assistant", "Hi")
 
-        context = self.session.get_context("gpt-4")
+        context = self.session.get_context("gpt-4", max_context_length=DEFAULT_MAX_CONTEXT_LENGTH)
         self.assertEqual(context.model, "gpt-4")
         self.assertEqual(len(context.messages), 2)
 

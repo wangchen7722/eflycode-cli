@@ -2,7 +2,13 @@ from typing import Dict, Iterator, List, Optional
 
 from eflycode.core.agent.session import Session
 from eflycode.core.event.event_bus import EventBus
-from eflycode.core.llm.protocol import ChatCompletion, ChatCompletionChunk, Message, ToolDefinition
+from eflycode.core.llm.protocol import (
+    ChatCompletion,
+    ChatCompletionChunk,
+    DEFAULT_MAX_CONTEXT_LENGTH,
+    Message,
+    ToolDefinition,
+)
 from eflycode.core.llm.providers.base import LLMProvider
 from eflycode.core.tool.base import BaseTool, ToolGroup
 from eflycode.core.tool.errors import ToolExecutionError
@@ -123,6 +129,7 @@ class BaseAgent:
         self.model_name = model
         self.event_bus = event_bus or EventBus()
         self.session = Session()
+        self.max_context_length = DEFAULT_MAX_CONTEXT_LENGTH
 
         self._tools: Dict[str, BaseTool] = {}
         self._tool_groups: List[ToolGroup] = []
@@ -149,7 +156,11 @@ class BaseAgent:
         if message:
             self.session.add_message("user", message)
 
-        request = self.session.get_context(self.model_name)
+        request = self.session.get_context(
+            self.model_name,
+            max_context_length=self.max_context_length,
+            provider=self.provider,
+        )
         request.tools = self.get_available_tools()
 
         if message:
@@ -181,7 +192,11 @@ class BaseAgent:
         if message:
             self.session.add_message("user", message)
 
-        request = self.session.get_context(self.model_name)
+        request = self.session.get_context(
+            self.model_name,
+            max_context_length=self.max_context_length,
+            provider=self.provider,
+        )
         request.tools = self.get_available_tools()
 
         if message:

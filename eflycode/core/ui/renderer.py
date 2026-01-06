@@ -73,14 +73,30 @@ class Renderer:
         """处理任务结束事件
 
         只更新状态，不阻塞
+        如果缓冲区还有未输出的内容，立即输出剩余内容后结束任务
 
         Args:
             **kwargs: 事件参数，包含 result 等
         """
+        # 检查是否还有未输出的内容
+        remaining = len(self._message_buffer) - self._message_index if self._message_buffer else 0
+        if remaining > 0:
+            # 直接输出剩余内容
+            chunk = self._message_buffer[self._message_index:]
+            if chunk:
+                self._output.write(chunk)
+            # 清空缓冲状态
+            self._message_buffer = ""
+            self._message_index = 0
+            # 已结束，显示待显示的工具调用
+            if self._message_stopped:
+                self._show_pending_tool_calls()
+                self._message_stopped = False
+
         # 输出任务完成
         if self.current_task and self._task_started:
             self._output.end_task()
-        
+
         # 刷新任务状态，但不重置消息记录
         self.current_task = None
         self._task_started = False
@@ -296,7 +312,7 @@ class Renderer:
                         # 只有在显示完工具调用后，才重置 _message_stopped
                         # 这样可以确保后续的新消息内容不会与工具调用显示混淆
                         self._message_stopped = False
-
+                    
             if start_time is not None:
                 elapsed_ms = (time.time() - start_time) * 1000
                 if elapsed_ms >= time_budget_ms:

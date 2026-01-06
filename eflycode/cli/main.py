@@ -234,6 +234,18 @@ def main() -> None:
                 
                 logger.info(f"收到用户输入: {user_input[:50]}...")
                 
+                session_messages = agent.session.get_messages()
+
+                # 新任务开始时，检查session最后一条消息
+                # 如果最后一条消息是tool消息，需要清空session或添加一个assistant消息来修复消息序列
+                # 为了简化，我们选择在新任务开始时清空session，确保消息序列正确
+                if session_messages:
+                    last_message = session_messages[-1]
+                    if last_message.role == "tool":
+                        # 最后一条是tool消息，清空session以避免消息序列错误
+                        logger.info("检测到session最后一条消息是tool消息，清空session以确保消息序列正确")
+                        agent.session.clear()
+                
                 # 创建运行循环
                 run_loop = AgentRunLoop(agent)
                 

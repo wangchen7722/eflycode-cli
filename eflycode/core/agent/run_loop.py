@@ -118,11 +118,11 @@ class AgentRunLoop:
                 if tool_name == "finish_task":
                     content = arguments.get("content", "")
                     logger.info("调用 finish_task 工具，任务完成")
-                    
+
                     # 将工具执行结果作为工具消息添加到 session 中
                     # 当 assistant 消息包含 tool_calls 时，必须紧接着发送工具消息
                     self.agent.session.add_message("tool", content="", tool_call_id=tool_call_id)
-                    
+
                     # 流式输出 content
                     if content:
                         # 通过事件系统流式输出 content

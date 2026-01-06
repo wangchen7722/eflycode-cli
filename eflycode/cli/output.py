@@ -51,7 +51,7 @@ class TerminalOutput(UIOutput):
             task_name: 任务名称
         """
         self._current_task = task_name
-        self._console.print(f"[bold cyan]任务开始:[/bold cyan] {task_name}")
+        self._console.print(f"\n[bold cyan]任务开始:[/bold cyan] {task_name}")
 
     def end_task(self) -> None:
         """结束任务"""

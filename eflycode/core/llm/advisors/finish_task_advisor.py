@@ -10,7 +10,6 @@ from eflycode.core.llm.protocol import (
     LLMRequest,
     Message,
 )
-from eflycode.core.tool.finish_task_tool import FinishTaskTool
 
 
 class FinishTaskAdvisor(Advisor):
@@ -18,6 +17,9 @@ class FinishTaskAdvisor(Advisor):
 
     def __init__(self):
         """初始化 FinishTaskAdvisor"""
+        # 延迟导入以避免循环导入
+        from eflycode.core.tool.finish_task_tool import FinishTaskTool
+        
         self._finish_task_tool = FinishTaskTool()
         # 用于流式响应的状态：request_id -> state
         self._stream_states: Dict[str, "_StreamState"] = {}
@@ -198,13 +200,20 @@ class FinishTaskAdvisor(Advisor):
         # 计算本次要输出的内容
         remaining = state.content[state.content_index :]
         if not remaining:
-            # 内容已全部输出，返回原始 chunk（可能是 finish_reason）
+            # 内容已全部输出，返回原始 chunk，可能是 finish_reason
             return chunk
 
-        # 每次输出一小块（模拟流式效果）
-        chunk_size = min(20, len(remaining))
-        content_chunk = remaining[:chunk_size]
-        state.content_index += chunk_size
+        # 如果 finish_reason 不为 None，输出所有剩余内容，避免内容丢失
+        # 否则每次输出一小块，模拟流式效果
+        if chunk.finish_reason is not None:
+            # 流式响应结束，输出所有剩余内容
+            content_chunk = remaining
+            state.content_index = len(state.content)
+        else:
+            # 每次输出一小块，模拟流式效果
+            chunk_size = min(20, len(remaining))
+            content_chunk = remaining[:chunk_size]
+            state.content_index += chunk_size
 
         # 创建新的 delta，只包含 content
         if chunk.delta is None:

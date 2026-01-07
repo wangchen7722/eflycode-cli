@@ -1,7 +1,5 @@
 """MCP相关错误定义"""
 
-from eflycode.core.tool.errors import ToolExecutionError
-
 
 class MCPError(Exception):
     """MCP基础错误类"""
@@ -42,7 +40,7 @@ class MCPProtocolError(MCPError):
     pass
 
 
-class MCPToolError(ToolExecutionError):
+class MCPToolError(MCPError):
     """MCP工具执行错误
 
     当MCP工具执行失败时抛出
@@ -56,7 +54,9 @@ class MCPToolError(ToolExecutionError):
             tool_name: 工具名称
             error_details: 原始错误详情
         """
-        super().__init__(message=message, tool_name=tool_name, error_details=error_details)
+        self.tool_name = tool_name
+        self.error_details = error_details
+        super().__init__(message=message, details=str(error_details) if error_details else "")
 
 
 class MCPConfigError(MCPError):

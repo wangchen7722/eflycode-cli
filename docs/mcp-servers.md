@@ -20,12 +20,17 @@ MCP 服务器配置存储在 `.eflycode/mcp.json` 文件中。
 ```json
 {
   "mcpServers": {
-    "server-name": {
+    "stdio-server": {
+      "transport": "stdio",
       "command": "npx",
       "args": ["-y", "@package/name"],
       "env": {
         "API_KEY": "your-api-key"
       }
+    },
+    "http-server": {
+      "transport": "http",
+      "url": "https://example.com/mcp"
     }
   }
 }
@@ -36,9 +41,13 @@ MCP 服务器配置存储在 `.eflycode/mcp.json` 文件中。
 - `mcpServers`：MCP 服务器配置对象
   - 键：服务器名称，用于标识服务器
   - 值：服务器配置对象
-    - `command`：启动命令，例如 `npx`、`python`、`node` 等
-    - `args`：命令参数数组
-    - `env`：环境变量对象（可选），支持 `${VAR_NAME}` 格式引用系统环境变量
+    - `transport`：传输类型，`stdio` 或 `http`，默认为 `stdio`（可选）
+    - **stdio 传输配置**：
+      - `command`：启动命令，例如 `npx`、`python`、`node` 等
+      - `args`：命令参数数组
+      - `env`：环境变量对象（可选），支持 `${VAR_NAME}` 格式引用系统环境变量
+    - **http 传输配置**：
+      - `url`：MCP 服务器端点 URL，例如 `https://example.com/mcp`
 
 ## 使用 CLI 管理 MCP 服务器
 
@@ -49,6 +58,8 @@ python -m eflycode.cli mcp list
 ```
 
 ### 添加服务器
+
+#### 添加 stdio 服务器
 
 ```bash
 python -m eflycode.cli mcp add <name> <command> [args...] [--env KEY=VALUE]...
@@ -64,6 +75,19 @@ python -m eflycode.cli mcp add context7 npx -y @upstash/context7-mcp --api-key Y
 python -m eflycode.cli mcp add my-server npx -y @some/package --env API_KEY=xxx --env TIMEOUT=30
 ```
 
+#### 添加 HTTP 服务器
+
+```bash
+python -m eflycode.cli mcp add <name> --transport http --url <URL>
+```
+
+**示例：**
+
+```bash
+# 添加 HTTP 服务器
+python -m eflycode.cli mcp add http-server --transport http --url https://example.com/mcp
+```
+
 ### 移除服务器
 
 ```bash
@@ -76,9 +100,57 @@ python -m eflycode.cli mcp remove <name>
 python -m eflycode.cli mcp remove context7
 ```
 
+## 传输类型
+
+Eflycode 支持两种 MCP 传输类型：
+
+### stdio 传输
+
+通过标准输入输出与 MCP 服务器进程通信。服务器作为子进程启动。
+
+**适用场景：**
+- 本地运行的 MCP 服务器
+- 通过命令行工具启动的服务器
+- 需要进程管理的场景
+
+**配置示例：**
+```json
+{
+  "transport": "stdio",
+  "command": "npx",
+  "args": ["-y", "@package/mcp"],
+  "env": {
+    "API_KEY": "your-key"
+  }
+}
+```
+
+### HTTP 传输（Streamable HTTP）
+
+通过 HTTP POST/GET 和 Server-Sent Events (SSE) 与远程 MCP 服务器通信。
+
+**适用场景：**
+- 远程 MCP 服务器
+- 需要支持多个客户端连接的服务器
+- 需要会话管理和可恢复性的场景
+
+**配置示例：**
+```json
+{
+  "transport": "http",
+  "url": "https://example.com/mcp"
+}
+```
+
+**HTTP 传输特性：**
+- 支持 HTTP POST 发送 JSON-RPC 消息
+- 支持 HTTP GET 建立 SSE 流
+- 自动处理协议版本头和会话管理
+- 支持连接恢复和消息重传
+
 ## 常用 MCP 服务器配置
 
-### Context7
+### Context7（stdio）
 
 Context7 提供实时文档查询功能。
 
@@ -86,7 +158,7 @@ Context7 提供实时文档查询功能。
 python -m eflycode.cli mcp add context7 npx -y @upstash/context7-mcp --api-key YOUR_API_KEY
 ```
 
-### Playwright
+### Playwright（stdio）
 
 Playwright MCP 提供浏览器自动化功能。
 
@@ -94,7 +166,7 @@ Playwright MCP 提供浏览器自动化功能。
 python -m eflycode.cli mcp add playwright npx @playwright/mcp@latest --isolated --no-sandbox
 ```
 
-### GitHub
+### GitHub（stdio）
 
 GitHub MCP 提供 GitHub 仓库操作功能。
 
@@ -102,12 +174,12 @@ GitHub MCP 提供 GitHub 仓库操作功能。
 python -m eflycode.cli mcp add github npx -y @modelcontextprotocol/server-github --env GITHUB_PERSONAL_ACCESS_TOKEN=YOUR_TOKEN
 ```
 
-### 文件系统
+### HTTP 服务器示例
 
-文件系统 MCP 提供本地文件系统访问功能。
+如果您的 MCP 服务器支持 HTTP 传输：
 
 ```bash
-python -m eflycode.cli mcp add filesystem npx -y @modelcontextprotocol/server-filesystem /path/to/allowed/directory
+python -m eflycode.cli mcp add remote-server --transport http --url https://mcp.example.com/api
 ```
 
 ## 环境变量支持

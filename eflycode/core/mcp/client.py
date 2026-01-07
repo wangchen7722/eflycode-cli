@@ -282,9 +282,16 @@ class MCPClient:
         在事件循环线程中执行
         """
         try:
-            server_params = self.server_config.to_stdio_params()
-            self._transport = stdio_client(server_params)
-            self._read, self._write = await self._transport.__aenter__()
+            if self.server_config.transport == "http":
+                from mcp.client.streamable_http import streamable_http_client
+                
+                url = self.server_config.to_http_params()
+                self._transport = streamable_http_client(url)
+                self._read, self._write, _ = await self._transport.__aenter__()
+            else:  # stdio
+                server_params = self.server_config.to_stdio_params()
+                self._transport = stdio_client(server_params)
+                self._read, self._write = await self._transport.__aenter__()
 
             self._session = ClientSession(self._read, self._write)
             await self._session.__aenter__()
@@ -293,12 +300,12 @@ class MCPClient:
             with self._lock:
                 self._connected = True
                 self._connecting = False
-            logger.debug(f"MCP服务器异步连接成功: {self.server_name}")
+            logger.debug(f"MCP服务器异步连接成功: {self.server_name}，传输类型: {self.server_config.transport}")
         except Exception as e:
             with self._lock:
                 self._connected = False
                 self._connecting = False
-            logger.error(f"MCP服务器异步连接失败: {self.server_name}，错误: {e}")
+            logger.error(f"MCP服务器异步连接失败: {self.server_name}，传输类型: {self.server_config.transport}，错误: {e}")
             raise
 
     def disconnect(self) -> None:
@@ -452,9 +459,9 @@ class MCPClient:
             request_id = f"call_tool_{time.time()}"
             self._request_queue.put(("call_tool", request_id, (tool_name, arguments)))
 
-            # 等待响应，最多等待30秒
+            # 等待响应，最多等待120秒，对于需要调用外部API的工具可能需要更长时间
             try:
-                response_id, success, result = self._response_queue.get(timeout=30)
+                response_id, success, result = self._response_queue.get(timeout=120)
                 if response_id != request_id:
                     raise MCPToolError(
                         message=f"MCP工具调用失败: {self.server_name}_{tool_name}",
@@ -495,11 +502,19 @@ class MCPClient:
                 raise MCPToolError(
                     message=f"MCP工具调用超时: {self.server_name}_{tool_name}",
                     tool_name=f"{self.server_name}_{tool_name}",
-                    error_details=Exception("请求超时"),
+                    error_details=Exception("请求超时，超过120秒未收到响应"),
                 )
         except Exception as e:
             if isinstance(e, MCPToolError):
                 raise
+            # 检查是否是底层 HTTP 客户端的超时错误
+            error_str = str(e).lower()
+            if "timeout" in error_str or "timed out" in error_str or "read operation" in error_str:
+                raise MCPToolError(
+                    message=f"MCP工具调用超时: {self.server_name}_{tool_name}",
+                    tool_name=f"{self.server_name}_{tool_name}",
+                    error_details=Exception(f"底层HTTP客户端读取超时: {e}"),
+                ) from e
             raise MCPToolError(
                 message=f"MCP工具调用失败: {self.server_name}_{tool_name}",
                 tool_name=f"{self.server_name}_{tool_name}",

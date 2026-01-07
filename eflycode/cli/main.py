@@ -13,7 +13,6 @@ from eflycode.core.config import Config, get_max_context_length, load_config, lo
 from eflycode.core.context.manager import ContextManager
 from eflycode.core.llm.protocol import DEFAULT_MAX_CONTEXT_LENGTH
 from eflycode.core.llm.providers.openai import OpenAiProvider
-from eflycode.core.llm.advisors.finish_task_advisor import FinishTaskAdvisor
 from eflycode.core.mcp import MCPClient, MCPToolGroup, load_mcp_config
 from eflycode.core.mcp.errors import MCPConnectionError, MCPConfigError
 from eflycode.core.tool.file_tool import create_file_tool_group
@@ -36,11 +35,8 @@ def create_agent(config: Config) -> BaseAgent:
     Returns:
         BaseAgent: Agent 实例
     """
-    # 创建 FinishTaskAdvisor
-    finish_task_advisor = FinishTaskAdvisor()
-
-    # 创建 LLM Provider，传入 FinishTaskAdvisor
-    provider = OpenAiProvider(config.model_config, advisors=[finish_task_advisor])
+    # 创建 LLM Provider
+    provider = OpenAiProvider(config.model_config)
 
     # 创建文件工具组
     file_tool_group = create_file_tool_group()

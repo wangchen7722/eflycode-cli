@@ -15,6 +15,7 @@ class TestMCPClient(unittest.TestCase):
         """设置测试环境"""
         self.server_config = MCPServerConfig(
             name="test_server",
+            transport="stdio",
             command="npx",
             args=["-y", "test-server"],
         )
@@ -109,6 +110,7 @@ class TestMCPTool(unittest.TestCase):
         """设置测试环境"""
         self.server_config = MCPServerConfig(
             name="test_server",
+            transport="stdio",
             command="npx",
             args=["-y", "test-server"],
         )
@@ -225,6 +227,7 @@ class TestMCPToolGroup(unittest.TestCase):
         """设置测试环境"""
         self.server_config = MCPServerConfig(
             name="test_server",
+            transport="stdio",
             command="npx",
             args=["-y", "test-server"],
         )

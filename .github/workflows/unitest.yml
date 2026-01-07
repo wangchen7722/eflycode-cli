@@ -1,0 +1,25 @@
+name: unitest
+
+on:
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/astral-sh/uv:python3.11-slim
+    
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+      
+      - name: 安装依赖
+        run: uv sync --frozen
+      
+      - name: 运行测试
+        run: |
+          source .venv/bin/activate
+          python -m unittest discover tests -v
+        shell: bash
+

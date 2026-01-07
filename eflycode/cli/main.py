@@ -24,6 +24,7 @@ from eflycode.core.ui.renderer import Renderer
 from eflycode.core.ui.ui_event_queue import UIEventQueue
 from eflycode.cli.components.composer import ComposerComponent
 from eflycode.cli.output import TerminalOutput
+from eflycode.core.llm.advisors.request_log_advisor import RequestLogAdvisor
 from eflycode.core.utils.logger import logger
 
 
@@ -164,10 +165,16 @@ def run_agent_task(agent: BaseAgent, user_input: str, run_loop: AgentRunLoop) ->
         agent.event_bus.emit("agent.error", agent=agent, error=e)
 
 
-def run_interactive_cli() -> None:
-    """运行交互式 CLI"""
+def run_interactive_cli(verbose: bool = False) -> None:
+    """运行交互式 CLI
+
+    Args:
+        verbose: 是否启用详细日志模式，记录所有 LLM 请求和响应
+    """
     
     logger.info("启动 eflycode CLI")
+    if verbose:
+        logger.info("详细日志模式已启用")
     
     # 加载配置
     config_manager = ConfigManager.get_instance()
@@ -183,6 +190,12 @@ def run_interactive_cli() -> None:
     # 创建 Agent
     agent = create_agent(config)
     logger.info(f"Agent 创建完成，模型: {config.model_name}")
+
+    # 如果启用了 verbose 模式，添加 RequestLogAdvisor
+    if verbose:
+        request_log_advisor = RequestLogAdvisor(session_id=agent.session.id)
+        agent.provider.add_advisors([request_log_advisor])
+        logger.info(f"RequestLogAdvisor 已添加，日志文件: {request_log_advisor.log_file}")
     
     # 创建 UI 组件
     ui_queue = UIEventQueue()

@@ -21,6 +21,13 @@ def main() -> None:
         description="Eflycode CLI，AI 驱动的编程助手",
     )
     
+    # 全局参数
+    parser.add_argument(
+        "--verbose", "-v",
+        action="store_true",
+        help="启用详细日志模式，记录所有 LLM 请求和响应",
+    )
+    
     subparsers = parser.add_subparsers(dest="command", help="可用命令")
     
     # init 命令
@@ -82,7 +89,7 @@ def main() -> None:
     # 注意：当使用子命令时，例如 mcp add，args.command 可能为 None
     # 需要检查是否有 func 属性来判断是否有命令需要执行
     if args.command is None and not hasattr(args, "func"):
-        run_interactive_cli()
+        run_interactive_cli(verbose=args.verbose)
     else:
         # 执行对应的命令函数
         if hasattr(args, "func"):

@@ -1,3 +1,4 @@
+import uuid
 from typing import List, Optional
 
 from eflycode.core.llm.protocol import LLMRequest, Message, MessageRole
@@ -15,10 +16,20 @@ class Session:
         Args:
             context_config: 上下文管理配置，如果为 None 则不启用上下文管理
         """
+        self._id = str(uuid.uuid4())
         self._messages: List[Message] = []
         self._initial_user_question: Optional[str] = None
         self.context_config = context_config
         self.context_manager: Optional[ContextManager] = ContextManager() if context_config else None
+
+    @property
+    def id(self) -> str:
+        """获取会话 ID
+
+        Returns:
+            str: 会话唯一标识符
+        """
+        return self._id
 
     def add_message(
         self,

@@ -13,7 +13,8 @@ class MockOutput(UIOutput):
 
     def __init__(self):
         self.written = []
-        self.tool_calls = []
+        self.tool_calls_detected = []
+        self.tool_calls_executing = []
         self.tool_results = []
         self.errors = []
         self.task_started = None
@@ -35,17 +36,13 @@ class MockOutput(UIOutput):
         self.task_ended = True
 
     def show_tool_call(self, tool_name: str, arguments: dict) -> None:
-        self.tool_calls.append({"name": tool_name, "arguments": arguments})
+        self.tool_calls_executing.append({"name": tool_name, "arguments": arguments})
 
     def show_tool_call_detected(self, tool_name: str) -> None:
-        self.tool_calls.append({"name": tool_name, "status": "detected"})
+        self.tool_calls_detected.append({"name": tool_name})
 
     def show_tool_call_executing(self, tool_name: str, arguments: dict) -> None:
-        for tc in self.tool_calls:
-            if tc.get("name") == tool_name and tc.get("status") == "detected":
-                tc["status"] = "executing"
-                tc["arguments"] = arguments
-                break
+        self.tool_calls_executing.append({"name": tool_name, "arguments": arguments})
 
     def show_tool_result(self, tool_name: str, result: str) -> None:
         self.tool_results.append({"name": tool_name, "result": result})
@@ -71,7 +68,6 @@ class TestRenderer(unittest.TestCase):
         self.assertIsNotNone(self.renderer._ui_queue)
         self.assertIsNotNone(self.renderer._output)
         self.assertEqual(self.renderer.current_task, None)
-        self.assertEqual(len(self.renderer.tool_calls), 0)
 
     def test_handle_task_start(self):
         """测试处理任务开始事件"""
@@ -122,20 +118,19 @@ class TestRenderer(unittest.TestCase):
         self.assertGreater(len(self.output.written), 0)
 
     def test_handle_tool_call_start(self):
-        """测试处理工具调用开始事件"""
+        """测试处理工具调用开始事件 - 直接显示"""
         self.ui_queue.emit("agent.tool.call.start", tool_name="test_tool", tool_call_id="call_1")
 
         # 处理事件队列
         self.ui_queue.process_events()
         self.renderer.tick()
 
-        self.assertEqual(len(self.renderer.tool_calls), 1)
-        self.assertEqual(self.renderer.tool_calls[0]["name"], "test_tool")
-        self.assertEqual(self.renderer.tool_calls[0]["status"], "detected")
-        self.assertEqual(self.renderer.tool_calls[0]["id"], "call_1")
+        # 验证直接显示到输出
+        self.assertEqual(len(self.output.tool_calls_detected), 1)
+        self.assertEqual(self.output.tool_calls_detected[0]["name"], "test_tool")
 
     def test_handle_tool_call_ready(self):
-        """测试处理工具调用就绪事件"""
+        """测试处理工具调用就绪事件 - 直接显示"""
         # 先触发 start 事件
         self.ui_queue.emit("agent.tool.call.start", tool_name="test_tool", tool_call_id="call_1")
         self.ui_queue.process_events()
@@ -146,13 +141,13 @@ class TestRenderer(unittest.TestCase):
         self.ui_queue.process_events()
         self.renderer.tick()
 
-        self.assertEqual(len(self.renderer.tool_calls), 1)
-        self.assertEqual(self.renderer.tool_calls[0]["name"], "test_tool")
-        self.assertEqual(self.renderer.tool_calls[0]["status"], "executing")
-        self.assertEqual(self.renderer.tool_calls[0]["arguments"]["arg1"], "value1")
+        # 验证直接显示到输出
+        self.assertEqual(len(self.output.tool_calls_executing), 1)
+        self.assertEqual(self.output.tool_calls_executing[0]["name"], "test_tool")
+        self.assertEqual(self.output.tool_calls_executing[0]["arguments"]["arg1"], "value1")
 
     def test_handle_tool_result(self):
-        """测试处理工具执行结果事件"""
+        """测试处理工具执行结果事件 - 直接显示"""
         # 先添加工具调用（通过新的事件流程）
         self.ui_queue.emit("agent.tool.call.start", tool_name="test_tool", tool_call_id="call_1")
         self.ui_queue.emit("agent.tool.call.ready", tool_name="test_tool", tool_call_id="call_1", arguments={})
@@ -164,10 +159,9 @@ class TestRenderer(unittest.TestCase):
         self.ui_queue.process_events()
         self.renderer.tick()
 
-        # 验证结果被关联到工具调用
-        self.assertEqual(len(self.renderer.tool_calls), 1)
-        self.assertEqual(self.renderer.tool_calls[0].get("result"), "success")
-        self.assertEqual(self.renderer.tool_calls[0].get("status"), "completed")
+        # 验证结果直接显示到输出
+        self.assertEqual(len(self.output.tool_results), 1)
+        self.assertEqual(self.output.tool_results[0]["result"], "success")
 
     def test_handle_error(self):
         """测试处理错误事件"""
@@ -197,29 +191,27 @@ class TestRenderer(unittest.TestCase):
         self.assertGreater(len(self.output.written), 0)
 
     def test_tick_tool_call_display(self):
-        """测试工具调用显示"""
-        # 添加工具调用（通过新的事件流程）
+        """测试工具调用显示 - 事件到来直接显示"""
+        # 添加工具调用
         self.ui_queue.emit("agent.tool.call.start", tool_name="test_tool", tool_call_id="call_1")
         self.ui_queue.process_events()
         self.renderer.tick()
 
-        # 验证工具调用被添加到 renderer
-        self.assertEqual(len(self.renderer.tool_calls), 1)
-        # 验证检测到工具调用被显示
-        self.assertEqual(len(self.output.tool_calls), 1)
-        self.assertEqual(self.output.tool_calls[0]["status"], "detected")
+        # 验证检测到工具调用被直接显示
+        self.assertEqual(len(self.output.tool_calls_detected), 1)
+        self.assertEqual(self.output.tool_calls_detected[0]["name"], "test_tool")
 
         # 触发 ready 事件
         self.ui_queue.emit("agent.tool.call.ready", tool_name="test_tool", tool_call_id="call_1", arguments={"arg": "value"})
         self.ui_queue.process_events()
         self.renderer.tick()
 
-        # 验证工具正在执行被显示
-        self.assertEqual(self.renderer.tool_calls[0]["status"], "executing")
+        # 验证工具正在执行被直接显示
+        self.assertEqual(len(self.output.tool_calls_executing), 1)
 
     def test_tick_tool_result_display(self):
-        """测试工具结果显示"""
-        # 添加工具调用（通过新的事件流程）
+        """测试工具结果显示 - 直接显示"""
+        # 添加工具调用
         self.ui_queue.emit("agent.tool.call.start", tool_name="test_tool", tool_call_id="call_1")
         self.ui_queue.emit("agent.tool.call.ready", tool_name="test_tool", tool_call_id="call_1", arguments={})
         self.ui_queue.process_events()
@@ -247,15 +239,16 @@ class TestRenderer(unittest.TestCase):
         self.assertTrue(self.output.task_ended)
 
     def test_multiple_tool_calls(self):
-        """测试多个工具调用"""
+        """测试多个工具调用 - 直接显示"""
         self.ui_queue.emit("agent.tool.call.start", tool_name="tool1", tool_call_id="call_1")
         self.ui_queue.emit("agent.tool.call.start", tool_name="tool2", tool_call_id="call_2")
         self.ui_queue.process_events()
         self.renderer.tick()
 
-        self.assertEqual(len(self.renderer.tool_calls), 2)
-        self.assertEqual(self.renderer.tool_calls[0]["name"], "tool1")
-        self.assertEqual(self.renderer.tool_calls[1]["name"], "tool2")
+        # 验证都被直接显示
+        self.assertEqual(len(self.output.tool_calls_detected), 2)
+        self.assertEqual(self.output.tool_calls_detected[0]["name"], "tool1")
+        self.assertEqual(self.output.tool_calls_detected[1]["name"], "tool2")
 
     def test_message_buffer_clearing(self):
         """测试消息缓冲区清空"""
@@ -265,6 +258,7 @@ class TestRenderer(unittest.TestCase):
 
         # 任务开始应该清空缓冲区
         self.ui_queue.emit("agent.task.start", user_input="New task")
+        self.ui_queue.process_events()
         self.renderer.tick()
 
         self.assertEqual(self.renderer._message_buffer, "")
@@ -272,4 +266,3 @@ class TestRenderer(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

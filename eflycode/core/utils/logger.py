@@ -57,7 +57,7 @@ def init_logger(
     enqueue = (enqueue or _env_bool("EFLYCODE_LOG_ENQUEUE", True))
     backtrace = (backtrace or _env_bool("EFLYCODE_LOG_BACKTRACE", True))
     diagnose = (diagnose or _env_bool("EFLYCODE_LOG_DIAGNOSE", True))
-    serialize = (serialize or _env_bool("EFLYCODE_LOG_SERIALIZE", True))
+    serialize = (serialize if serialize is not None else _env_bool("EFLYCODE_LOG_SERIALIZE", False))
     
     fmt = fmt or _DEFAULT_FORMAT
 

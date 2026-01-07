@@ -9,6 +9,10 @@ import re
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from eflycode.core.config.config_manager import (
+    get_user_config_dir,
+    resolve_workspace_dir,
+)
 from eflycode.core.mcp.errors import MCPConfigError
 from eflycode.core.utils.logger import logger
 
@@ -91,43 +95,34 @@ class MCPServerConfig:
         return self.url
 
 
-def find_mcp_config_file(workspace_dir: Optional[Path] = None) -> Optional[Path]:
+def find_mcp_config_file() -> Optional[Path]:
     """查找MCP配置文件
 
     查找逻辑：
     1. 从工作区目录的.eflycode/mcp.json查找
     2. 如果未找到，从用户主目录的.eflycode/mcp.json查找
 
-    Args:
-        workspace_dir: 工作区目录，如果为None则使用当前工作目录
-
     Returns:
         Optional[Path]: 配置文件路径，如果未找到则返回None
     """
-    if workspace_dir is None:
-        workspace_dir = Path.cwd().resolve()
-
     # 先查找工作区目录
+    workspace_dir = resolve_workspace_dir()
     workspace_config = workspace_dir / ".eflycode" / "mcp.json"
     if workspace_config.exists() and workspace_config.is_file():
         return workspace_config
 
     # 再查找用户主目录
-    user_home = Path.home()
-    user_config = user_home / ".eflycode" / "mcp.json"
+    user_config = get_user_config_dir() / "mcp.json"
     if user_config.exists() and user_config.is_file():
         return user_config
 
     return None
 
 
-def load_mcp_config(workspace_dir: Optional[Path] = None) -> List[MCPServerConfig]:
+def load_mcp_config() -> List[MCPServerConfig]:
     """加载MCP配置
 
     从.eflycode/mcp.json加载MCP服务器配置
-
-    Args:
-        workspace_dir: 工作区目录，如果为None则使用当前工作目录
 
     Returns:
         List[MCPServerConfig]: MCP服务器配置列表
@@ -135,7 +130,7 @@ def load_mcp_config(workspace_dir: Optional[Path] = None) -> List[MCPServerConfi
     Raises:
         MCPConfigError: 当配置加载或解析失败时抛出
     """
-    config_path = find_mcp_config_file(workspace_dir)
+    config_path = find_mcp_config_file()
 
     if config_path is None:
         logger.debug("未找到MCP配置文件，跳过MCP服务器加载")

@@ -168,7 +168,7 @@
 
 - `Config`：配置类
 - `load_config`：配置加载函数
-- `find_config_file`：配置文件查找
+- `find_config_files`：配置文件查找，返回用户配置和项目配置
 
 ## 数据流
 

@@ -5,6 +5,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from eflycode.core.mcp.config import (
     MCPServerConfig,
@@ -104,20 +105,20 @@ class TestMCPConfigLoading(unittest.TestCase):
 
     def test_find_mcp_config_file_not_found(self):
         """测试查找不存在的配置文件"""
-        result = find_mcp_config_file(self.tmp_dir)
-        self.assertIsNone(result)
+        with patch("eflycode.core.mcp.config.resolve_workspace_dir", return_value=self.tmp_dir):
+            result = find_mcp_config_file()
+            self.assertIsNone(result)
 
     def test_find_mcp_config_file_in_workspace(self):
         """测试在工作区目录查找配置文件"""
-        workspace_dir = self.tmp_dir / "workspace"
-        workspace_dir.mkdir()
-        config_dir = workspace_dir / ".eflycode"
+        config_dir = self.tmp_dir / ".eflycode"
         config_dir.mkdir()
         config_file = config_dir / "mcp.json"
         config_file.write_text('{"mcpServers": {}}')
 
-        result = find_mcp_config_file(workspace_dir)
-        self.assertEqual(result, config_file)
+        with patch("eflycode.core.mcp.config.resolve_workspace_dir", return_value=self.tmp_dir):
+            result = find_mcp_config_file()
+            self.assertEqual(result, config_file)
 
     def test_load_mcp_config_valid(self):
         """测试加载有效的MCP配置"""
@@ -136,12 +137,13 @@ class TestMCPConfigLoading(unittest.TestCase):
 
         config_file.write_text(json.dumps(config_data, indent=2))
 
-        configs = load_mcp_config(self.tmp_dir)
-        self.assertEqual(len(configs), 1)
-        self.assertEqual(configs[0].name, "test_server")
-        self.assertEqual(configs[0].transport, "stdio")
-        self.assertEqual(configs[0].command, "npx")
-        self.assertEqual(configs[0].args, ["-y", "test-server"])
+        with patch("eflycode.core.mcp.config.resolve_workspace_dir", return_value=self.tmp_dir):
+            configs = load_mcp_config()
+            self.assertEqual(len(configs), 1)
+            self.assertEqual(configs[0].name, "test_server")
+            self.assertEqual(configs[0].transport, "stdio")
+            self.assertEqual(configs[0].command, "npx")
+            self.assertEqual(configs[0].args, ["-y", "test-server"])
 
     def test_load_mcp_config_with_env(self):
         """测试加载包含环境变量的MCP配置"""
@@ -165,9 +167,10 @@ class TestMCPConfigLoading(unittest.TestCase):
 
         config_file.write_text(json.dumps(config_data, indent=2))
 
-        configs = load_mcp_config(self.tmp_dir)
-        self.assertEqual(len(configs), 1)
-        self.assertEqual(configs[0].env["API_TOKEN"], "test-token-value")
+        with patch("eflycode.core.mcp.config.resolve_workspace_dir", return_value=self.tmp_dir):
+            configs = load_mcp_config()
+            self.assertEqual(len(configs), 1)
+            self.assertEqual(configs[0].env["API_TOKEN"], "test-token-value")
 
         # 清理
         del os.environ["TEST_TOKEN"]
@@ -179,8 +182,9 @@ class TestMCPConfigLoading(unittest.TestCase):
         config_file = config_dir / "mcp.json"
         config_file.write_text("{ invalid json }")
 
-        with self.assertRaises(MCPConfigError):
-            load_mcp_config(self.tmp_dir)
+        with patch("eflycode.core.mcp.config.resolve_workspace_dir", return_value=self.tmp_dir):
+            with self.assertRaises(MCPConfigError):
+                load_mcp_config()
 
     def test_load_mcp_config_missing_command(self):
         """测试缺少command字段的配置"""
@@ -198,9 +202,10 @@ class TestMCPConfigLoading(unittest.TestCase):
 
         config_file.write_text(json.dumps(config_data, indent=2))
 
-        configs = load_mcp_config(self.tmp_dir)
-        # 应该跳过无效配置
-        self.assertEqual(len(configs), 0)
+        with patch("eflycode.core.mcp.config.resolve_workspace_dir", return_value=self.tmp_dir):
+            configs = load_mcp_config()
+            # 应该跳过无效配置
+            self.assertEqual(len(configs), 0)
 
     def test_load_mcp_config_http(self):
         """测试加载HTTP传输配置"""
@@ -219,11 +224,12 @@ class TestMCPConfigLoading(unittest.TestCase):
 
         config_file.write_text(json.dumps(config_data, indent=2))
 
-        configs = load_mcp_config(self.tmp_dir)
-        self.assertEqual(len(configs), 1)
-        self.assertEqual(configs[0].name, "http_server")
-        self.assertEqual(configs[0].transport, "http")
-        self.assertEqual(configs[0].url, "https://example.com/mcp")
+        with patch("eflycode.core.mcp.config.resolve_workspace_dir", return_value=self.tmp_dir):
+            configs = load_mcp_config()
+            self.assertEqual(len(configs), 1)
+            self.assertEqual(configs[0].name, "http_server")
+            self.assertEqual(configs[0].transport, "http")
+            self.assertEqual(configs[0].url, "https://example.com/mcp")
 
     def test_load_mcp_config_http_missing_url(self):
         """测试HTTP传输缺少URL字段"""
@@ -241,9 +247,10 @@ class TestMCPConfigLoading(unittest.TestCase):
 
         config_file.write_text(json.dumps(config_data, indent=2))
 
-        configs = load_mcp_config(self.tmp_dir)
-        # 应该跳过无效配置
-        self.assertEqual(len(configs), 0)
+        with patch("eflycode.core.mcp.config.resolve_workspace_dir", return_value=self.tmp_dir):
+            configs = load_mcp_config()
+            # 应该跳过无效配置
+            self.assertEqual(len(configs), 0)
 
     def test_load_mcp_config_mixed_transports(self):
         """测试混合传输类型配置"""
@@ -267,17 +274,18 @@ class TestMCPConfigLoading(unittest.TestCase):
 
         config_file.write_text(json.dumps(config_data, indent=2))
 
-        configs = load_mcp_config(self.tmp_dir)
-        self.assertEqual(len(configs), 2)
-        
-        stdio_config = next(c for c in configs if c.name == "stdio_server")
-        http_config = next(c for c in configs if c.name == "http_server")
-        
-        self.assertEqual(stdio_config.transport, "stdio")
-        self.assertEqual(stdio_config.command, "npx")
-        
-        self.assertEqual(http_config.transport, "http")
-        self.assertEqual(http_config.url, "https://example.com/mcp")
+        with patch("eflycode.core.mcp.config.resolve_workspace_dir", return_value=self.tmp_dir):
+            configs = load_mcp_config()
+            self.assertEqual(len(configs), 2)
+            
+            stdio_config = next(c for c in configs if c.name == "stdio_server")
+            http_config = next(c for c in configs if c.name == "http_server")
+            
+            self.assertEqual(stdio_config.transport, "stdio")
+            self.assertEqual(stdio_config.command, "npx")
+            
+            self.assertEqual(http_config.transport, "http")
+            self.assertEqual(http_config.url, "https://example.com/mcp")
 
     def test_load_mcp_config_default_transport(self):
         """测试默认传输类型为stdio"""
@@ -296,14 +304,18 @@ class TestMCPConfigLoading(unittest.TestCase):
 
         config_file.write_text(json.dumps(config_data, indent=2))
 
-        configs = load_mcp_config(self.tmp_dir)
-        self.assertEqual(len(configs), 1)
-        self.assertEqual(configs[0].transport, "stdio")
+        with patch("eflycode.core.mcp.config.resolve_workspace_dir", return_value=self.tmp_dir):
+            configs = load_mcp_config()
+            self.assertEqual(len(configs), 1)
+            self.assertEqual(configs[0].transport, "stdio")
 
     def test_load_mcp_config_not_found(self):
         """测试配置文件不存在的情况"""
-        configs = load_mcp_config(Path("/nonexistent/path"))
-        self.assertEqual(len(configs), 0)
+        nonexistent_path = Path("/nonexistent/path")
+        with patch("eflycode.core.mcp.config.resolve_workspace_dir", return_value=nonexistent_path):
+            with patch("eflycode.core.mcp.config.get_user_config_dir", return_value=nonexistent_path):
+                configs = load_mcp_config()
+                self.assertEqual(len(configs), 0)
 
 
 if __name__ == "__main__":

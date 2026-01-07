@@ -1,7 +1,9 @@
+from pathlib import Path
 from typing import Dict, Iterator, List, Optional
 
 from eflycode.core.agent.session import Session
 from eflycode.core.event.event_bus import EventBus
+from eflycode.core.llm.advisor import Advisor
 from eflycode.core.llm.protocol import (
     ChatCompletion,
     ChatCompletionChunk,
@@ -108,6 +110,8 @@ class TaskConversation:
 class BaseAgent:
     """Agent 基类，集成 LLMProvider 和工具系统"""
 
+    ROLE = "default"  # Agent 角色，用于加载对应的系统提示词
+
     def __init__(
         self,
         model: str,
@@ -115,6 +119,7 @@ class BaseAgent:
         tools: Optional[List[BaseTool]] = None,
         tool_groups: Optional[List[ToolGroup]] = None,
         event_bus: Optional[EventBus] = None,
+        advisors: Optional[List[Advisor]] = None,
     ):
         """初始化 Agent
 
@@ -124,12 +129,13 @@ class BaseAgent:
             tools: 工具列表
             tool_groups: 工具组列表
             event_bus: 事件总线，如果为 None 则创建新的
+            advisors: Advisor 列表，会自动合并到 Provider 的 advisors 中
         """
-        self.provider = provider
         self.model_name = model
         self.event_bus = event_bus or EventBus()
         self.session = Session()
         self.max_context_length = DEFAULT_MAX_CONTEXT_LENGTH
+        self._advisors: List[Advisor] = advisors or []
 
         self._tools: Dict[str, BaseTool] = {}
         self._tool_groups: List[ToolGroup] = []
@@ -143,6 +149,18 @@ class BaseAgent:
             for group in tool_groups:
                 for tool in group.tools:
                     self._tools[tool.name] = tool
+
+        # 创建 SystemPromptAdvisor 并添加到 advisors
+        # 延迟导入以避免循环导入
+        from eflycode.core.prompt.system_prompt_advisor import SystemPromptAdvisor
+        
+        system_prompt_advisor = SystemPromptAdvisor(agent=self)
+        self._advisors.append(system_prompt_advisor)
+
+        # 设置 provider，并合并 advisors
+        self.provider = provider
+        if self._advisors and hasattr(provider, "add_advisors"):
+            provider.add_advisors(self._advisors)
 
     def chat(self, message: str = "") -> ChatConversation:
         """发送消息并获取响应
@@ -387,6 +405,35 @@ class BaseAgent:
             Optional[BaseTool]: 找到的工具，如果不存在则返回 None
         """
         return self._tools.get(tool_name)
+
+    def _set_provider(self, provider: LLMProvider) -> None:
+        """设置 Provider 并合并 advisors
+
+        Args:
+            provider: LLM Provider 实例
+        """
+        self.provider = provider
+        if self._advisors and hasattr(provider, "add_advisors"):
+            provider.add_advisors(self._advisors)
+
+    def add_advisor(self, advisor: Advisor) -> None:
+        """添加 Advisor 到 Agent
+
+        Args:
+            advisor: 要添加的 Advisor
+        """
+        self._advisors.append(advisor)
+        # 如果 provider 已设置且支持 add_advisors，立即合并
+        if self.provider and hasattr(self.provider, "add_advisors"):
+            self.provider.add_advisors([advisor])
+
+    def get_advisors(self) -> List[Advisor]:
+        """获取 Agent 的 Advisor 列表
+
+        Returns:
+            List[Advisor]: Advisor 列表
+        """
+        return self._advisors.copy()
 
     def shutdown(self) -> None:
         """关闭 Agent，清理资源"""

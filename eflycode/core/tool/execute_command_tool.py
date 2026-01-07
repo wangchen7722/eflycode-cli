@@ -4,6 +4,7 @@ import subprocess
 from pathlib import Path
 from typing import Annotated, Optional
 
+from eflycode.core.config.config_manager import resolve_workspace_dir
 from eflycode.core.llm.protocol import ToolFunctionParameters
 from eflycode.core.tool.base import BaseTool, ToolType
 from eflycode.core.tool.errors import ToolExecutionError
@@ -97,13 +98,7 @@ def _get_workspace_dir() -> Path:
     Returns:
         Path: 项目根目录，如果无法获取则返回当前工作目录
     """
-    # 延迟导入以避免循环导入
-    from eflycode.core.config.config_manager import find_config_file
-    
-    _, workspace_dir = find_config_file()
-    if workspace_dir:
-        return workspace_dir
-    return Path.cwd().resolve()
+    return resolve_workspace_dir()
 
 
 def _validate_workdir(workdir: Optional[str]) -> Path:

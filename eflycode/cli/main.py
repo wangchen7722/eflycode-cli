@@ -9,7 +9,8 @@ import time
 
 from eflycode.core.agent.base import BaseAgent
 from eflycode.core.agent.run_loop import AgentRunLoop
-from eflycode.core.config import Config, get_max_context_length, load_config, load_config_from_file
+from eflycode.core.config import Config
+from eflycode.core.config.config_manager import ConfigManager
 from eflycode.core.context.manager import ContextManager
 from eflycode.core.llm.protocol import DEFAULT_MAX_CONTEXT_LENGTH
 from eflycode.core.llm.providers.openai import OpenAiProvider
@@ -35,9 +36,6 @@ def create_agent(config: Config) -> BaseAgent:
     Returns:
         BaseAgent: Agent 实例
     """
-    # 创建 LLM Provider
-    provider = OpenAiProvider(config.model_config)
-
     # 创建文件工具组
     file_tool_group = create_file_tool_group()
     
@@ -45,20 +43,15 @@ def create_agent(config: Config) -> BaseAgent:
     execute_command_tool = ExecuteCommandTool()
 
     # 获取最大上下文长度
-    max_context_length = DEFAULT_MAX_CONTEXT_LENGTH
-    if config.config_file_path:
-        try:
-            config_data = load_config_from_file(config.config_file_path)
-            max_context_length = get_max_context_length(config_data)
-        except Exception:
-            pass
+    config_manager = ConfigManager.get_instance()
+    max_context_length = config_manager.get_max_context_length()
 
     # 加载MCP工具
     tool_groups = [file_tool_group]
     mcp_clients = []
     
     try:
-        mcp_server_configs = load_mcp_config(config.workspace_dir)
+        mcp_server_configs = load_mcp_config()
         # 先启动所有MCP服务器的连接，不阻塞
         for server_config in mcp_server_configs:
             try:
@@ -133,7 +126,10 @@ def create_agent(config: Config) -> BaseAgent:
             f"加载MCP配置时发生未知错误: {type(e).__name__}: {str(e)}，继续使用内置工具"
         )
 
-    # 创建 Agent
+    # 创建最终的 LLM Provider
+    provider = OpenAiProvider(config.model_config)
+    
+    # 创建 Agent，SystemPromptAdvisor 会在 BaseAgent 初始化时自动创建
     agent = BaseAgent(
         model=config.model_name,
         provider=provider,
@@ -174,7 +170,8 @@ def run_interactive_cli() -> None:
     logger.info("启动 eflycode CLI")
     
     # 加载配置
-    config = load_config()
+    config_manager = ConfigManager.get_instance()
+    config = config_manager.load()
     logger.info(f"配置加载完成，工作区目录: {config.workspace_dir}")
     
     # 设置工作区目录

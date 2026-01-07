@@ -6,34 +6,25 @@
 import json
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict
+
+from eflycode.core.config.config_manager import resolve_workspace_dir
+from eflycode.core.mcp.config import find_mcp_config_file
 
 
-def find_or_create_mcp_config(workspace_dir: Optional[Path] = None) -> Path:
+def find_or_create_mcp_config() -> Path:
     """查找或创建 MCP 配置文件
-    
-    Args:
-        workspace_dir: 工作区目录，如果为None则使用当前工作目录
         
     Returns:
         Path: MCP 配置文件路径
     """
-    if workspace_dir is None:
-        # 尝试从配置文件获取工作区目录
-        from eflycode.core.config.config_manager import find_config_file
-        _, config_workspace_dir = find_config_file()
-        if config_workspace_dir:
-            workspace_dir = config_workspace_dir
-        else:
-            workspace_dir = Path.cwd().resolve()
-    
     # 查找现有配置文件
-    from eflycode.core.mcp.config import find_mcp_config_file
-    config_path = find_mcp_config_file(workspace_dir)
+    config_path = find_mcp_config_file()
     if config_path:
         return config_path
     
     # 如果不存在，创建工作区目录下的配置文件
+    workspace_dir = resolve_workspace_dir()
     eflycode_dir = workspace_dir / ".eflycode"
     eflycode_dir.mkdir(exist_ok=True)
     config_path = eflycode_dir / "mcp.json"
@@ -45,17 +36,13 @@ def find_or_create_mcp_config(workspace_dir: Optional[Path] = None) -> Path:
     return config_path
 
 
-def load_mcp_config_dict(workspace_dir: Optional[Path] = None) -> Dict:
+def load_mcp_config_dict() -> Dict:
     """加载 MCP 配置为字典
-    
-    Args:
-        workspace_dir: 工作区目录，如果为None则使用当前工作目录
         
     Returns:
         Dict: MCP 配置字典
     """
-    # 延迟导入以避免循环导入
-    config_path = find_or_create_mcp_config(workspace_dir)
+    config_path = find_or_create_mcp_config()
     
     try:
         with open(config_path, "r", encoding="utf-8") as f:
@@ -94,24 +81,16 @@ def mcp_list(args) -> None:
     Args:
         args: argparse 参数对象
     """
-    # 延迟导入以避免循环导入
-    from eflycode.core.config.config_manager import find_config_file
-    from eflycode.core.mcp.config import find_mcp_config_file
-    
-    # 获取工作区目录
-    _, workspace_dir = find_config_file()
-    if not workspace_dir:
-        workspace_dir = Path.cwd().resolve()
-    
     # 加载配置
-    config_path = find_mcp_config_file(workspace_dir)
+    config_path = find_mcp_config_file()
     if not config_path or not config_path.exists():
+        workspace_dir = resolve_workspace_dir()
         print("未找到 MCP 配置文件")
         print(f"配置文件位置: {workspace_dir / '.eflycode' / 'mcp.json'}")
         print("使用 'eflycode mcp add' 命令添加 MCP 服务器")
         return
     
-    config_data = load_mcp_config_dict(workspace_dir)
+    config_data = load_mcp_config_dict()
     mcp_servers = config_data.get("mcpServers", {})
     
     if not mcp_servers:
@@ -154,16 +133,8 @@ def mcp_add(args) -> None:
     Args:
         args: argparse 参数对象，包含 name, transport, url, command, args, env
     """
-    # 延迟导入以避免循环导入
-    from eflycode.core.config.config_manager import find_config_file
-    
-    # 获取工作区目录
-    _, workspace_dir = find_config_file()
-    if not workspace_dir:
-        workspace_dir = Path.cwd().resolve()
-    
     # 加载配置
-    config_data = load_mcp_config_dict(workspace_dir)
+    config_data = load_mcp_config_dict()
     mcp_servers = config_data.get("mcpServers", {})
     
     # 检查服务器名称是否已存在
@@ -259,7 +230,7 @@ def mcp_add(args) -> None:
     mcp_servers[args.name] = server_config
     
     # 保存配置
-    config_path = find_or_create_mcp_config(workspace_dir)
+    config_path = find_or_create_mcp_config()
     save_mcp_config(config_path, mcp_servers)
     
     print(f"MCP 服务器 '{args.name}' 已添加")
@@ -272,16 +243,8 @@ def mcp_remove(args) -> None:
     Args:
         args: argparse 参数对象，包含 name
     """
-    # 延迟导入以避免循环导入
-    from eflycode.core.config.config_manager import find_config_file
-    
-    # 获取工作区目录
-    _, workspace_dir = find_config_file()
-    if not workspace_dir:
-        workspace_dir = Path.cwd().resolve()
-    
     # 加载配置
-    config_data = load_mcp_config_dict(workspace_dir)
+    config_data = load_mcp_config_dict()
     mcp_servers = config_data.get("mcpServers", {})
     
     # 检查服务器名称是否存在
@@ -293,7 +256,7 @@ def mcp_remove(args) -> None:
     del mcp_servers[args.name]
     
     # 保存配置
-    config_path = find_or_create_mcp_config(workspace_dir)
+    config_path = find_or_create_mcp_config()
     save_mcp_config(config_path, mcp_servers)
     
     print(f"MCP 服务器 '{args.name}' 已移除")

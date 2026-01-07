@@ -1,77 +1,71 @@
 """忽略文件管理模块
 
 负责查找和解析 .eflycodeignore 文件，提供路径忽略判断功能
+忽略文件位置：.eflycode/.eflycodeignore
 """
 
 import fnmatch
 from pathlib import Path
 from typing import List, Optional
 
+from eflycode.core.config.config_manager import resolve_workspace_dir
 
-def find_ignore_file(workspace_dir: Optional[Path] = None) -> Optional[Path]:
-    """查找 .eflycodeignore 文件
 
-    查找逻辑：
-    1. 如果提供了 workspace_dir，直接在该目录查找
-    2. 否则从当前目录开始，向上查找最多 2 级（与 find_config_file 逻辑一致）
-    3. 返回找到的文件路径，如果没找到返回 None
+def _load_patterns_from_file(ignore_file: Path) -> List[str]:
+    """从文件加载忽略模式
 
     Args:
-        workspace_dir: 工作区根目录，如果提供则直接在该目录查找
+        ignore_file: 忽略文件路径
 
     Returns:
-        Optional[Path]: 找到的 .eflycodeignore 文件路径，如果没找到返回 None
+        List[str]: 忽略模式列表
     """
-    if workspace_dir:
-        ignore_file = workspace_dir / ".eflycodeignore"
-        if ignore_file.exists() and ignore_file.is_file():
-            return ignore_file
-        return None
-
-    # 从当前目录开始，向上查找最多 2 级
-    current_dir = Path.cwd().resolve()
-    for _ in range(3):  # 当前目录 + 向上 2 级 = 3 个目录
-        ignore_file = current_dir / ".eflycodeignore"
-        if ignore_file.exists() and ignore_file.is_file():
-            return ignore_file
-        current_dir = current_dir.parent
-
-    return None
-
-
-def load_ignore_patterns(
-    ignore_file_path: Optional[Path] = None, workspace_dir: Optional[Path] = None
-) -> List[str]:
-    """加载忽略模式列表
-
-    从 .eflycodeignore 文件中加载忽略模式，去除空行和注释行
-
-    Args:
-        ignore_file_path: 忽略文件路径，如果提供则直接读取该文件
-        workspace_dir: 工作区根目录，如果提供了则用于查找忽略文件
-
-    Returns:
-        List[str]: 忽略模式列表，如果文件不存在返回空列表
-    """
-    if ignore_file_path is None:
-        ignore_file_path = find_ignore_file(workspace_dir)
-
-    if ignore_file_path is None or not ignore_file_path.exists():
+    if not ignore_file.exists() or not ignore_file.is_file():
         return []
 
     patterns = []
     try:
-        with open(ignore_file_path, "r", encoding="utf-8") as f:
+        with open(ignore_file, "r", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 # 跳过空行和注释行
                 if line and not line.startswith("#"):
                     patterns.append(line)
     except Exception:
-        # 如果读取失败，返回空列表
         return []
 
     return patterns
+
+
+def find_ignore_file() -> Optional[Path]:
+    """查找 .eflycodeignore 文件
+
+    查找逻辑：
+    1. 在工作区的 .eflycode/.eflycodeignore 中查找
+    2. 返回找到的文件路径，如果没找到返回 None
+
+    Returns:
+        Optional[Path]: 找到的 .eflycodeignore 文件路径，如果没找到返回 None
+    """
+    workspace_dir = resolve_workspace_dir()
+    ignore_file = workspace_dir / ".eflycode" / ".eflycodeignore"
+    if ignore_file.exists() and ignore_file.is_file():
+        return ignore_file
+    return None
+
+
+def load_ignore_patterns() -> List[str]:
+    """加载忽略模式列表
+
+    从 .eflycode/.eflycodeignore 文件中加载忽略模式
+
+    Returns:
+        List[str]: 忽略模式列表，如果文件不存在返回空列表
+    """
+    ignore_file = find_ignore_file()
+    if ignore_file:
+        return _load_patterns_from_file(ignore_file)
+    return []
 
 
 def should_ignore_path(path: Path, ignore_patterns: List[str], base_dir: Path) -> bool:

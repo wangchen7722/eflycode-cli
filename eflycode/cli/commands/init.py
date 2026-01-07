@@ -8,6 +8,8 @@ from pathlib import Path
 
 import yaml
 
+from eflycode.core.config.config_manager import find_config_files
+
 
 def init_command(args) -> None:
     """初始化配置文件命令
@@ -15,11 +17,9 @@ def init_command(args) -> None:
     Args:
         args: argparse 参数对象
     """
-    # 延迟导入以避免循环导入
-    from eflycode.core.config.config_manager import find_config_file
-    
     # 查找是否已存在配置文件
-    config_path, workspace_dir = find_config_file()
+    user_config, project_config, workspace_dir = find_config_files()
+    config_path = project_config or user_config
     
     if config_path and config_path.exists():
         print(f"错误: 配置文件已存在: {config_path}", file=sys.stderr)

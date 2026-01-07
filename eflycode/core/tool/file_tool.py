@@ -3,6 +3,7 @@ import re
 from pathlib import Path
 from typing import Annotated, Any, Dict, List, Optional, Union
 
+from eflycode.core.config.config_manager import ConfigManager
 from eflycode.core.config.ignore import load_ignore_patterns, should_ignore_path
 from eflycode.core.llm.protocol import ToolFunctionParameters
 from eflycode.core.tool.base import BaseTool, ToolGroup, ToolType
@@ -275,15 +276,14 @@ class ListFilesTool(BaseTool):
         # 确定基础目录
         # 尝试从配置中获取工作区目录，否则使用 safe_path 的父目录
         try:
-            from eflycode.core.config import load_config
-            config = load_config()
+            config = ConfigManager.get_instance().get_config()
             base_dir = config.workspace_dir
         except Exception:
             # 如果获取配置失败，使用 safe_path 的父目录
             base_dir = safe_path.parent if safe_path.parent != safe_path else safe_path
 
         # 加载忽略模式
-        ignore_patterns = load_ignore_patterns(workspace_dir=base_dir)
+        ignore_patterns = load_ignore_patterns()
 
         tree = self._build_tree(
             safe_path,

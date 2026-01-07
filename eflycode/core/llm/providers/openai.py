@@ -31,13 +31,23 @@ class OpenAiProvider(LLMProvider):
             advisors: Advisor 列表，用于拦截和修改请求响应
         """
         self.config = config
-        self.advisor_chain = AdvisorChain(advisors or [])
+        self._advisors: List[Advisor] = advisors or []
+        self.advisor_chain = AdvisorChain(self._advisors.copy())
         self.client = OpenAI(
             api_key=config.api_key,
             base_url=config.base_url,
             timeout=config.timeout,
             max_retries=config.max_retries,
         )
+
+    def add_advisors(self, advisors: List[Advisor]) -> None:
+        """添加 Advisor 到现有列表并更新 AdvisorChain
+
+        Args:
+            advisors: 要添加的 Advisor 列表
+        """
+        self._advisors.extend(advisors)
+        self.advisor_chain = AdvisorChain(self._advisors.copy())
 
     @property
     def capabilities(self) -> ProviderCapabilities:

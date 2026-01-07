@@ -1,10 +1,10 @@
-.idea
-.vscode
-.cursor
-.trae
+.idea/
+.vscode/
+.cursor/
+.trae/
 .eflycode/
 
-**/__pycache__
+**/__pycache__/
 *.egg-info
 
 logs/

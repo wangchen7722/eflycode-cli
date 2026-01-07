@@ -1,6 +1,8 @@
 name: unitest
 
 on:
+  push:
+    branches: [ master ]
   pull_request:
     branches: [ master ]
 

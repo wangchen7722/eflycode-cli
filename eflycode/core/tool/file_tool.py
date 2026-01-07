@@ -127,28 +127,48 @@ class ListFilesTool(BaseTool):
             required=["directory"],
         )
 
-    def _count_items(self, directory: Path, max_depth: int, current_depth: int = 0) -> int:
-        """统计目录中的项目数量（包括子目录中的文件）
+    def _count_items(
+        self,
+        directory: Path,
+        max_depth: int,
+        current_depth: int = 0,
+        ignore_patterns: Optional[List[str]] = None,
+        base_dir: Optional[Path] = None,
+    ) -> int:
+        """统计目录中的项目数量
 
         Args:
             directory: 目录路径
             max_depth: 最大递归深度
             current_depth: 当前深度
+            ignore_patterns: 忽略模式列表
+            base_dir: 基础目录，用于计算相对路径
 
         Returns:
             int: 项目数量
         """
-        if current_depth >= max_depth:
-            return 0
-
         count = 0
         try:
-            for item in directory.iterdir():
+            items = list(directory.iterdir())
+            
+            # 过滤被忽略的项目
+            if ignore_patterns and base_dir:
+                filtered_items = []
+                for item in items:
+                    if not should_ignore_path(item, ignore_patterns, base_dir):
+                        filtered_items.append(item)
+                items = filtered_items
+            
+            for item in items:
                 if item.is_file():
                     count += 1
                 elif item.is_dir():
                     count += 1  # 目录本身算一个
-                    count += self._count_items(item, max_depth, current_depth + 1)
+                    # 如果还没达到最大深度，递归统计子目录
+                    if current_depth + 1 < max_depth:
+                        count += self._count_items(
+                            item, max_depth, current_depth + 1, ignore_patterns, base_dir
+                        )
         except (PermissionError, OSError):
             pass
 
@@ -205,7 +225,9 @@ class ListFilesTool(BaseTool):
                     # 如果是目录
                     if current_depth >= max_depth:
                         # 达到最大深度，只显示目录名和项目数量
-                        item_count = self._count_items(item, max_depth, current_depth)
+                        item_count = self._count_items(
+                            item, max_depth, current_depth, ignore_patterns, base_dir
+                        )
                         result.append(f"{full_prefix}{item.name}/ ({item_count} items)")
                     else:
                         # 继续递归

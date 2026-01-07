@@ -172,8 +172,8 @@ def run_agent_task(agent: BaseAgent, user_input: str, run_loop: AgentRunLoop) ->
         agent.event_bus.emit("agent.error", agent=agent, error=e)
 
 
-def main() -> None:
-    """主函数"""
+def run_interactive_cli() -> None:
+    """运行交互式 CLI"""
     
     logger.info("启动 eflycode CLI")
     
@@ -305,6 +305,11 @@ def main() -> None:
                     logger.warning(f"断开MCP客户端连接失败: {e}")
         
         agent.shutdown()
+
+
+def main() -> None:
+    """主函数，用于向后兼容"""
+    run_interactive_cli()
 
 
 if __name__ == "__main__":

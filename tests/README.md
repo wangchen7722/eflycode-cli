@@ -21,7 +21,7 @@ tests/
     ├── test_context_strategies.py # 上下文策略测试
     ├── test_event_bus.py         # 事件总线测试
     ├── test_execute_command_tool.py # 命令执行工具测试
-    ├── test_file_tool.py          # 文件工具测试
+    ├── test_file_system_tool.py   # 文件系统工具测试
     ├── test_finish_task_advisor.py # FinishTaskAdvisor 测试
     ├── test_mcp_client.py         # MCP 客户端测试
     ├── test_mcp_config.py         # MCP 配置测试

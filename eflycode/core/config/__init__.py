@@ -19,7 +19,10 @@ from eflycode.core.config.config_manager import (
 
 # 导入忽略文件管理功能
 from eflycode.core.config.ignore import (
+    find_gitignore_file,
     find_ignore_file,
+    load_all_ignore_patterns,
+    load_gitignore_patterns,
     load_ignore_patterns,
     should_ignore_path,
 )
@@ -37,7 +40,10 @@ __all__ = [
     "parse_model_config",
     "resolve_workspace_dir",
     # 忽略文件管理
+    "find_gitignore_file",
     "find_ignore_file",
+    "load_all_ignore_patterns",
+    "load_gitignore_patterns",
     "load_ignore_patterns",
     "should_ignore_path",
 ]

@@ -10,5 +10,6 @@
 logs/
 build/
 cache/
+temp/
 
 .env

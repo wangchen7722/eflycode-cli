@@ -1,7 +1,9 @@
 """忽略文件管理模块
 
-负责查找和解析 .eflycodeignore 文件，提供路径忽略判断功能
-忽略文件位置：.eflycode/.eflycodeignore
+负责查找和解析 .eflycodeignore 和 .gitignore 文件，提供路径忽略判断功能
+忽略文件位置：
+- .eflycode/.eflycodeignore
+- .gitignore
 """
 
 import fnmatch
@@ -38,6 +40,40 @@ def _load_patterns_from_file(ignore_file: Path) -> List[str]:
     return patterns
 
 
+def _is_git_repository(workspace_dir: Path) -> bool:
+    """检测是否为 Git 仓库
+
+    Args:
+        workspace_dir: 工作区目录
+
+    Returns:
+        bool: 是否为 Git 仓库
+    """
+    git_dir = workspace_dir / ".git"
+    return git_dir.exists() and (git_dir.is_dir() or git_dir.is_file())
+
+
+def find_gitignore_file(workspace_dir: Optional[Path] = None) -> Optional[Path]:
+    """查找 .gitignore 文件
+
+    Args:
+        workspace_dir: 工作区目录，如果为 None 则自动解析
+
+    Returns:
+        Optional[Path]: 找到的 .gitignore 文件路径，如果没找到返回 None
+    """
+    if workspace_dir is None:
+        workspace_dir = resolve_workspace_dir()
+    
+    if not _is_git_repository(workspace_dir):
+        return None
+    
+    gitignore_file = workspace_dir / ".gitignore"
+    if gitignore_file.exists() and gitignore_file.is_file():
+        return gitignore_file
+    return None
+
+
 def find_ignore_file() -> Optional[Path]:
     """查找 .eflycodeignore 文件
 
@@ -67,6 +103,51 @@ def load_ignore_patterns() -> List[str]:
     if ignore_file:
         return _load_patterns_from_file(ignore_file)
     return []
+
+
+def load_gitignore_patterns(workspace_dir: Optional[Path] = None) -> List[str]:
+    """加载 .gitignore 模式列表
+
+    Args:
+        workspace_dir: 工作区目录，如果为 None 则自动解析
+
+    Returns:
+        List[str]: 忽略模式列表，如果文件不存在或不是 Git 仓库返回空列表
+    """
+    gitignore_file = find_gitignore_file(workspace_dir)
+    if gitignore_file:
+        return _load_patterns_from_file(gitignore_file)
+    return []
+
+
+def load_all_ignore_patterns(
+    respect_git_ignore: bool = True,
+    respect_eflycode_ignore: bool = True,
+    workspace_dir: Optional[Path] = None,
+) -> List[str]:
+    """加载所有忽略模式（.gitignore 和 .eflycodeignore）
+
+    Args:
+        respect_git_ignore: 是否加载 .gitignore，默认 True
+        respect_eflycode_ignore: 是否加载 .eflycodeignore，默认 True
+        workspace_dir: 工作区目录，如果为 None 则自动解析
+
+    Returns:
+        List[str]: 合并后的忽略模式列表
+    """
+    patterns = []
+    
+    if respect_git_ignore:
+        if workspace_dir is None:
+            workspace_dir = resolve_workspace_dir()
+        gitignore_patterns = load_gitignore_patterns(workspace_dir)
+        patterns.extend(gitignore_patterns)
+    
+    if respect_eflycode_ignore:
+        eflycode_patterns = load_ignore_patterns()
+        patterns.extend(eflycode_patterns)
+    
+    return patterns
 
 
 def should_ignore_path(path: Path, ignore_patterns: List[str], base_dir: Path) -> bool:

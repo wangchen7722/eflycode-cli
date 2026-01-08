@@ -97,7 +97,7 @@
 
 - `BaseTool`：工具基类
 - `ToolGroup`：工具组管理
-- `FileTool`：文件操作工具
+- `FileSystemTool`：文件系统操作工具
 - `ExecuteCommandTool`：命令执行工具
 - `MCPTool`：MCP 工具包装器
 - `MCPToolGroup`：MCP 工具组

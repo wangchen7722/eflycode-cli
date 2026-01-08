@@ -102,6 +102,15 @@
 - `MCPTool`：MCP 工具包装器
 - `MCPToolGroup`：MCP 工具组
 
+### Checkpointing
+- 配置开关：`checkpointing.enabled`
+- 存储：`~/.eflycode/history/<hash>`、`~/.eflycode/tmp/<hash>/checkpoints`
+- 组件：
+  - `GitService`（`eflycode/core/services/git_service.py`）：shadow repo 快照/恢复
+  - `checkpoint.capture_tool_checkpoint`（`eflycode/core/utils/checkpoint.py`）：捕获工具调用快照
+- 适用工具：`write_file`、`replace`
+- 恢复命令：`eflycode restore [name]`
+
 ### 5. MCP 层
 
 **位置：** `eflycode/core/mcp/`

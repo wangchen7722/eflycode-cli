@@ -15,6 +15,11 @@ CONFIG_FILE = "config.yaml"
 MCP_CONFIG_FILE = "mcp.json"
 IGNORE_FILE = ".eflycodeignore"
 
+# checkpointing 存储目录
+HISTORY_DIR = "history"
+TMP_DIR = "tmp"
+CHECKPOINTS_DIR = "checkpoints"
+
 # 日志和输出目录
 LOG_DIR = "logs"
 VERBOSE_DIR = "verbose"

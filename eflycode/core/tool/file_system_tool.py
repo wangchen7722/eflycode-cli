@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from eflycode.core.config.config_manager import resolve_workspace_dir
+from eflycode.core.utils.checkpoint import capture_tool_checkpoint
 from eflycode.core.config.ignore import (
     load_all_ignore_patterns,
     should_ignore_path,
@@ -1118,6 +1119,15 @@ class WriteFileTool(BaseTool):
         # 检查文件是否存在
         file_exists = safe_path.exists() and safe_path.is_file()
 
+        # 捕获 checkpoint（最佳努力，不影响主流程）
+        capture_tool_checkpoint(
+            tool_name=self.name,
+            tool_args={
+                "file_path": str(safe_path),
+                "content_preview": content[:2000],  # 避免写入过大内容
+            },
+        )
+
         try:
             # 递归创建父目录
             safe_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1282,6 +1292,18 @@ class ReplaceTool(BaseTool):
                 message="old_string 和 new_string 必须不同",
                 tool_name=self.name,
             )
+
+        # 捕获 checkpoint（最佳努力，不影响主流程）
+        capture_tool_checkpoint(
+            tool_name=self.name,
+            tool_args={
+                "file_path": str(safe_path),
+                "instruction": instruction,
+                "old_string_preview": old_string[:2000],
+                "new_string_preview": new_string[:2000],
+                "expected_replacements": expected_replacements,
+            },
+        )
 
         try:
             # 读取文件，转换行结束符为 \n

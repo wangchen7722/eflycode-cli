@@ -33,6 +33,7 @@ class Config:
         workspace_dir: Path,
         config_file_path: Optional[Path] = None,
         context_config: Optional[ContextStrategyConfig] = None,
+        checkpointing_enabled: bool = False,
     ):
         """初始化配置
 
@@ -42,12 +43,14 @@ class Config:
             workspace_dir: 工作区根目录
             config_file_path: 配置文件路径（如果是从文件加载的）
             context_config: 上下文管理配置
+            checkpointing_enabled: 是否启用 checkpointing
         """
         self.model_config = model_config
         self.model_name = model_name
         self.workspace_dir = workspace_dir
         self.config_file_path = config_file_path
         self.context_config = context_config
+        self.checkpointing_enabled = checkpointing_enabled
 
 
 def _merge_entries_by_key(
@@ -334,6 +337,14 @@ def get_max_context_length(config_data: dict) -> int:
     return DEFAULT_MAX_CONTEXT_LENGTH
 
 
+def get_checkpointing_enabled(config_data: dict) -> bool:
+    """从配置中获取 checkpointing 开关"""
+    checkpointing_section = config_data.get("checkpointing", {})
+    if isinstance(checkpointing_section, dict):
+        return bool(checkpointing_section.get("enabled", False))
+    return False
+
+
 class ConfigManager:
     """全局配置管理器单例
 
@@ -398,6 +409,7 @@ class ConfigManager:
                 model_config = parse_model_config(config_data)
                 model_name = get_model_name_from_config(config_data)
                 context_config = parse_context_config(config_data)
+                checkpointing_enabled = get_checkpointing_enabled(config_data)
 
                 return Config(
                     model_config=model_config,
@@ -405,6 +417,7 @@ class ConfigManager:
                     workspace_dir=workspace_dir,
                     config_file_path=config_file_path,
                     context_config=context_config,
+                    checkpointing_enabled=checkpointing_enabled,
                 )
             except Exception as e:
                 logger.warning(f"解析配置失败: {e}，使用默认配置")
@@ -426,6 +439,7 @@ class ConfigManager:
             workspace_dir=default_workspace,
             config_file_path=None,
             context_config=None,
+            checkpointing_enabled=False,
         )
 
     def load(self) -> Config:

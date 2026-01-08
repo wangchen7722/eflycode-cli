@@ -11,6 +11,7 @@ import sys
 
 from eflycode.cli.commands.init import init_command
 from eflycode.cli.commands.mcp import mcp_add, mcp_list, mcp_remove
+from eflycode.cli.commands.restore import restore_command
 from eflycode.cli.main import run_interactive_cli
 
 
@@ -81,6 +82,11 @@ def main() -> None:
     mcp_remove_parser = mcp_subparsers.add_parser("remove", help="移除 MCP 服务器")
     mcp_remove_parser.add_argument("name", help="服务器名称")
     mcp_remove_parser.set_defaults(func=mcp_remove)
+
+    # restore 命令
+    restore_parser = subparsers.add_parser("restore", help="恢复 checkpoint；无参数列出可用的 checkpoint")
+    restore_parser.add_argument("name", nargs="?", help="checkpoint 名称（不含 .json 可省略）")
+    restore_parser.set_defaults(func=restore_command)
     
     # 解析参数
     args = parser.parse_args()

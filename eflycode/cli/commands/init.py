@@ -9,6 +9,23 @@ from pathlib import Path
 import yaml
 
 from eflycode.core.config.config_manager import find_config_files
+from eflycode.core.constants import (
+    EFLYCODE_DIR,
+    CONFIG_FILE,
+    LOG_DIR,
+    LOG_FILE,
+    LOG_LEVEL,
+    LOG_ROTATION,
+    LOG_RETENTION,
+    LOG_ENCODING,
+    DEFAULT_MODEL,
+    DEFAULT_TEMPERATURE,
+    DEFAULT_MAX_CONTEXT_LENGTH_INIT,
+)
+from eflycode.core.context.strategies import (
+    SUMMARY_THRESHOLD,
+    SUMMARY_KEEP_RECENT,
+)
 
 
 def init_command(args) -> None:
@@ -33,31 +50,31 @@ def init_command(args) -> None:
         workspace_path = Path.cwd().resolve()
     
     # 创建 .eflycode 目录
-    eflycode_dir = workspace_path / ".eflycode"
+    eflycode_dir = workspace_path / EFLYCODE_DIR
     eflycode_dir.mkdir(exist_ok=True)
     
     # 创建默认配置
     default_config = {
         "logger": {
-            "dirpath": "logs",
-            "filename": "eflycode.log",
-            "level": "INFO",
+            "dirpath": LOG_DIR,
+            "filename": LOG_FILE,
+            "level": LOG_LEVEL,
             "format": "{time:YYYY-MM-DD HH:mm:ss} | {level} | {file}:{function}:{line} | {message}",
-            "rotation": "10 MB",
-            "retention": "14 days",
-            "encoding": "utf-8",
+            "rotation": LOG_ROTATION,
+            "retention": LOG_RETENTION,
+            "encoding": LOG_ENCODING,
         },
         "model": {
-            "default": "gpt-4",
+            "default": DEFAULT_MODEL,
             "entries": [
                 {
-                    "model": "gpt-4",
+                    "model": DEFAULT_MODEL,
                     "name": "GPT-4",
                     "provider": "openai",
                     "api_key": "${OPENAI_API_KEY}",
                     "base_url": None,
-                    "max_context_length": 8192,
-                    "temperature": 0.7,
+                    "max_context_length": DEFAULT_MAX_CONTEXT_LENGTH_INIT,
+                    "temperature": DEFAULT_TEMPERATURE,
                     "supports_native_tool_call": True,
                 }
             ],
@@ -65,13 +82,13 @@ def init_command(args) -> None:
         "workspace": {
             "workspace_dir": str(workspace_path),
             "settings_dir": str(eflycode_dir),
-            "settings_file": str(eflycode_dir / "config.yaml"),
+            "settings_file": str(eflycode_dir / CONFIG_FILE),
         },
         "context": {
             "strategy": "sliding_window",
             "summary": {
-                "threshold": 0.8,
-                "keep_recent": 10,
+                "threshold": SUMMARY_THRESHOLD,
+                "keep_recent": SUMMARY_KEEP_RECENT,
                 "model": None,
             },
             "sliding_window": {
@@ -81,7 +98,7 @@ def init_command(args) -> None:
     }
     
     # 写入配置文件
-    config_file = eflycode_dir / "config.yaml"
+    config_file = eflycode_dir / CONFIG_FILE
     with open(config_file, "w", encoding="utf-8") as f:
         yaml.dump(default_config, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
     

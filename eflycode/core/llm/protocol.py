@@ -3,8 +3,33 @@ from typing import Any, Dict, List, Literal, Optional, TypeAlias, Union
 
 from pydantic import BaseModel, Field
 
-# 默认最大上下文长度（64k tokens）
-DEFAULT_MAX_CONTEXT_LENGTH = 65536
+from eflycode.core.constants import (
+    DEFAULT_MAX_CONTEXT_LENGTH,
+    DEFAULT_TIMEOUT,
+    DEFAULT_MAX_RETRIES,
+)
+
+# 重新导出以保持向后兼容
+__all__ = [
+    "DEFAULT_MAX_CONTEXT_LENGTH",
+    "MessageRole",
+    "ToolCallType",
+    "ToolChoice",
+    "ToolFunctionParameters",
+    "ToolFunction",
+    "ToolDefinition",
+    "ToolCallFunction",
+    "ToolCall",
+    "DeltaToolCallFunction",
+    "DeltaToolCall",
+    "Message",
+    "DeltaMessage",
+    "Usage",
+    "ChatCompletion",
+    "ChatCompletionChunk",
+    "LLMRequest",
+    "LLMConfig",
+]
 
 MessageRole: TypeAlias = Literal["system", "user", "assistant", "tool"]
 ToolCallType: TypeAlias = Literal["function"]
@@ -101,7 +126,7 @@ class LLMRequest(BaseModel):
 class LLMConfig(BaseModel):
     api_key: Optional[str] = None
     base_url: Optional[str] = None
-    timeout: float = 60.0
-    max_retries: int = 3
+    timeout: float = DEFAULT_TIMEOUT
+    max_retries: int = DEFAULT_MAX_RETRIES
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None

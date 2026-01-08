@@ -4,6 +4,9 @@ from eflycode.core.agent.base import BaseAgent, ChatConversation, TaskConversati
 from eflycode.core.tool.errors import ToolExecutionError
 from eflycode.core.utils.logger import logger
 
+# Agent 运行配置常量
+AGENT_MAX_ITERATIONS = 50
+
 
 class AgentRunLoop:
     """Agent 运行循环，处理用户输入、工具调用和对话流程"""
@@ -15,7 +18,7 @@ class AgentRunLoop:
             agent: Agent 实例
         """
         self.agent = agent
-        self.max_iterations = 50
+        self.max_iterations = AGENT_MAX_ITERATIONS
         self.current_iteration = 0
 
     def run(self, user_input: str, stream: bool = True) -> TaskConversation:

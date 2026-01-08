@@ -8,6 +8,7 @@ from typing import Any, Dict, Optional
 
 from jinja2 import Template, TemplateError, UndefinedError, StrictUndefined
 
+from eflycode.core.constants import EFLYCODE_DIR
 from eflycode.core.utils.logger import logger
 
 
@@ -50,7 +51,7 @@ class PromptLoader:
         """
         # 尝试加载用户配置
         if workspace_dir:
-            user_prompt_path = workspace_dir / ".eflycode" / "agents" / agent_role / "system.prompt"
+            user_prompt_path = workspace_dir / EFLYCODE_DIR / "agents" / agent_role / "system.prompt"
             if user_prompt_path.exists():
                 try:
                     template_content = user_prompt_path.read_text(encoding="utf-8")

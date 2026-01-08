@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from eflycode.core.config.config_manager import resolve_workspace_dir
+from eflycode.core.constants import EFLYCODE_DIR, IGNORE_FILE
 
 
 def _load_patterns_from_file(ignore_file: Path) -> List[str]:
@@ -48,7 +49,7 @@ def find_ignore_file() -> Optional[Path]:
         Optional[Path]: 找到的 .eflycodeignore 文件路径，如果没找到返回 None
     """
     workspace_dir = resolve_workspace_dir()
-    ignore_file = workspace_dir / ".eflycode" / ".eflycodeignore"
+    ignore_file = workspace_dir / EFLYCODE_DIR / IGNORE_FILE
     if ignore_file.exists() and ignore_file.is_file():
         return ignore_file
     return None

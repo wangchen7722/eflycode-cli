@@ -7,10 +7,15 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import List, Literal, Optional
 
-from eflycode.core.llm.protocol import LLMRequest, Message, MessageRole
+from eflycode.core.llm.protocol import LLMRequest, Message
 from eflycode.core.llm.providers.base import LLMProvider
 
 from eflycode.core.context.tokenizer import Tokenizer
+
+# 上下文策略默认配置常量
+SUMMARY_THRESHOLD = 0.8  # token 阈值比例
+SUMMARY_KEEP_RECENT = 10  # 保留最新消息数
+SLIDING_WINDOW_SIZE = 10  # 窗口大小
 
 
 @dataclass
@@ -19,11 +24,11 @@ class ContextStrategyConfig:
 
     strategy_type: Literal["summary", "sliding_window"]
     # Summary 策略配置
-    summary_threshold: float = 0.8  # token 阈值比例
-    summary_keep_recent: int = 10  # 保留最新消息数
+    summary_threshold: float = SUMMARY_THRESHOLD  # token 阈值比例
+    summary_keep_recent: int = SUMMARY_KEEP_RECENT  # 保留最新消息数
     summary_model: Optional[str] = None  # 用于 summary 的模型，None 表示使用相同模型
     # Sliding Window 策略配置
-    sliding_window_size: int = 10  # 窗口大小
+    sliding_window_size: int = SLIDING_WINDOW_SIZE  # 窗口大小
 
 
 class ContextStrategy(ABC):

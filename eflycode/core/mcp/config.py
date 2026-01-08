@@ -13,6 +13,7 @@ from eflycode.core.config.config_manager import (
     get_user_config_dir,
     resolve_workspace_dir,
 )
+from eflycode.core.constants import EFLYCODE_DIR, MCP_CONFIG_FILE
 from eflycode.core.mcp.errors import MCPConfigError
 from eflycode.core.utils.logger import logger
 
@@ -107,12 +108,12 @@ def find_mcp_config_file() -> Optional[Path]:
     """
     # 先查找工作区目录
     workspace_dir = resolve_workspace_dir()
-    workspace_config = workspace_dir / ".eflycode" / "mcp.json"
+    workspace_config = workspace_dir / EFLYCODE_DIR / MCP_CONFIG_FILE
     if workspace_config.exists() and workspace_config.is_file():
         return workspace_config
 
     # 再查找用户主目录
-    user_config = get_user_config_dir() / "mcp.json"
+    user_config = get_user_config_dir() / MCP_CONFIG_FILE
     if user_config.exists() and user_config.is_file():
         return user_config
 

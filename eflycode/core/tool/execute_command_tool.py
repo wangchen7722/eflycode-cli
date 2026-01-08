@@ -9,6 +9,9 @@ from eflycode.core.llm.protocol import ToolFunctionParameters
 from eflycode.core.tool.base import BaseTool, ToolType
 from eflycode.core.tool.errors import ToolExecutionError
 
+# 工具执行配置常量
+COMMAND_DEFAULT_TIMEOUT = 60  # 秒
+
 
 # 命令白名单
 COMMAND_WHITELIST = {
@@ -209,7 +212,7 @@ class ExecuteCommandTool(BaseTool):
 
         # 设置默认超时时间
         if timeout is None:
-            timeout = 60
+            timeout = COMMAND_DEFAULT_TIMEOUT
 
         try:
             # 执行命令

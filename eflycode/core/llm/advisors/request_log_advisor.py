@@ -7,6 +7,7 @@ import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from eflycode.core.constants import EFLYCODE_DIR, VERBOSE_DIR, REQUESTS_DIR
 from eflycode.core.llm.advisor import Advisor
 from eflycode.core.llm.protocol import (
     ChatCompletion,
@@ -44,7 +45,7 @@ class RequestLogAdvisor(Advisor):
         from eflycode.core.config.config_manager import resolve_workspace_dir
         
         workspace_dir = resolve_workspace_dir()
-        return workspace_dir / ".eflycode" / "verbose" / "requests" / f"{self.session_id}.log"
+        return workspace_dir / EFLYCODE_DIR / VERBOSE_DIR / REQUESTS_DIR / f"{self.session_id}.log"
 
     def _get_timestamp(self) -> str:
         """获取当前时间戳

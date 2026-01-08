@@ -4,6 +4,10 @@ from typing import Optional
 from eflycode.core.ui.output import UIOutput
 from eflycode.core.ui.ui_event_queue import UIEventQueue
 
+# 打字机效果配置常量
+TYPEWRITER_CHARS_PER_TICK = 20
+TYPEWRITER_OUTPUT_INTERVAL = 0.05  # 秒
+
 
 class Renderer:
     """渲染器，监听 UI 事件队列并输出
@@ -31,9 +35,9 @@ class Renderer:
         # 用于打字机效果的缓冲区
         self._message_buffer: str = ""
         self._message_index: int = 0
-        self._chars_per_tick: int = 20
+        self._chars_per_tick: int = TYPEWRITER_CHARS_PER_TICK
         self._last_output_time: float = 0.0
-        self._output_interval: float = 0.05  # 每次输出的间隔，单位为秒
+        self._output_interval: float = TYPEWRITER_OUTPUT_INTERVAL
 
         self._subscribe_events()
 

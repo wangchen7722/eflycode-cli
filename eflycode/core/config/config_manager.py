@@ -12,6 +12,12 @@ from typing import Any, Dict, List, Optional
 
 import yaml
 
+from eflycode.core.constants import (
+    DEFAULT_SYSTEM_VERSION,
+    EFLYCODE_DIR,
+    CONFIG_FILE,
+    WORKSPACE_SEARCH_MAX_DEPTH,
+)
 from eflycode.core.context.strategies import ContextStrategyConfig
 from eflycode.core.llm.protocol import DEFAULT_MAX_CONTEXT_LENGTH, LLMConfig
 from eflycode.core.utils.logger import logger
@@ -137,8 +143,8 @@ def resolve_workspace_dir() -> Path:
     current_dir = initial_cwd
     user_home = Path.home().resolve()
 
-    for _ in range(3):  # 向上最多查找 3 级
-        eflycode_dir = current_dir / ".eflycode"
+    for _ in range(WORKSPACE_SEARCH_MAX_DEPTH):  # 向上最多查找指定级数
+        eflycode_dir = current_dir / EFLYCODE_DIR
         # 检查是否存在 .eflycode 目录，且不是用户目录
         if eflycode_dir.is_dir() and current_dir != user_home:
             return current_dir
@@ -156,7 +162,7 @@ def get_user_config_dir() -> Path:
     Returns:
         Path: 用户配置目录路径 (~/.eflycode)
     """
-    return Path.home() / ".eflycode"
+    return Path.home() / EFLYCODE_DIR
 
 
 def find_config_files() -> tuple[Optional[Path], Optional[Path], Optional[Path]]:
@@ -173,7 +179,7 @@ def find_config_files() -> tuple[Optional[Path], Optional[Path], Optional[Path]]
     """
     # 1. 查找用户目录配置
     user_config_dir = get_user_config_dir()
-    user_config_path = user_config_dir / "config.yaml"
+    user_config_path = user_config_dir / CONFIG_FILE
     if not (user_config_path.exists() and user_config_path.is_file()):
         user_config_path = None
 
@@ -181,7 +187,7 @@ def find_config_files() -> tuple[Optional[Path], Optional[Path], Optional[Path]]
     workspace_dir = resolve_workspace_dir()
     project_config_path = None
 
-    config_path = workspace_dir / ".eflycode" / "config.yaml"
+    config_path = workspace_dir / EFLYCODE_DIR / CONFIG_FILE
     if config_path.exists() and config_path.is_file():
         project_config_path = config_path
 
@@ -476,12 +482,12 @@ class ConfigManager:
             if pyproject_path.exists():
                 with open(pyproject_path, "rb") as f:
                     data = tomllib.load(f)
-                    self._system_version = data.get("project", {}).get("version", "0.1.0")
+                    self._system_version = data.get("project", {}).get("version", DEFAULT_SYSTEM_VERSION)
                     return self._system_version
         except Exception:
             pass
 
-        self._system_version = "0.1.0"
+        self._system_version = DEFAULT_SYSTEM_VERSION
         return self._system_version
 
     def get_system_info(self) -> Dict[str, str]:

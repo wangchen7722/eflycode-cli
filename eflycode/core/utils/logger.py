@@ -1,7 +1,20 @@
 import os
 from pathlib import Path
 from typing import Optional, Union
+
 from loguru import logger as _logger
+
+from eflycode.core.constants import (
+    LOG_LEVEL,
+    LOG_DIR,
+    LOG_FILE,
+    LOG_ROTATION,
+    LOG_RETENTION,
+    LOG_COMPRESSION,
+    LOG_ENCODING,
+    LOG_FORMAT,
+    EFLYCODE_DIR,
+)
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -17,13 +30,6 @@ def _env_str(name: str, default: str) -> str:
     return val.strip().upper()
 
 _LOGGER_CONFIGURED = False
-_DEFAULT_FORMAT = (
-    "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
-    "<level>{level: <8}</level> | "
-    "{thread.name}:{thread.id} | "
-    "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - "
-    "<level>{message}</level>"
-)
 
 def init_logger(
     *,
@@ -45,21 +51,21 @@ def init_logger(
         print("logger already configured, skipping...")
         return
 
-    level = (level or _env_str("EFLYCODE_LOG_LEVEL", "INFO"))
-    log_dir = (log_dir or _env_str("EFLYCODE_LOG_DIR", ".eflycode/logs"))
-    log_file = (log_file or _env_str("EFLYCODE_LOG_FILE", "eflycode.log"))
+    level = (level or _env_str("EFLYCODE_LOG_LEVEL", LOG_LEVEL))
+    log_dir = (log_dir or _env_str("EFLYCODE_LOG_DIR", f"{EFLYCODE_DIR}/{LOG_DIR}"))
+    log_file = (log_file or _env_str("EFLYCODE_LOG_FILE", LOG_FILE))
     log_dirpath = Path(log_dir).expanduser().resolve()
 
-    rotation = (rotation or _env_str("EFLYCODE_LOG_ROTATION", "10 MB"))
-    retention = (retention or _env_str("EFLYCODE_LOG_RETENTION", "14 days"))
-    compression = (compression or _env_str("EFLYCODE_LOG_COMPRESSION", "tar.gz"))
+    rotation = (rotation or _env_str("EFLYCODE_LOG_ROTATION", LOG_ROTATION))
+    retention = (retention or _env_str("EFLYCODE_LOG_RETENTION", LOG_RETENTION))
+    compression = (compression or _env_str("EFLYCODE_LOG_COMPRESSION", LOG_COMPRESSION))
 
     enqueue = (enqueue or _env_bool("EFLYCODE_LOG_ENQUEUE", True))
     backtrace = (backtrace or _env_bool("EFLYCODE_LOG_BACKTRACE", True))
     diagnose = (diagnose or _env_bool("EFLYCODE_LOG_DIAGNOSE", True))
     serialize = (serialize if serialize is not None else _env_bool("EFLYCODE_LOG_SERIALIZE", False))
     
-    fmt = fmt or _DEFAULT_FORMAT
+    fmt = fmt or LOG_FORMAT
 
     _logger.remove()
     log_dirpath.mkdir(parents=True, exist_ok=True)
@@ -75,7 +81,7 @@ def init_logger(
         diagnose=diagnose,
         enqueue=enqueue,
         serialize=serialize,
-        encoding="utf-8",
+        encoding=LOG_ENCODING,
     )
 
     _LOGGER_CONFIGURED = True

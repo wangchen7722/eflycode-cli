@@ -4,6 +4,9 @@ from typing import Callable, Dict, List
 
 logger = logging.getLogger(__name__)
 
+# 事件总线配置常量
+EVENT_BUS_MAX_WORKERS = 10
+
 
 class HandlerInfo:
     """Handler 信息"""
@@ -34,7 +37,7 @@ class HandlerInfo:
 class EventBus:
     """事件总线，使用线程池实现异步非阻塞事件处理"""
 
-    def __init__(self, max_workers: int = 10):
+    def __init__(self, max_workers: int = EVENT_BUS_MAX_WORKERS):
         """初始化事件总线
 
         Args:

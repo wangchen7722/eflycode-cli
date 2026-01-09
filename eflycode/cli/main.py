@@ -215,10 +215,10 @@ async def run_interactive_cli(verbose: bool = False) -> None:
     # 注册 /model 命令处理函数
     async def handle_model_command(command: str) -> bool:
         """处理 /model 命令
-        
+
         Args:
             command: 命令字符串
-            
+
         Returns:
             bool: 如果命令已处理返回 True，否则返回 False
         """
@@ -227,7 +227,7 @@ async def run_interactive_cli(verbose: bool = False) -> None:
                 # 显示模型列表
                 model_list = ModelListComponent()
                 selected_model = await model_list.show()
-                
+
                 if selected_model:
                     # 更新项目配置
                     config_manager = ConfigManager.get_instance()
@@ -299,9 +299,11 @@ async def run_interactive_cli(verbose: bool = False) -> None:
                 
                 if not user_input or not user_input.strip():
                     continue
-                
-                # 如果返回的是 /model 命令，说明命令未被处理，跳过
-                if user_input.strip() == "/model":
+
+                if user_input.strip().startswith("/"):
+                    handled = await handle_command(user_input)
+                    if handled:
+                        continue
                     continue
                 
                 logger.info(f"收到用户输入: {user_input[:50]}...")

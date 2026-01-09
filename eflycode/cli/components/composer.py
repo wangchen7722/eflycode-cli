@@ -128,31 +128,16 @@ class ComposerComponent:
             if text.startswith("/"):
                 # 处理命令
                 if on_complete:
-                    # 检查是否是异步函数
+                    # 异步命令在外层处理，避免嵌套 prompt_toolkit 应用导致 UI 残留
                     if asyncio.iscoroutinefunction(on_complete):
-                        # 异步回调，在事件循环中运行
-                        # 由于我们在异步上下文中，使用 app.run_async，可以使用 create_task
-                        loop = asyncio.get_event_loop()
-                        task = loop.create_task(on_complete(text))
-                        # 使用回调来处理结果
-                        def handle_result(future):
-                            try:
-                                handled = future.result()
-                                if handled:
-                                    # 在事件循环中调用 exit
-                                    # 使用 call_soon 确保在正确的上下文中调用
-                                    loop.call_soon(event.app.exit, result="")
-                            except Exception:
-                                pass
-                        task.add_done_callback(handle_result)
+                        event.app.exit(result=text)
                         return
-                    else:
-                        # 同步回调
-                        handled = on_complete(text)
-                        if handled:
-                            # 命令已处理，退出并返回空字符串，让主循环继续
-                            event.app.exit(result="")
-                            return
+                    # 同步回调
+                    handled = on_complete(text)
+                    if handled:
+                        # 命令已处理，退出并返回空字符串，让主循环继续
+                        event.app.exit(result="")
+                        return
             # 普通输入，退出并返回结果
             event.app.exit(result=text)
         

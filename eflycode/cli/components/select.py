@@ -24,7 +24,7 @@ class _SelectOption:
 
 
 class SelectComponent:
-    def show(
+    async def show(
         self,
         *,
         title: str,
@@ -166,8 +166,8 @@ class SelectComponent:
             erase_when_done=erase_when_done,
             mouse_support=False,
         )
-
-        result = app.run()
+        
+        result = await app.run_async()
         if result is None:
             raise UserCanceledError()
 
@@ -245,8 +245,9 @@ class SelectComponent:
 
 
 def main() -> None:
+    import asyncio
     component = SelectComponent()
-    result = component.show(
+    result = asyncio.run(component.show(
         title="play",
         options=[
             {"key": "1", "label": "play"},
@@ -255,7 +256,7 @@ def main() -> None:
         ],
         default_key="2",
         full_screen=False,
-    )
+    ))
     print("result:", result)
 
 

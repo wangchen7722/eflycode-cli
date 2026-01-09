@@ -3,28 +3,28 @@
 将各个组件 Agent、UI、事件系统串联起来，实现完整的 CLI 应用
 """
 
+import asyncio
 import os
-import threading
-import time
 
+from eflycode.cli.components.composer import ComposerComponent
+from eflycode.cli.components.model_list import ModelListComponent
+from eflycode.cli.components.smart_completer import SmartCompleter
+from eflycode.cli.output import TerminalOutput
 from eflycode.core.agent.base import BaseAgent
 from eflycode.core.agent.run_loop import AgentRunLoop
 from eflycode.core.config import Config
 from eflycode.core.config.config_manager import ConfigManager
 from eflycode.core.context.manager import ContextManager
-from eflycode.core.llm.protocol import DEFAULT_MAX_CONTEXT_LENGTH
+from eflycode.core.llm.advisors.request_log_advisor import RequestLogAdvisor
 from eflycode.core.llm.providers.openai import OpenAiProvider
 from eflycode.core.mcp import MCPClient, MCPToolGroup, load_mcp_config
 from eflycode.core.mcp.errors import MCPConnectionError, MCPConfigError
-from eflycode.core.tool.file_system_tool import FILE_SYSTEM_TOOL_GROUP
 from eflycode.core.tool.execute_command_tool import ExecuteCommandTool
+from eflycode.core.tool.file_system_tool import FILE_SYSTEM_TOOL_GROUP
 from eflycode.core.ui.bridge import EventBridge
 from eflycode.core.ui.errors import UserCanceledError
 from eflycode.core.ui.renderer import Renderer
 from eflycode.core.ui.ui_event_queue import UIEventQueue
-from eflycode.cli.components.composer import ComposerComponent
-from eflycode.cli.output import TerminalOutput
-from eflycode.core.llm.advisors.request_log_advisor import RequestLogAdvisor
 from eflycode.core.utils.logger import logger
 
 
@@ -172,7 +172,7 @@ def run_agent_task(agent: BaseAgent, user_input: str, run_loop: AgentRunLoop) ->
         agent.event_bus.emit("agent.error", agent=agent, error=e)
 
 
-def run_interactive_cli(verbose: bool = False) -> None:
+async def run_interactive_cli(verbose: bool = False) -> None:
     """运行交互式 CLI
 
     Args:
@@ -208,6 +208,59 @@ def run_interactive_cli(verbose: bool = False) -> None:
     ui_queue = UIEventQueue()
     output = TerminalOutput()
     renderer = Renderer(ui_queue, output)
+    
+    # 创建智能命令 completer
+    smart_completer = SmartCompleter()
+    
+    # 注册 /model 命令处理函数
+    async def handle_model_command(command: str) -> bool:
+        """处理 /model 命令
+        
+        Args:
+            command: 命令字符串
+            
+        Returns:
+            bool: 如果命令已处理返回 True，否则返回 False
+        """
+        if command.strip() == "/model":
+            try:
+                # 显示模型列表
+                model_list = ModelListComponent()
+                selected_model = await model_list.show()
+                
+                if selected_model:
+                    # 更新项目配置
+                    config_manager = ConfigManager.get_instance()
+                    config_manager.update_project_model_default(selected_model)
+                    output.write(f"\n[已更新默认模型: {selected_model}]\n")
+                    logger.info(f"用户选择模型: {selected_model}")
+                else:
+                    output.write("\n[取消选择]\n")
+            except Exception as e:
+                output.write(f"\n[错误: {str(e)}]\n")
+                logger.error(f"处理 /model 命令失败: {e}", exc_info=True)
+            return True
+        return False
+    
+    # 设置 /model 命令的处理函数
+    smart_completer.set_command_handler("/model", handle_model_command)
+    
+    # 创建命令处理回调，异步函数
+    async def handle_command(command: str) -> bool:
+        """处理命令
+        
+        Args:
+            command: 命令字符串
+            
+        Returns:
+            bool: 如果命令已处理返回 True，否则返回 False
+        """
+        handler = smart_completer.get_command_handler(command)
+        if handler:
+            # handler 现在是异步的，需要 await
+            return await handler(command)
+        return False
+    
     composer = ComposerComponent()
     
     # 创建事件桥接
@@ -235,14 +288,20 @@ def run_interactive_cli(verbose: bool = False) -> None:
         while True:
             try:
                 # 获取用户输入
-                user_input = composer.show(
+                user_input = await composer.show(
                     prompt_text="> ",
                     busy_prompt_text="🤔> ",
                     placeholder="share your ideas...",
-                    toolbar_text="Press Ctrl+M to submit, Ctrl+D to exit",
+                    toolbar_text="Press Ctrl+M to submit, Ctrl+D to exit, /model to select model",
+                    completer=smart_completer,
+                    on_complete=handle_command,
                 )
                 
                 if not user_input or not user_input.strip():
+                    continue
+                
+                # 如果返回的是 /model 命令，说明命令未被处理，跳过
+                if user_input.strip() == "/model":
                     continue
                 
                 logger.info(f"收到用户输入: {user_input[:50]}...")
@@ -263,16 +322,15 @@ def run_interactive_cli(verbose: bool = False) -> None:
                 # 创建运行循环
                 run_loop = AgentRunLoop(agent)
                 
-                # 在后台线程运行 Agent
-                agent_thread = threading.Thread(
-                    target=run_agent_task,
-                    args=(agent, user_input, run_loop),
-                    daemon=True,
+                # 使用 asyncio.to_thread 在线程中运行同步的 Agent 任务
+                # 这样可以避免阻塞事件循环
+                # 同时在前台处理 UI 更新
+                agent_task = asyncio.create_task(
+                    asyncio.to_thread(run_agent_task, agent, user_input, run_loop)
                 )
-                agent_thread.start()
                 
-                # UI 渲染循环
-                while agent_thread.is_alive():
+                # UI 渲染循环，在 Agent 执行期间持续更新
+                while not agent_task.done():
                     # 处理 UI 事件
                     ui_queue.process_events(time_budget_ms=50)
                     
@@ -280,10 +338,13 @@ def run_interactive_cli(verbose: bool = False) -> None:
                     renderer.tick(time_budget_ms=50)
                     
                     # 短暂休眠，避免 CPU 占用过高
-                    time.sleep(0.01)
+                    await asyncio.sleep(0.01)
                 
-                # 等待线程完成
-                agent_thread.join(timeout=1.0)
+                # 等待任务完成，如果还没完成
+                try:
+                    await agent_task
+                except Exception as e:
+                    logger.error(f"Agent 任务执行失败: {e}", exc_info=True)
                 
                 # 最终渲染
                 while ui_queue.size() > 0:
@@ -323,7 +384,7 @@ def run_interactive_cli(verbose: bool = False) -> None:
 
 def main() -> None:
     """主函数，用于向后兼容"""
-    run_interactive_cli()
+    asyncio.run(run_interactive_cli())
 
 
 if __name__ == "__main__":

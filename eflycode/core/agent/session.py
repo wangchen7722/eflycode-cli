@@ -127,7 +127,7 @@ class Session:
                 logger.info(
                     f"上下文压缩完成: session_id={self._id}, "
                     f"original_messages={original_count}, compressed_messages={compressed_count}"
-                )
+            )
 
         return LLMRequest(
             model=model,

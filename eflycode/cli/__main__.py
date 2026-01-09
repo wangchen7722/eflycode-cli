@@ -7,6 +7,7 @@
 """
 
 import argparse
+import asyncio
 import sys
 
 from eflycode.cli.commands.init import init_command
@@ -95,7 +96,7 @@ def main() -> None:
     # 注意：当使用子命令时，例如 mcp add，args.command 可能为 None
     # 需要检查是否有 func 属性来判断是否有命令需要执行
     if args.command is None and not hasattr(args, "func"):
-        run_interactive_cli(verbose=args.verbose)
+        asyncio.run(run_interactive_cli(verbose=args.verbose))
     else:
         # 执行对应的命令函数
         if hasattr(args, "func"):

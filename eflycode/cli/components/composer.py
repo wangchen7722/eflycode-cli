@@ -1,4 +1,5 @@
-from typing import Callable, List, Optional
+import asyncio
+from typing import Awaitable, Callable, List, Optional, Union
 
 from prompt_toolkit import Application
 from prompt_toolkit.buffer import Buffer
@@ -55,7 +56,7 @@ def build_placeholder_visible(buffer: Buffer) -> Callable[[], bool]:
 
 class ComposerComponent:
 
-    def show(
+    async def show(
         self,
         *,
         prompt_text: str = "> ",
@@ -66,9 +67,9 @@ class ComposerComponent:
         min_height: int = 1,
         max_height: int = 20,
         completer: Optional[Completer] = None,
-        on_complete: Optional[Callable[[str], bool]] = None,
+        on_complete: Optional[Union[Callable[[str], bool], Callable[[str], Awaitable[bool]]]] = None,
         on_busy: Optional[Callable[[], bool]] = None,
-    ) -> None:
+    ) -> str:
         buffer = Buffer(
             completer=completer,
             multiline=multiline
@@ -122,7 +123,38 @@ class ComposerComponent:
         
         @kb.add(Keys.ControlM)
         def _on_submit(event: KeyPressEvent):
-            event.app.exit(result=event.current_buffer.text)
+            text = event.current_buffer.text.strip()
+            # 检查是否是命令，以 / 开头
+            if text.startswith("/"):
+                # 处理命令
+                if on_complete:
+                    # 检查是否是异步函数
+                    if asyncio.iscoroutinefunction(on_complete):
+                        # 异步回调，在事件循环中运行
+                        # 由于我们在异步上下文中，使用 app.run_async，可以使用 create_task
+                        loop = asyncio.get_event_loop()
+                        task = loop.create_task(on_complete(text))
+                        # 使用回调来处理结果
+                        def handle_result(future):
+                            try:
+                                handled = future.result()
+                                if handled:
+                                    # 在事件循环中调用 exit
+                                    # 使用 call_soon 确保在正确的上下文中调用
+                                    loop.call_soon(event.app.exit, result="")
+                            except Exception:
+                                pass
+                        task.add_done_callback(handle_result)
+                        return
+                    else:
+                        # 同步回调
+                        handled = on_complete(text)
+                        if handled:
+                            # 命令已处理，退出并返回空字符串，让主循环继续
+                            event.app.exit(result="")
+                            return
+            # 普通输入，退出并返回结果
+            event.app.exit(result=text)
         
         @kb.add(Keys.Tab)
         def _on_tab(event: KeyPressEvent):
@@ -159,7 +191,7 @@ class ComposerComponent:
             erase_when_done=True,
             mouse_support=False
         )
-        result = app.run()
+        result = await app.run_async()
         if result is None:
             raise UserCanceledError()
 
@@ -167,9 +199,12 @@ class ComposerComponent:
         
 
 def main():
-    composer = ComposerComponent()
-    result = composer.show()
-    print(result)
+    import asyncio
+    async def _main():
+        composer = ComposerComponent()
+        result = await composer.show()
+        print(result)
+    asyncio.run(_main())
 
 if __name__ == "__main__":
     main()

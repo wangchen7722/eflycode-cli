@@ -34,6 +34,7 @@ class Config:
         config_file_path: Optional[Path] = None,
         context_config: Optional[ContextStrategyConfig] = None,
         checkpointing_enabled: bool = False,
+        source: str = "default",
     ):
         """初始化配置
 
@@ -41,9 +42,10 @@ class Config:
             model_config: LLM 配置
             model_name: 模型名称
             workspace_dir: 工作区根目录
-            config_file_path: 配置文件路径（如果是从文件加载的）
+            config_file_path: 配置文件路径，如果是从文件加载的
             context_config: 上下文管理配置
             checkpointing_enabled: 是否启用 checkpointing
+            source: 配置来源，"user"、"project" 或 "default"，TODO: 未来支持 "team" 作为配置来源
         """
         self.model_config = model_config
         self.model_name = model_name
@@ -51,6 +53,11 @@ class Config:
         self.config_file_path = config_file_path
         self.context_config = context_config
         self.checkpointing_enabled = checkpointing_enabled
+        # source 只能是 "user", "project", "default" 之一
+        # TODO: 支持 "team" 作为配置来源
+        if source not in ("user", "project", "default"):
+            raise ValueError(f"无效的配置来源: {source}，必须是 'user', 'project' 或 'default'")
+        self.source = source
 
 
 def _merge_entries_by_key(
@@ -376,11 +383,15 @@ class ConfigManager:
 
         配置加载和合并逻辑：
         1. 先加载用户目录配置 (~/.eflycode/config.yaml) 作为基础
-        2. 再加载项目目录配置并与用户配置合并（项目配置优先）
+        2. 再加载项目目录配置并与用户配置合并，项目配置优先
         3. 如果都没有，使用默认配置
+        
+        TODO: 支持 team 配置来源
+        - 优先级：team > project > user > default
+        - team 配置应该从团队共享配置中加载
 
         Returns:
-            Config: 配置对象
+            Config: 配置对象，source 属性标识配置来源，"user"、"project" 或 "default"
         """
         user_config_path, project_config_path, workspace_dir = find_config_files()
 
@@ -395,13 +406,27 @@ class ConfigManager:
         # 2. 加载项目配置并合并
         config_data = base_config_data
         config_file_path = user_config_path
+        source = "user"  # 默认来源
+        
         if project_config_path:
             try:
                 project_config_data = load_config_from_file(project_config_path)
-                config_data = _deep_merge(base_config_data, project_config_data)
+                if base_config_data:
+                    # 两者都有，合并配置，项目配置优先
+                    config_data = _deep_merge(base_config_data, project_config_data)
+                    # 合并后的配置来源应该是 project，因为项目配置优先
+                    source = "project"
+                else:
+                    # 只有项目配置
+                    config_data = project_config_data
+                    source = "project"
                 config_file_path = project_config_path  # 使用项目配置路径
             except Exception as e:
                 logger.warning(f"加载项目配置文件失败: {e}，使用用户配置")
+                source = "user" if base_config_data else "default"
+        
+        # TODO: 支持 team 配置来源
+        # 当实现 team 配置时，优先级应该是：team > project > user > default
 
         # 3. 如果有配置数据，解析并返回
         if config_data:
@@ -418,6 +443,7 @@ class ConfigManager:
                     config_file_path=config_file_path,
                     context_config=context_config,
                     checkpointing_enabled=checkpointing_enabled,
+                    source=source,
                 )
             except Exception as e:
                 logger.warning(f"解析配置失败: {e}，使用默认配置")
@@ -440,6 +466,7 @@ class ConfigManager:
             config_file_path=None,
             context_config=None,
             checkpointing_enabled=False,
+            source="default",
         )
 
     def load(self) -> Config:
@@ -577,4 +604,116 @@ class ConfigManager:
             "python_version": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
             "platform": platform.platform(),
         }
+
+    def get_all_model_entries(self) -> List[Dict[str, Any]]:
+        """获取所有模型条目（用户配置 + 项目配置合并）
+
+        Returns:
+            List[Dict[str, Any]]: 模型条目列表，每个条目包含 source 字段标识来源
+        """
+        user_config_path, project_config_path, _ = find_config_files()
+        
+        user_entries = []
+        project_entries = []
+        
+        # 加载用户配置
+        if user_config_path:
+            try:
+                user_config_data = load_config_from_file(user_config_path)
+                user_model_section = user_config_data.get("model", {})
+                user_entries = user_model_section.get("entries", [])
+                if not isinstance(user_entries, list):
+                    user_entries = []
+            except Exception as e:
+                logger.warning(f"加载用户配置模型条目失败: {e}")
+        
+        # 加载项目配置
+        if project_config_path:
+            try:
+                project_config_data = load_config_from_file(project_config_path)
+                project_model_section = project_config_data.get("model", {})
+                project_entries = project_model_section.get("entries", [])
+                if not isinstance(project_entries, list):
+                    project_entries = []
+            except Exception as e:
+                logger.warning(f"加载项目配置模型条目失败: {e}")
+        
+        # 合并条目，项目配置优先
+        merged_entries = _merge_entries_by_key(user_entries, project_entries, "model")
+        
+        # 为每个条目添加 source 标识
+        project_model_names = {entry.get("model") for entry in project_entries if entry.get("model")}
+        
+        result = []
+        for entry in merged_entries:
+            entry_copy = entry.copy()
+            model_name = entry_copy.get("model")
+            if model_name in project_model_names:
+                entry_copy["_source"] = "project"
+            else:
+                entry_copy["_source"] = "user"
+            result.append(entry_copy)
+        
+        return result
+
+    def get_model_entry_source(self, entry: Dict[str, Any]) -> str:
+        """判断模型条目的来源
+
+        Args:
+            entry: 模型条目字典
+
+        Returns:
+            str: "user" 或 "project"
+        """
+        return entry.get("_source", "user")
+
+    def update_project_model_default(self, model_name: str) -> None:
+        """更新项目配置中的 model.default
+
+        Args:
+            model_name: 要设置为默认的模型名称
+
+        Raises:
+            ValueError: 如果项目配置文件不存在或无法更新
+        """
+        _, project_config_path, workspace_dir = find_config_files()
+        
+        if not project_config_path:
+            # 如果项目配置文件不存在，创建它
+            project_config_dir = workspace_dir / EFLYCODE_DIR
+            project_config_dir.mkdir(parents=True, exist_ok=True)
+            project_config_path = project_config_dir / CONFIG_FILE
+            
+            # 创建初始配置
+            config_data = {
+                "model": {
+                    "default": model_name,
+                    "entries": []
+                }
+            }
+        else:
+            # 加载现有配置
+            try:
+                config_data = load_config_from_file(project_config_path)
+            except Exception as e:
+                logger.error(f"加载项目配置文件失败: {e}")
+                raise ValueError(f"无法加载项目配置文件: {e}")
+        
+        # 更新 model.default
+        if "model" not in config_data:
+            config_data["model"] = {}
+        config_data["model"]["default"] = model_name
+        
+        # 保存配置
+        try:
+            with open(project_config_path, "w", encoding="utf-8") as f:
+                yaml.dump(config_data, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+            logger.info(f"已更新项目配置 model.default: {model_name}")
+        except Exception as e:
+            logger.error(f"保存项目配置文件失败: {e}")
+            raise ValueError(f"无法保存项目配置文件: {e}")
+        
+        # 重新加载配置
+        self.config = None
+        self._initialized = False
 

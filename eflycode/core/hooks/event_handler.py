@@ -16,6 +16,7 @@ from eflycode.core.hooks.types import (
     HookGroup,
 )
 from eflycode.core.llm.protocol import LLMRequest, ToolDefinition
+from eflycode.core.utils.logger import logger
 
 
 class HookEventHandler:
@@ -359,7 +360,12 @@ class HookEventHandler:
             AggregatedHookResult: 聚合结果
         """
         if not hook_groups:
+            logger.debug(f"没有 hooks 需要执行: event={event_name}")
             return AggregatedHookResult()
+
+        total_hooks = sum(len(group.hooks) for group in hook_groups)
+        groups_count = len(hook_groups)
+        logger.debug(f"开始执行 hooks: event={event_name}, groups={groups_count}, total_hooks={total_hooks}")
 
         # 制定执行计划
         execution_plan = self.planner.plan_execution(hook_groups)
@@ -369,6 +375,8 @@ class HookEventHandler:
 
         # 执行每个组
         for hooks, sequential in execution_plan.groups:
+            hooks_count = len(hooks)
+            logger.debug(f"执行 hook 组: hooks_count={hooks_count}, sequential={sequential}")
             if sequential:
                 # 串行执行
                 results = self.runner.execute_hooks_sequential(
@@ -393,7 +401,10 @@ class HookEventHandler:
             all_results.extend(results)
 
         # 聚合所有结果
-        return self.aggregator.aggregate_results(all_results)
+        aggregated = self.aggregator.aggregate_results(all_results)
+        total_results_count = len(all_results)
+        logger.debug(f"Hooks 执行完成: event={event_name}, total_results={total_results_count}, continue={aggregated.continue_}")
+        return aggregated
 
     def _llm_request_to_dict(self, request: LLMRequest) -> Dict[str, Any]:
         """将 LLMRequest 转换为字典

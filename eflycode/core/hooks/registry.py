@@ -6,6 +6,7 @@
 from typing import Dict, List, Optional
 
 from eflycode.core.hooks.types import CommandHook, HookEventName, HookGroup
+from eflycode.core.utils.logger import logger
 
 
 class HookRegistry:
@@ -41,6 +42,7 @@ class HookRegistry:
         if group_matcher is not None:
             group = HookGroup(matcher=group_matcher, sequential=sequential, hooks=[hook])
             self._hooks[event_name].append(group)
+            logger.debug(f"注册 hook 到新组: event={event_name}, hook={hook.name}, group_matcher={group_matcher}")
         else:
             # 如果没有提供 group_matcher，但 hook 有 matcher，根据 hook 的 matcher 分组
             if hook.matcher:
@@ -55,8 +57,10 @@ class HookRegistry:
                     # 创建新组
                     target_group = HookGroup(matcher=hook.matcher, sequential=sequential)
                     self._hooks[event_name].append(target_group)
+                    logger.debug(f"创建新 hook 组: event={event_name}, matcher={hook.matcher}")
                 
                 target_group.hooks.append(hook)
+                logger.debug(f"注册 hook 到现有组: event={event_name}, hook={hook.name}, matcher={hook.matcher}")
             else:
                 # hook 没有 matcher，添加到默认组（matcher=None）
                 # 查找默认组
@@ -70,8 +74,10 @@ class HookRegistry:
                     # 创建默认组
                     default_group = HookGroup()
                     self._hooks[event_name].append(default_group)
+                    logger.debug(f"创建默认 hook 组: event={event_name}")
                 
                 default_group.hooks.append(hook)
+                logger.debug(f"注册 hook 到默认组: event={event_name}, hook={hook.name}")
 
     def register_hook_group(
         self, event_name: HookEventName, group: HookGroup
@@ -99,6 +105,7 @@ class HookRegistry:
             List[HookGroup]: 匹配的 Hook 组列表
         """
         if event_name not in self._hooks:
+            logger.debug(f"查询 hooks: event={event_name}, tool_name={tool_name}, no_hooks")
             return []
 
         matched_groups = []
@@ -122,6 +129,10 @@ class HookRegistry:
                         )
                         matched_groups.append(matched_group)
 
+        logger.debug(
+            f"查询 hooks: event={event_name}, tool_name={tool_name}, "
+            f"total_groups={len(self._hooks[event_name])}, matched_groups={len(matched_groups)}"
+        )
         return matched_groups
 
     def get_all_hooks_for_event(
@@ -139,7 +150,9 @@ class HookRegistry:
 
     def clear_hooks(self) -> None:
         """清空所有 hooks（主要用于测试）"""
+        event_count = len(self._hooks)
         self._hooks.clear()
+        logger.info(f"清空所有 hooks: cleared_events={event_count}")
 
     def has_hooks(self, event_name: HookEventName) -> bool:
         """检查是否有指定事件的 hooks

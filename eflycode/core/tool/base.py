@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional
 
 from eflycode.core.llm.protocol import ToolDefinition, ToolFunction, ToolFunctionParameters
 from eflycode.core.tool.errors import ToolExecutionError, ToolParameterError
+from eflycode.core.utils.logger import logger
 
 
 def _convert_basic_type(data: Any, schema: Dict[str, Any]) -> Any:
@@ -219,11 +220,21 @@ class BaseTool(ABC):
             ToolParameterError: 当参数错误时抛出
             ToolExecutionError: 当工具执行失败时抛出
         """
+        param_names = list(kwargs.keys())
+        logger.info(f"开始执行工具: name={self.name}, params={param_names}")
         try:
-            return self.do_run(*args, **self._convert_type(kwargs))
-        except (ToolParameterError, ToolExecutionError):
+            result = self.do_run(*args, **self._convert_type(kwargs))
+            result_length = len(result) if result else 0
+            logger.info(f"工具执行成功: name={self.name}, result_length={result_length}")
+            return result
+        except (ToolParameterError, ToolExecutionError) as e:
+            error_message = str(e)
+            logger.error(f"工具执行错误: name={self.name}, error={error_message}")
             raise
         except Exception as e:
+            error_type = type(e).__name__
+            error_message = str(e)
+            logger.error(f"工具执行时发生意外错误: name={self.name}, error={error_type}: {error_message}", exc_info=True)
             raise ToolExecutionError(
                 message=str(e),
                 tool_name=self.name,

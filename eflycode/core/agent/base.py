@@ -1,4 +1,3 @@
-from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional
 
 from eflycode.core.agent.session import Session
@@ -14,6 +13,7 @@ from eflycode.core.llm.protocol import (
 from eflycode.core.llm.providers.base import LLMProvider
 from eflycode.core.tool.base import BaseTool, ToolGroup
 from eflycode.core.tool.errors import ToolExecutionError
+from eflycode.core.utils.logger import logger
 
 
 class ChatConversation:
@@ -165,6 +165,12 @@ class BaseAgent:
         if self._advisors and hasattr(provider, "add_advisors"):
             provider.add_advisors(self._advisors)
 
+        logger.info(
+            f"Agent 初始化完成: model={model}, tools={len(self._tools)}, "
+            f"tool_groups={len(self._tool_groups)}, advisors={len(self._advisors)}, "
+            f"hook_system={'enabled' if hook_system else 'disabled'}"
+        )
+
     def chat(self, message: str = "") -> ChatConversation:
         """发送消息并获取响应
 
@@ -174,8 +180,13 @@ class BaseAgent:
         Returns:
             ChatConversation: 包含当前响应和全部对话信息的会话对象
         """
+        message_length = len(message) if message else 0
+        logger.debug(f"开始 chat 请求: message_length={message_length}, session_id={self.session.id}")
+        
         if message:
             self.session.add_message("user", message)
+            message_preview = message[:50]
+            logger.debug(f"添加用户消息到会话: message_preview={message_preview}...")
 
         request = self.session.get_context(
             self.model_name,
@@ -184,6 +195,10 @@ class BaseAgent:
             hook_system=self.hook_system,
         )
         request.tools = self.get_available_tools()
+        
+        tools_count = len(request.tools) if request.tools else 0
+        messages_count = len(request.messages)
+        logger.debug(f"准备 LLM 请求: model={self.model_name}, messages_count={messages_count}, tools_count={tools_count}")
 
         if message:
             self.event_bus.emit("agent.message.start", agent=self, message=message)
@@ -191,6 +206,7 @@ class BaseAgent:
         try:
             # 触发 BeforeModel hook
             if self.hook_system:
+                logger.debug(f"触发 BeforeModel hook: session_id={self.session.id}")
                 from pathlib import Path
                 from eflycode.core.config.config_manager import ConfigManager
 
@@ -203,18 +219,23 @@ class BaseAgent:
 
                 # 如果 hook 返回了修改后的请求，使用修改后的请求
                 if modified_request:
+                    logger.debug("BeforeModel hook 修改了请求")
                     request = modified_request
 
                 # 如果 hook 要求停止，抛出异常
                 if not hook_result.continue_:
+                    logger.warning(f"BeforeModel hook 要求停止执行: {hook_result.system_message}")
                     raise RuntimeError(
                         hook_result.system_message or "Hook requested to stop execution"
                     )
 
+            logger.info(f"调用 LLM provider: model={self.model_name}")
             response = self.provider.call(request)
+            logger.info(f"LLM 响应完成: id={response.id}, finish_reason={response.finish_reason}, usage={response.usage}")
 
             # 触发 AfterModel hook
             if self.hook_system:
+                logger.debug(f"触发 AfterModel hook: session_id={self.session.id}")
                 from pathlib import Path
                 from eflycode.core.config.config_manager import ConfigManager
 
@@ -227,6 +248,7 @@ class BaseAgent:
 
                 # 如果 hook 要求停止，抛出异常
                 if not hook_result.continue_:
+                    logger.warning(f"AfterModel hook 要求停止执行: {hook_result.system_message}")
                     raise RuntimeError(
                         hook_result.system_message or "Hook requested to stop execution"
                     )
@@ -234,12 +256,19 @@ class BaseAgent:
             content = response.message.content or ""
             tool_calls = response.message.tool_calls
 
+            tool_calls_count = len(tool_calls) if tool_calls else 0
+            content_length = len(content)
+            logger.debug(f"添加 assistant 消息到会话: content_length={content_length}, tool_calls_count={tool_calls_count}")
             self.session.add_message("assistant", content=content, tool_calls=tool_calls)
 
             self.event_bus.emit("agent.message.stop", agent=self, response=response)
-
+            
+            logger.debug("chat 请求完成")
             return ChatConversation(completion=response, messages=self.session.get_messages())
         except Exception as e:
+            error_type = type(e).__name__
+            error_message = str(e)
+            logger.error(f"chat 请求失败: {error_type}: {error_message}", exc_info=True)
             self.event_bus.emit("agent.error", agent=self, error=e)
             raise
 
@@ -252,8 +281,13 @@ class BaseAgent:
         Yields:
             ChatCompletionChunk: 流式响应块
         """
+        message_length = len(message) if message else 0
+        logger.debug(f"开始 stream 请求: message_length={message_length}, session_id={self.session.id}")
+        
         if message:
             self.session.add_message("user", message)
+            message_preview = message[:50]
+            logger.debug(f"添加用户消息到会话: message_preview={message_preview}...")
 
         request = self.session.get_context(
             self.model_name,
@@ -262,9 +296,14 @@ class BaseAgent:
             hook_system=self.hook_system,
         )
         request.tools = self.get_available_tools()
+        
+        tools_count = len(request.tools) if request.tools else 0
+        messages_count = len(request.messages)
+        logger.debug(f"准备 LLM 流式请求: model={self.model_name}, messages_count={messages_count}, tools_count={tools_count}")
 
         # 触发 BeforeModel hook（流式模式）
         if self.hook_system:
+            logger.debug(f"触发 BeforeModel hook (stream): session_id={self.session.id}")
             from pathlib import Path
             from eflycode.core.config.config_manager import ConfigManager
 
@@ -277,10 +316,12 @@ class BaseAgent:
 
             # 如果 hook 返回了修改后的请求，使用修改后的请求
             if modified_request:
+                logger.debug("BeforeModel hook 修改了请求 (stream)")
                 request = modified_request
 
             # 如果 hook 要求停止，抛出异常
             if not hook_result.continue_:
+                logger.warning(f"BeforeModel hook 要求停止执行 (stream): {hook_result.system_message}")
                 raise RuntimeError(
                     hook_result.system_message or "Hook requested to stop execution"
                 )
@@ -289,11 +330,14 @@ class BaseAgent:
             self.event_bus.emit("agent.message.start", agent=self, message=message)
 
         try:
+            logger.info(f"开始 LLM 流式调用: model={self.model_name}")
             full_content = ""
             last_chunk = None
             accumulated_tool_calls = {}
+            chunk_count = 0
             
             for chunk in self.provider.stream(request):
+                chunk_count += 1
                 # 提取 delta 内容
                 if chunk.delta and chunk.delta.content:
                     delta_content = chunk.delta.content
@@ -373,6 +417,7 @@ class BaseAgent:
 
                 # 触发 AfterModel hook（流式模式）
                 if self.hook_system:
+                    logger.debug(f"触发 AfterModel hook (stream): session_id={self.session.id}")
                     from pathlib import Path
                     from eflycode.core.config.config_manager import ConfigManager
 
@@ -385,12 +430,19 @@ class BaseAgent:
 
                     # 如果 hook 要求停止，抛出异常
                     if not hook_result.continue_:
+                        logger.warning(f"AfterModel hook 要求停止执行 (stream): {hook_result.system_message}")
                         raise RuntimeError(
                             hook_result.system_message or "Hook requested to stop execution"
                         )
 
+                usage_info = completion.usage if completion.usage else None
+                content_length = len(full_content)
+                logger.info(f"LLM 流式响应完成: chunks={chunk_count}, content_length={content_length}, usage={usage_info}")
                 self.event_bus.emit("agent.message.stop", agent=self, response=completion)
         except Exception as e:
+            error_type = type(e).__name__
+            error_message = str(e)
+            logger.error(f"stream 请求失败: {error_type}: {error_message}", exc_info=True)
             self.event_bus.emit("agent.error", agent=self, error=e)
             raise
 
@@ -408,8 +460,12 @@ class BaseAgent:
         Raises:
             ToolExecutionError: 当工具执行失败时抛出
         """
+        param_names = list(kwargs.keys())
+        logger.info(f"开始执行工具: tool_name={tool_name}, tool_call_id={tool_call_id}, params={param_names}")
+        
         tool = self._tools.get(tool_name)
         if not tool:
+            logger.error(f"工具不存在: {tool_name}")
             raise ToolExecutionError(
                 message=f"工具不存在: {tool_name}",
                 tool_name=tool_name,
@@ -417,6 +473,7 @@ class BaseAgent:
 
         # 触发 BeforeTool hook
         if self.hook_system:
+            logger.debug(f"触发 BeforeTool hook: tool_name={tool_name}, session_id={self.session.id}")
             from pathlib import Path
             from eflycode.core.config.config_manager import ConfigManager
 
@@ -429,16 +486,19 @@ class BaseAgent:
 
             # 检查 decision
             if hook_result.decision == "block":
+                logger.warning(f"BeforeTool hook 阻止工具执行: tool_name={tool_name}, reason={hook_result.system_message}")
                 raise ToolExecutionError(
                     message=hook_result.system_message or f"Hook blocked tool execution: {tool_name}",
                     tool_name=tool_name,
                 )
             elif hook_result.decision == "deny":
                 # deny 表示拒绝执行，返回错误信息
+                logger.info(f"BeforeTool hook 拒绝工具执行: tool_name={tool_name}, reason={hook_result.system_message}")
                 return hook_result.system_message or f"Tool execution denied: {tool_name}"
 
             # 如果 hook 要求停止，抛出异常
             if not hook_result.continue_:
+                logger.warning(f"BeforeTool hook 要求停止执行: tool_name={tool_name}")
                 raise RuntimeError(
                     hook_result.system_message or "Hook requested to stop execution"
                 )
@@ -447,9 +507,12 @@ class BaseAgent:
 
         try:
             result = tool.run(**kwargs)
+            result_length = len(result) if result else 0
+            logger.info(f"工具执行完成: tool_name={tool_name}, result_length={result_length}")
 
             # 触发 AfterTool hook
             if self.hook_system:
+                logger.debug(f"触发 AfterTool hook: tool_name={tool_name}, session_id={self.session.id}")
                 from pathlib import Path
                 from eflycode.core.config.config_manager import ConfigManager
 
@@ -462,13 +525,22 @@ class BaseAgent:
 
                 # 如果 hook 要求停止，抛出异常
                 if not hook_result.continue_:
+                    logger.warning(f"AfterTool hook 要求停止执行: tool_name={tool_name}")
                     raise RuntimeError(
                         hook_result.system_message or "Hook requested to stop execution"
                     )
 
             self.event_bus.emit("agent.tool.result", agent=self, tool_name=tool_name, result=result, tool_call_id=tool_call_id)
             return result
+        except ToolExecutionError as e:
+            error_message = str(e)
+            logger.error(f"工具执行错误: tool_name={tool_name}, error={error_message}")
+            self.event_bus.emit("agent.tool.error", agent=self, tool_name=tool_name, error=e, tool_call_id=tool_call_id)
+            raise
         except Exception as e:
+            error_type = type(e).__name__
+            error_message = str(e)
+            logger.error(f"工具执行时发生意外错误: tool_name={tool_name}, error={error_type}: {error_message}", exc_info=True)
             self.event_bus.emit("agent.tool.error", agent=self, tool_name=tool_name, error=e, tool_call_id=tool_call_id)
             raise
 
@@ -479,9 +551,13 @@ class BaseAgent:
             List[ToolDefinition]: 工具定义列表
         """
         tools = [tool.definition for tool in self._tools.values()]
+        tool_names = [t.function.name for t in tools if t.function]
+        tools_count = len(tools)
+        logger.debug(f"获取可用工具列表: count={tools_count}, tool_names={tool_names}")
 
         # 触发 BeforeToolSelection hook
         if self.hook_system:
+            logger.debug(f"触发 BeforeToolSelection hook: session_id={self.session.id}")
             from pathlib import Path
             from eflycode.core.config.config_manager import ConfigManager
 
@@ -494,6 +570,9 @@ class BaseAgent:
 
             # 如果 hook 返回了修改后的工具列表，使用修改后的列表
             if modified_tools:
+                original_count = len(tools)
+                modified_count = len(modified_tools)
+                logger.debug(f"BeforeToolSelection hook 修改了工具列表: original_count={original_count}, modified_count={modified_count}")
                 tools = modified_tools
 
         return tools

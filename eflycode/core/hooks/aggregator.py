@@ -10,6 +10,7 @@ from eflycode.core.hooks.types import (
     HookExecutionResult,
     HookOutput,
 )
+from eflycode.core.utils.logger import logger
 
 
 class HookAggregator:
@@ -26,12 +27,17 @@ class HookAggregator:
         Returns:
             AggregatedHookResult: 聚合后的结果
         """
+        results_count = len(execution_results)
+        logger.debug(f"聚合 hook 结果: count={results_count}")
         aggregated = AggregatedHookResult()
         aggregated.execution_results = execution_results
 
         # 处理阻断错误
         blocking_results = [r for r in execution_results if r.is_blocking]
         if blocking_results:
+            blocking_hook_names = [r.hook_name for r in blocking_results]
+            blocking_count = len(blocking_results)
+            logger.warning(f"检测到阻断错误: count={blocking_count}, hooks={blocking_hook_names}")
             # 如果有阻断错误，设置 continue 为 False
             aggregated.continue_ = False
             # 使用第一个阻断错误的 stderr 作为系统消息
@@ -61,12 +67,17 @@ class HookAggregator:
 
         # 处理警告
         warning_results = [r for r in execution_results if r.is_warning]
-        for result in warning_results:
-            # 警告只记录日志，不影响决策
-            if result.stderr:
-                # 可以在这里记录日志
-                pass
+        if warning_results:
+            warning_hook_names = [r.hook_name for r in warning_results]
+            warning_count = len(warning_results)
+            logger.warning(f"检测到警告: count={warning_count}, hooks={warning_hook_names}")
+            for result in warning_results:
+                if result.stderr:
+                    stderr_preview = result.stderr[:200]
+                    logger.warning(f"Hook 警告: name={result.hook_name}, stderr={stderr_preview}")
 
+        messages_count = len(aggregated.system_messages)
+        logger.debug(f"聚合完成: continue={aggregated.continue_}, decision={aggregated.decision}, messages_count={messages_count}")
         return aggregated
 
     def merge_results(
@@ -83,9 +94,12 @@ class HookAggregator:
         if not results:
             return AggregatedHookResult()
 
+        results_count = len(results)
+        logger.debug(f"合并聚合结果: count={results_count}")
         merged = results[0]
         for result in results[1:]:
             merged.merge(result)
 
+        logger.debug(f"合并完成: continue={merged.continue_}, decision={merged.decision}")
         return merged
 

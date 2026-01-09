@@ -406,7 +406,8 @@ class MCPClient:
                     })
 
                 self._tools_cache = tools
-                logger.debug(f"MCP服务器工具列表获取成功: {self.server_name}，共{len(tools)}个工具")
+                tools_count = len(tools)
+                logger.debug(f"MCP服务器工具列表获取成功: {self.server_name}，共{tools_count}个工具")
                 return tools
             except queue.Empty:
                 raise MCPProtocolError(

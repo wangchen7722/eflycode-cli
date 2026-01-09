@@ -37,6 +37,7 @@ class AgentRunLoop:
 
         # 触发 SessionStart 和 BeforeAgent hooks
         if self.agent.hook_system:
+            logger.debug(f"触发 SessionStart hook: session_id={self.agent.session.id}")
             from pathlib import Path
             from eflycode.core.config.config_manager import ConfigManager
 
@@ -49,12 +50,14 @@ class AgentRunLoop:
             )
 
             # BeforeAgent
+            logger.debug(f"触发 BeforeAgent hook: session_id={self.agent.session.id}")
             hook_result = self.agent.hook_system.fire_before_agent_event(
                 user_input, self.agent.session.id, workspace_dir
             )
 
             # 如果 hook 要求停止，直接返回
             if not hook_result.continue_:
+                logger.warning(f"BeforeAgent hook 要求停止执行: reason={hook_result.system_message}")
                 from eflycode.core.llm.protocol import ChatCompletion, Message
                 # 创建一个空的 completion 表示任务被停止
                 completion = ChatCompletion(
@@ -78,6 +81,7 @@ class AgentRunLoop:
             while self.current_iteration < self.max_iterations:
                 self.current_iteration += 1
                 statistics.iterations = self.current_iteration
+                logger.debug(f"开始迭代 {self.current_iteration}/{self.max_iterations}")
 
                 if stream:
                     # 使用流式对话
@@ -145,6 +149,7 @@ class AgentRunLoop:
 
                     # 触发 AfterAgent hook
                     if self.agent.hook_system:
+                        logger.debug(f"触发 AfterAgent hook: session_id={self.agent.session.id}")
                         from pathlib import Path
                         from eflycode.core.config.config_manager import ConfigManager
 
@@ -157,8 +162,11 @@ class AgentRunLoop:
 
                         # 如果 hook 有系统消息，添加到结果中
                         if hook_result.system_message:
+                            message_length = len(hook_result.system_message)
+                            logger.debug(f"AfterAgent hook 添加系统消息: message_length={message_length}")
                             result_content = hook_result.system_message
 
+                    logger.info(f"任务完成: iterations={statistics.iterations}, tool_calls={statistics.tool_calls_count}, total_tokens={statistics.total_tokens}")
                     self.agent.event_bus.emit("agent.task.stop", agent=self.agent, result=result_content)
                     return TaskConversation(conversation=conversation, statistics=statistics)
 
@@ -174,7 +182,8 @@ class AgentRunLoop:
                 statistics.tool_calls_count += 1
                 tool_result = self._execute_tool(tool_name, arguments, tool_call_id)
                 
-                logger.info(f"工具 {tool_name} 执行完成，结果长度: {len(tool_result)} 字符")
+                tool_result_length = len(tool_result)
+                logger.info(f"工具 {tool_name} 执行完成，结果长度: {tool_result_length} 字符")
 
                 # 将工具执行结果作为工具消息添加到 session 中
                 # 这是 OpenAI API 的要求：当 assistant 消息包含 tool_calls 时，必须紧接着发送工具消息
@@ -184,6 +193,7 @@ class AgentRunLoop:
 
             if last_conversation:
                 statistics.tool_calls_count = self.current_iteration - 1
+                logger.warning(f"达到最大迭代次数: iterations={self.current_iteration}, tool_calls={statistics.tool_calls_count}")
                 self.agent.event_bus.emit("agent.task.stop", agent=self.agent, result="达到最大迭代次数")
                 return TaskConversation(conversation=last_conversation, statistics=statistics)
 
@@ -191,10 +201,14 @@ class AgentRunLoop:
             if final_conversation.completion.usage:
                 statistics.add_usage(final_conversation.completion.usage)
             statistics.tool_calls_count = self.current_iteration - 1
+            logger.warning(f"达到最大迭代次数: iterations={self.current_iteration}, tool_calls={statistics.tool_calls_count}")
             self.agent.event_bus.emit("agent.task.stop", agent=self.agent, result="达到最大迭代次数")
             return TaskConversation(conversation=final_conversation, statistics=statistics)
 
         except Exception as e:
+            error_type = type(e).__name__
+            error_message = str(e)
+            logger.error(f"任务执行失败: iteration={self.current_iteration}, error={error_type}: {error_message}", exc_info=True)
             self.agent.event_bus.emit("agent.task.error", agent=self.agent, error=e)
             if last_conversation:
                 return TaskConversation(conversation=last_conversation, statistics=statistics)
@@ -202,6 +216,7 @@ class AgentRunLoop:
         finally:
             # 触发 SessionEnd hook
             if self.agent.hook_system:
+                logger.debug(f"触发 SessionEnd hook: session_id={self.agent.session.id}")
                 from pathlib import Path
                 from eflycode.core.config.config_manager import ConfigManager
 

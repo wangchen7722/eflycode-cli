@@ -123,7 +123,8 @@ class SystemPromptAdvisor(Advisor):
         system_message = Message(role="system", content=system_prompt)
         request.messages.insert(0, system_message)
 
-        logger.debug(f"已添加系统提示词，长度: {len(system_prompt)} 字符")
+        prompt_length = len(system_prompt)
+        logger.debug(f"已添加系统提示词，长度: {prompt_length} 字符")
 
         return request
 

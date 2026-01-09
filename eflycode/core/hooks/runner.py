@@ -16,6 +16,7 @@ from eflycode.core.hooks.types import (
     HookExecutionResult,
     HookOutput,
 )
+from eflycode.core.utils.logger import logger
 
 
 class HookRunner:
@@ -53,6 +54,7 @@ class HookRunner:
             HookExecutionResult: 执行结果
         """
         start_time = time.time()
+        logger.info(f"开始执行 hook: name={hook.name}, event={event_name}, timeout={hook.timeout}ms")
 
         # 构造完整的输入数据
         full_input = self._build_input_data(
@@ -63,6 +65,8 @@ class HookRunner:
         command = self._expand_env_vars(
             hook.command, workspace_dir or self.workspace_dir, session_id
         )
+        command_preview = command[:100] if len(command) > 100 else command
+        logger.debug(f"Hook 命令: {hook.name}, command={command_preview}")
 
         # 准备环境变量
         env = self._prepare_environment(
@@ -85,8 +89,8 @@ class HookRunner:
             )
 
             duration_ms = int((time.time() - start_time) * 1000)
-
-            return HookExecutionResult(
+            
+            result = HookExecutionResult(
                 hook_name=hook.name,
                 stdout=process.stdout,
                 stderr=process.stderr,
@@ -94,8 +98,17 @@ class HookRunner:
                 duration_ms=duration_ms,
                 success=process.returncode == 0,
             )
+            
+            if result.success:
+                logger.info(f"Hook 执行成功: name={hook.name}, duration={duration_ms}ms, exit_code={process.returncode}")
+            else:
+                stderr_preview = process.stderr[:200]
+                logger.warning(f"Hook 执行失败: name={hook.name}, duration={duration_ms}ms, exit_code={process.returncode}, stderr={stderr_preview}")
+            
+            return result
         except subprocess.TimeoutExpired:
             duration_ms = int((time.time() - start_time) * 1000)
+            logger.error(f"Hook 执行超时: name={hook.name}, timeout={hook.timeout}ms, duration={duration_ms}ms")
             return HookExecutionResult(
                 hook_name=hook.name,
                 stdout="",
@@ -106,6 +119,9 @@ class HookRunner:
             )
         except Exception as e:
             duration_ms = int((time.time() - start_time) * 1000)
+            error_type = type(e).__name__
+            error_message = str(e)
+            logger.error(f"Hook 执行异常: name={hook.name}, error={error_type}: {error_message}", exc_info=True)
             return HookExecutionResult(
                 hook_name=hook.name,
                 stdout="",
@@ -137,6 +153,8 @@ class HookRunner:
         """
         import concurrent.futures
 
+        hooks_count = len(hooks)
+        logger.debug(f"并行执行 hooks: count={hooks_count}, event={event_name}")
         results = []
         with concurrent.futures.ThreadPoolExecutor(max_workers=len(hooks)) as executor:
             futures = {
@@ -176,6 +194,8 @@ class HookRunner:
         Returns:
             List[HookExecutionResult]: 执行结果列表
         """
+        hooks_count = len(hooks)
+        logger.debug(f"串行执行 hooks: count={hooks_count}, event={event_name}")
         results = []
         current_input = initial_input_data.copy()
 

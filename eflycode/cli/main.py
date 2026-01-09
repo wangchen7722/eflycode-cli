@@ -129,12 +129,20 @@ def create_agent(config: Config) -> BaseAgent:
     # 创建最终的 LLM Provider
     provider = OpenAiProvider(config.model_config)
     
+    # 创建 HookSystem
+    from eflycode.core.hooks.system import HookSystem
+    from pathlib import Path
+    
+    workspace_dir = config.workspace_dir or Path.cwd()
+    hook_system = HookSystem(workspace_dir=workspace_dir)
+    
     # 创建 Agent，SystemPromptAdvisor 会在 BaseAgent 初始化时自动创建
     agent = BaseAgent(
         model=config.model_name,
         provider=provider,
         tool_groups=tool_groups,
         tools=[execute_command_tool],
+        hook_system=hook_system,
     )
     agent.max_context_length = max_context_length
     

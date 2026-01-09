@@ -3,7 +3,7 @@
 协调 Tokenizer 和 Strategy，管理上下文压缩
 """
 
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from eflycode.core.llm.protocol import Message
 from eflycode.core.llm.providers.base import LLMProvider
@@ -27,6 +27,8 @@ class ContextManager:
         max_context_length: int,
         initial_user_question: Optional[str] = None,
         provider: Optional[LLMProvider] = None,
+        hook_system: Optional[Any] = None,
+        session_id: Optional[str] = None,
     ) -> List[Message]:
         """管理上下文，返回优化后的消息列表
 
@@ -37,6 +39,8 @@ class ContextManager:
             max_context_length: 模型的最大上下文长度
             initial_user_question: 用户最初的提问（用于滑动窗口策略）
             provider: LLM Provider（用于 summary 策略）
+            hook_system: Hook 系统实例（可选）
+            session_id: 会话 ID（可选，用于 hooks）
 
         Returns:
             List[Message]: 优化后的消息列表
@@ -54,6 +58,20 @@ class ContextManager:
         # 检查是否需要压缩
         if not strategy.should_compress(messages, model, self.tokenizer, max_context_length):
             return messages
+
+        # 触发 PreCompress hook
+        if hook_system and session_id:
+            from pathlib import Path
+            from eflycode.core.config.config_manager import ConfigManager
+
+            config_manager = ConfigManager.get_instance()
+            workspace_dir = config_manager.get_workspace_dir() or Path.cwd()
+
+            hook_result = hook_system.fire_pre_compress_event(session_id, workspace_dir)
+
+            # 如果 hook 要求停止，返回原始消息
+            if not hook_result.continue_:
+                return messages
 
         # 执行压缩
         compressed_messages = strategy.compress(

@@ -34,6 +34,41 @@ class AgentRunLoop:
         logger.info(f"开始执行任务，流式模式: {stream}")
         
         self.current_iteration = 0
+
+        # 触发 SessionStart 和 BeforeAgent hooks
+        if self.agent.hook_system:
+            from pathlib import Path
+            from eflycode.core.config.config_manager import ConfigManager
+
+            config_manager = ConfigManager.get_instance()
+            workspace_dir = config_manager.get_workspace_dir() or Path.cwd()
+
+            # SessionStart
+            self.agent.hook_system.fire_session_start_event(
+                self.agent.session.id, workspace_dir
+            )
+
+            # BeforeAgent
+            hook_result = self.agent.hook_system.fire_before_agent_event(
+                user_input, self.agent.session.id, workspace_dir
+            )
+
+            # 如果 hook 要求停止，直接返回
+            if not hook_result.continue_:
+                from eflycode.core.llm.protocol import ChatCompletion, Message
+                # 创建一个空的 completion 表示任务被停止
+                completion = ChatCompletion(
+                    id="",
+                    object="chat.completion",
+                    created=0,
+                    model=self.agent.model_name,
+                    message=Message(role="assistant", content=hook_result.system_message or "Task stopped by hook"),
+                )
+                conversation = ChatConversation(completion=completion, messages=self.agent.session.get_messages())
+                statistics = TaskStatistics()
+                self.agent.event_bus.emit("agent.task.stop", agent=self.agent, result=hook_result.system_message or "Stopped by hook")
+                return TaskConversation(conversation=conversation, statistics=statistics)
+
         self.agent.event_bus.emit("agent.task.start", agent=self.agent, user_input=user_input)
 
         statistics = TaskStatistics()
@@ -106,7 +141,25 @@ class AgentRunLoop:
                 tool_call = self._parse_tool_call(conversation.completion)
                 if not tool_call:
                     statistics.tool_calls_count = self.current_iteration - 1
-                    self.agent.event_bus.emit("agent.task.stop", agent=self.agent, result=response_content)
+                    result_content = response_content
+
+                    # 触发 AfterAgent hook
+                    if self.agent.hook_system:
+                        from pathlib import Path
+                        from eflycode.core.config.config_manager import ConfigManager
+
+                        config_manager = ConfigManager.get_instance()
+                        workspace_dir = config_manager.get_workspace_dir() or Path.cwd()
+
+                        hook_result = self.agent.hook_system.fire_after_agent_event(
+                            user_input, result_content, self.agent.session.id, workspace_dir
+                        )
+
+                        # 如果 hook 有系统消息，添加到结果中
+                        if hook_result.system_message:
+                            result_content = hook_result.system_message
+
+                    self.agent.event_bus.emit("agent.task.stop", agent=self.agent, result=result_content)
                     return TaskConversation(conversation=conversation, statistics=statistics)
 
                 tool_name = tool_call.get("name")
@@ -146,6 +199,18 @@ class AgentRunLoop:
             if last_conversation:
                 return TaskConversation(conversation=last_conversation, statistics=statistics)
             raise
+        finally:
+            # 触发 SessionEnd hook
+            if self.agent.hook_system:
+                from pathlib import Path
+                from eflycode.core.config.config_manager import ConfigManager
+
+                config_manager = ConfigManager.get_instance()
+                workspace_dir = config_manager.get_workspace_dir() or Path.cwd()
+
+                self.agent.hook_system.fire_session_end_event(
+                    self.agent.session.id, workspace_dir
+                )
 
     def _parse_tool_call(self, completion) -> Optional[Dict]:
         """解析响应中的工具调用

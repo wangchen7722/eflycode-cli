@@ -1,5 +1,5 @@
 import uuid
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from eflycode.core.llm.protocol import LLMRequest, Message, MessageRole
 from eflycode.core.llm.providers.base import LLMProvider
@@ -72,6 +72,7 @@ class Session:
         model: str,
         max_context_length: int,
         provider: Optional[LLMProvider] = None,
+        hook_system: Optional[Any] = None,
     ) -> LLMRequest:
         """获取当前上下文，转换为 LLMRequest 格式
 
@@ -79,6 +80,7 @@ class Session:
             model: 模型名称
             max_context_length: 模型的最大上下文长度
             provider: LLM Provider（用于 summary 策略）
+            hook_system: Hook 系统实例（可选，用于 PreCompress hook）
 
         Returns:
             LLMRequest: LLM 请求对象
@@ -94,6 +96,8 @@ class Session:
                 max_context_length=max_context_length,
                 initial_user_question=self._initial_user_question,
                 provider=provider,
+                hook_system=hook_system,
+                session_id=self._id,
             )
 
         return LLMRequest(

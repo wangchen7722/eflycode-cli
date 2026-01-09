@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Dict, Iterator, List, Optional
+from typing import Any, Dict, Iterator, List, Optional
 
 from eflycode.core.agent.session import Session
 from eflycode.core.event.event_bus import EventBus
@@ -120,6 +120,7 @@ class BaseAgent:
         tool_groups: Optional[List[ToolGroup]] = None,
         event_bus: Optional[EventBus] = None,
         advisors: Optional[List[Advisor]] = None,
+        hook_system: Optional[Any] = None,
     ):
         """初始化 Agent
 
@@ -130,12 +131,14 @@ class BaseAgent:
             tool_groups: 工具组列表
             event_bus: 事件总线，如果为 None 则创建新的
             advisors: Advisor 列表，会自动合并到 Provider 的 advisors 中
+            hook_system: Hook 系统实例，如果为 None 则不使用 hooks
         """
         self.model_name = model
         self.event_bus = event_bus or EventBus()
         self.session = Session()
         self.max_context_length = DEFAULT_MAX_CONTEXT_LENGTH
         self._advisors: List[Advisor] = advisors or []
+        self.hook_system = hook_system
 
         self._tools: Dict[str, BaseTool] = {}
         self._tool_groups: List[ToolGroup] = []
@@ -178,6 +181,7 @@ class BaseAgent:
             self.model_name,
             max_context_length=self.max_context_length,
             provider=self.provider,
+            hook_system=self.hook_system,
         )
         request.tools = self.get_available_tools()
 
@@ -185,7 +189,48 @@ class BaseAgent:
             self.event_bus.emit("agent.message.start", agent=self, message=message)
 
         try:
+            # 触发 BeforeModel hook
+            if self.hook_system:
+                from pathlib import Path
+                from eflycode.core.config.config_manager import ConfigManager
+
+                config_manager = ConfigManager.get_instance()
+                workspace_dir = config_manager.get_workspace_dir() or Path.cwd()
+
+                hook_result, modified_request = self.hook_system.fire_before_model_event(
+                    request, self.session.id, workspace_dir
+                )
+
+                # 如果 hook 返回了修改后的请求，使用修改后的请求
+                if modified_request:
+                    request = modified_request
+
+                # 如果 hook 要求停止，抛出异常
+                if not hook_result.continue_:
+                    raise RuntimeError(
+                        hook_result.system_message or "Hook requested to stop execution"
+                    )
+
             response = self.provider.call(request)
+
+            # 触发 AfterModel hook
+            if self.hook_system:
+                from pathlib import Path
+                from eflycode.core.config.config_manager import ConfigManager
+
+                config_manager = ConfigManager.get_instance()
+                workspace_dir = config_manager.get_workspace_dir() or Path.cwd()
+
+                hook_result = self.hook_system.fire_after_model_event(
+                    request, response, self.session.id, workspace_dir
+                )
+
+                # 如果 hook 要求停止，抛出异常
+                if not hook_result.continue_:
+                    raise RuntimeError(
+                        hook_result.system_message or "Hook requested to stop execution"
+                    )
+
             content = response.message.content or ""
             tool_calls = response.message.tool_calls
 
@@ -214,8 +259,31 @@ class BaseAgent:
             self.model_name,
             max_context_length=self.max_context_length,
             provider=self.provider,
+            hook_system=self.hook_system,
         )
         request.tools = self.get_available_tools()
+
+        # 触发 BeforeModel hook（流式模式）
+        if self.hook_system:
+            from pathlib import Path
+            from eflycode.core.config.config_manager import ConfigManager
+
+            config_manager = ConfigManager.get_instance()
+            workspace_dir = config_manager.get_workspace_dir() or Path.cwd()
+
+            hook_result, modified_request = self.hook_system.fire_before_model_event(
+                request, self.session.id, workspace_dir
+            )
+
+            # 如果 hook 返回了修改后的请求，使用修改后的请求
+            if modified_request:
+                request = modified_request
+
+            # 如果 hook 要求停止，抛出异常
+            if not hook_result.continue_:
+                raise RuntimeError(
+                    hook_result.system_message or "Hook requested to stop execution"
+                )
 
         if message:
             self.event_bus.emit("agent.message.start", agent=self, message=message)
@@ -302,6 +370,25 @@ class BaseAgent:
                     finish_reason=last_chunk.finish_reason,
                     usage=last_chunk.usage,
                 )
+
+                # 触发 AfterModel hook（流式模式）
+                if self.hook_system:
+                    from pathlib import Path
+                    from eflycode.core.config.config_manager import ConfigManager
+
+                    config_manager = ConfigManager.get_instance()
+                    workspace_dir = config_manager.get_workspace_dir() or Path.cwd()
+
+                    hook_result = self.hook_system.fire_after_model_event(
+                        request, completion, self.session.id, workspace_dir
+                    )
+
+                    # 如果 hook 要求停止，抛出异常
+                    if not hook_result.continue_:
+                        raise RuntimeError(
+                            hook_result.system_message or "Hook requested to stop execution"
+                        )
+
                 self.event_bus.emit("agent.message.stop", agent=self, response=completion)
         except Exception as e:
             self.event_bus.emit("agent.error", agent=self, error=e)
@@ -328,10 +415,57 @@ class BaseAgent:
                 tool_name=tool_name,
             )
 
+        # 触发 BeforeTool hook
+        if self.hook_system:
+            from pathlib import Path
+            from eflycode.core.config.config_manager import ConfigManager
+
+            config_manager = ConfigManager.get_instance()
+            workspace_dir = config_manager.get_workspace_dir() or Path.cwd()
+
+            hook_result = self.hook_system.fire_before_tool_event(
+                tool_name, kwargs, self.session.id, workspace_dir
+            )
+
+            # 检查 decision
+            if hook_result.decision == "block":
+                raise ToolExecutionError(
+                    message=hook_result.system_message or f"Hook blocked tool execution: {tool_name}",
+                    tool_name=tool_name,
+                )
+            elif hook_result.decision == "deny":
+                # deny 表示拒绝执行，返回错误信息
+                return hook_result.system_message or f"Tool execution denied: {tool_name}"
+
+            # 如果 hook 要求停止，抛出异常
+            if not hook_result.continue_:
+                raise RuntimeError(
+                    hook_result.system_message or "Hook requested to stop execution"
+                )
+
         self.event_bus.emit("agent.tool.call", agent=self, tool_name=tool_name, arguments=kwargs, tool_call_id=tool_call_id)
 
         try:
             result = tool.run(**kwargs)
+
+            # 触发 AfterTool hook
+            if self.hook_system:
+                from pathlib import Path
+                from eflycode.core.config.config_manager import ConfigManager
+
+                config_manager = ConfigManager.get_instance()
+                workspace_dir = config_manager.get_workspace_dir() or Path.cwd()
+
+                hook_result = self.hook_system.fire_after_tool_event(
+                    tool_name, kwargs, result, self.session.id, workspace_dir
+                )
+
+                # 如果 hook 要求停止，抛出异常
+                if not hook_result.continue_:
+                    raise RuntimeError(
+                        hook_result.system_message or "Hook requested to stop execution"
+                    )
+
             self.event_bus.emit("agent.tool.result", agent=self, tool_name=tool_name, result=result, tool_call_id=tool_call_id)
             return result
         except Exception as e:
@@ -344,7 +478,25 @@ class BaseAgent:
         Returns:
             List[ToolDefinition]: 工具定义列表
         """
-        return [tool.definition for tool in self._tools.values()]
+        tools = [tool.definition for tool in self._tools.values()]
+
+        # 触发 BeforeToolSelection hook
+        if self.hook_system:
+            from pathlib import Path
+            from eflycode.core.config.config_manager import ConfigManager
+
+            config_manager = ConfigManager.get_instance()
+            workspace_dir = config_manager.get_workspace_dir() or Path.cwd()
+
+            hook_result, modified_tools = self.hook_system.fire_before_tool_selection_event(
+                tools, self.session.id, workspace_dir
+            )
+
+            # 如果 hook 返回了修改后的工具列表，使用修改后的列表
+            if modified_tools:
+                tools = modified_tools
+
+        return tools
 
     def add_tool(self, tool: BaseTool) -> None:
         """添加工具

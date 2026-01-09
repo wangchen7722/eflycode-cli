@@ -72,8 +72,19 @@ class ComposerComponent:
     ) -> str:
         buffer = Buffer(
             completer=completer,
-            multiline=multiline
+            multiline=multiline,
+            complete_while_typing=True,
         )
+        if completer is not None:
+            def _on_text_changed(_):
+                text = buffer.text.strip()
+                last_token = text.rsplit(" ", 1)[-1] if text else ""
+                if not last_token.startswith(("/", "#", "@")):
+                    return
+                if buffer.complete_state and buffer.complete_state.completions:
+                    return
+                buffer.start_completion(select_first=True)
+            buffer.on_text_changed += _on_text_changed
         get_prompt_width = build_get_line_prefix_width(prompt_text, busy_prompt_text, on_busy)
 
         input_window = Window(
@@ -101,7 +112,7 @@ class ComposerComponent:
             transparent=True,
             content=CompletionsMenu(
                 scroll_offset=1,
-                extra_filter=has_focus(buffer)
+                extra_filter=has_focus(buffer),
             )
         )
         toolbar_window = Window(
@@ -115,7 +126,10 @@ class ComposerComponent:
         @kb.add(Keys.Enter)
         def _on_enter(event: KeyPressEvent):
             if event.current_buffer.complete_state:
-                completion = event.current_buffer.complete_state.current_completion
+                state = event.current_buffer.complete_state
+                completion = state.current_completion
+                if completion is None and state.completions:
+                    completion = state.completions[0]
                 if completion is not None:
                     event.current_buffer.apply_completion(completion)
                     return

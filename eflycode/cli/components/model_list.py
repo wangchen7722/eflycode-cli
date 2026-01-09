@@ -59,24 +59,23 @@ class ModelListComponent:
         for entry in entries:
             model_name = entry.get("model", "")
             display_name = entry.get("name", model_name)
-            provider = entry.get("provider", "unknown")
-            api_key = entry.get("api_key", "")
             source = config_manager.get_model_entry_source(entry)
             
             # 构建标签
-            source_label = "项目" if source == "project" else "用户"
-            api_key_masked = mask_api_key(api_key)
-            
-            label = f"{model_name} ({display_name}) [{source_label}] [{api_key_masked}]"
+            label = f"{display_name}"
             
             # 如果是当前默认模型，添加标记
+            selected_prefix = "[x] "
+            unselected_prefix = "[ ] "
             if model_name == current_default:
-                label = f"{label} [当前默认]"
+                label = f"{selected_prefix}{label}"
+            else:
+                label = f"{unselected_prefix}{label}"
             
             options.append({
                 "key": model_name,
                 "label": label,
-                "description": f"Provider: {provider}",
+                "description": None,
             })
         
         # 使用 SelectComponent 显示

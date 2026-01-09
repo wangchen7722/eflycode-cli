@@ -25,6 +25,7 @@ from eflycode.core.ui.bridge import EventBridge
 from eflycode.core.ui.errors import UserCanceledError
 from eflycode.core.ui.renderer import Renderer
 from eflycode.core.ui.ui_event_queue import UIEventQueue
+from eflycode.core.utils.file_manager import get_file_manager
 from eflycode.core.utils.logger import logger
 
 
@@ -208,6 +209,8 @@ async def run_interactive_cli(verbose: bool = False) -> None:
     ui_queue = UIEventQueue()
     output = TerminalOutput()
     renderer = Renderer(ui_queue, output)
+    file_manager = get_file_manager()
+    file_manager.start_watching()
     
     # 创建智能命令 completer
     smart_completer = SmartCompleter()
@@ -372,6 +375,7 @@ async def run_interactive_cli(verbose: bool = False) -> None:
         # 清理资源
         event_bridge.stop()
         renderer.close()
+        file_manager.stop_watching()
         
         # 断开MCP客户端连接
         if hasattr(agent, "_mcp_clients"):

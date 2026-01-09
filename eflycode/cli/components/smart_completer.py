@@ -3,16 +3,12 @@
 统一处理所有命令的补全和执行
 """
 
-import os
-import time
-from pathlib import Path
 from typing import Callable, Dict, Iterable, Optional
 
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.document import Document
 
-from eflycode.core.config import resolve_workspace_dir
-from eflycode.core.config.ignore import load_all_ignore_patterns, should_ignore_path
+from eflycode.core.utils.file_manager import get_file_manager
 
 
 class SmartCompleter(Completer):
@@ -21,9 +17,6 @@ class SmartCompleter(Completer):
     def __init__(self):
         """初始化 SmartCompleter"""
         self._commands: Dict[str, Dict[str, any]] = {}
-        self._file_cache: list[str] = []
-        self._file_cache_root: Optional[Path] = None
-        self._file_cache_time: float = 0.0
         self._register_default_commands()
 
     def _register_default_commands(self) -> None:
@@ -91,7 +84,7 @@ class SmartCompleter(Completer):
         elif token.startswith("#"):
             query = token[1:]
             start_pos = -len(token)
-            for path in self._iter_project_files(prefix=query):
+            for path in self._iter_project_files(query=query):
                 yield Completion(
                     text=f"#{path}",
                     start_position=start_pos,
@@ -112,50 +105,9 @@ class SmartCompleter(Completer):
         idx = stripped.rfind(" ")
         return stripped[idx + 1 :]
 
-    def _iter_project_files(self, prefix: str) -> Iterable[str]:
-        files = self._get_project_files()
-        count = 0
-        for path in files:
-            if not prefix or path.startswith(prefix):
-                yield path
-                count += 1
-                if count >= 200:
-                    break
-
-    def _get_project_files(self) -> list[str]:
-        workspace_dir = resolve_workspace_dir()
-        now = time.monotonic()
-        if (
-            self._file_cache_root == workspace_dir
-            and self._file_cache
-            and (now - self._file_cache_time) < 2.0
-        ):
-            return self._file_cache
-
-        ignore_patterns = load_all_ignore_patterns(workspace_dir=workspace_dir)
-        default_excludes = {".git", "__pycache__", "node_modules", ".venv"}
-        files: list[str] = []
-
-        for root, dirs, filenames in os.walk(workspace_dir):
-            root_path = Path(root)
-            dirs[:] = [d for d in dirs if d not in default_excludes]
-            if ignore_patterns:
-                dirs[:] = [
-                    d
-                    for d in dirs
-                    if not should_ignore_path(root_path / d, ignore_patterns, workspace_dir)
-                ]
-            for filename in filenames:
-                path = root_path / filename
-                if ignore_patterns and should_ignore_path(path, ignore_patterns, workspace_dir):
-                    continue
-                rel_path = path.relative_to(workspace_dir).as_posix()
-                files.append(rel_path)
-
-        self._file_cache = files
-        self._file_cache_root = workspace_dir
-        self._file_cache_time = now
-        return files
+    def _iter_project_files(self, query: str) -> Iterable[str]:
+        file_manager = get_file_manager()
+        return file_manager.fuzzy_find(query, limit=200)
 
     def handle_command(self, command: str) -> bool:
         """处理命令

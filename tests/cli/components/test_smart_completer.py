@@ -1,7 +1,7 @@
 """SmartCompleter 测试"""
 
 import unittest
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock, MagicMock, patch
 
 from prompt_toolkit.document import Document
 
@@ -63,8 +63,21 @@ class TestSmartCompleter(unittest.TestCase):
                 model_completion = c
                 break
         self.assertIsNotNone(model_completion)
-        # 检查补全文本是剩余部分
-        self.assertEqual(model_completion.text, "del")
+        # 检查补全文本是完整命令
+        self.assertEqual(model_completion.text, "/model")
+        self.assertEqual(model_completion.start_position, -3)
+
+    def test_get_completions_file_token(self):
+        """测试 # 文件补全"""
+        with patch("eflycode.cli.components.smart_completer.get_file_manager") as get_file_manager:
+            file_manager = MagicMock()
+            file_manager.fuzzy_find.return_value = ["src/main.py", "README.md"]
+            get_file_manager.return_value = file_manager
+
+            document = Document("check #sm")
+            completions = list(self.completer.get_completions(document, None))
+            self.assertEqual(len(completions), 2)
+            self.assertEqual(completions[0].text, "#src/main.py")
 
     def test_get_completions_full_command(self):
         """测试完整命令输入时的补全"""

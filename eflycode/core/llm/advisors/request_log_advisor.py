@@ -1,6 +1,6 @@
 """LLM 请求日志 Advisor
 
-在 verbose 模式下记录所有 LLM 请求和响应
+记录 LLM 请求和响应摘要
 """
 
 import datetime
@@ -19,6 +19,8 @@ from eflycode.core.llm.protocol import (
 
 class RequestLogAdvisor(Advisor):
     """请求日志 Advisor，记录所有 LLM 请求和响应到日志文件"""
+
+    _content_preview_limit = 500
 
     def __init__(self, session_id: str):
         """初始化 RequestLogAdvisor
@@ -68,25 +70,15 @@ class RequestLogAdvisor(Advisor):
         for msg in messages:
             role = msg.role
             content = msg.content or ""
-            
-            # 处理多行内容
-            content_lines = content.split("\n")
-            if len(content_lines) > 1:
-                first_line = content_lines[0]
-                lines.append(f"  [{role}] {first_line}")
-                for line in content_lines[1:]:
-                    lines.append(f"          {line}")
-            else:
-                lines.append(f"  [{role}] {content}")
+            preview = self._summarize_text(content)
+            lines.append(f"  [{role}] ({len(content)} chars) {preview}")
             
             # 如果有工具调用，记录工具调用信息
             if msg.tool_calls:
                 for tc in msg.tool_calls:
                     lines.append(f"    -> Tool: {tc.function.name}")
-                    args = tc.function.arguments
-                    if len(args) > 200:
-                        args = args[:200] + "..."
-                    lines.append(f"       Args: {args}")
+                    args = tc.function.arguments or ""
+                    lines.append(f"       Args: {self._summarize_text(args, 200)}")
             
             # 如果是工具响应，记录工具调用 ID
             if msg.tool_call_id:
@@ -109,12 +101,19 @@ class RequestLogAdvisor(Advisor):
         lines = []
         for tc in tool_calls:
             lines.append(f"  - {tc.function.name}")
-            args = tc.function.arguments
-            if len(args) > 200:
-                args = args[:200] + "..."
-            lines.append(f"    Args: {args}")
+            args = tc.function.arguments or ""
+            lines.append(f"    Args: {self._summarize_text(args, 200)}")
         
         return "\n".join(lines)
+
+    def _summarize_text(self, text: str, limit: Optional[int] = None) -> str:
+        """摘要文本内容"""
+        preview_limit = limit if limit is not None else self._content_preview_limit
+        if not text:
+            return ""
+        if len(text) <= preview_limit:
+            return text
+        return f"{text[:preview_limit]}...({len(text)} chars)"
 
     def _write_log(self, content: str) -> None:
         """写入日志
@@ -167,7 +166,7 @@ Time: {self._get_timestamp()}
 Tokens: {usage_str}
 Finish Reason: {response.finish_reason or 'N/A'}
 Content:
-{content}
+{self._summarize_text(content)}
 Tool Calls:
 {self._format_tool_calls(response.message.tool_calls)}
 """

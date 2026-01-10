@@ -162,6 +162,16 @@ class ExecuteCommandTool(BaseTool):
         )
 
     @property
+    def display_name(self) -> str:
+        return "Run"
+
+    def display(self, command: str = "", **kwargs) -> str:
+        """工具显示名称"""
+        if command:
+            return f"{self.display_name} {command}"
+        return self.display_name
+
+    @property
     def parameters(self) -> ToolFunctionParameters:
         return ToolFunctionParameters(
             type="object",

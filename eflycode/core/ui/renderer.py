@@ -157,7 +157,10 @@ class Renderer:
             **kwargs: 事件参数，包含 tool_name、tool_call_id 等
         """
         tool_name = kwargs.get("tool_name", "")
+        show_call = kwargs.get("show_call", True)
         if tool_name:
+            if not show_call:
+                return
             # 先输出缓冲区内容，再显示工具调用
             self._flush_message_buffer()
             self._output.show_tool_call_detected(tool_name)
@@ -170,8 +173,9 @@ class Renderer:
         """
         tool_name = kwargs.get("tool_name", "")
         arguments = kwargs.get("arguments", {})
+        display = kwargs.get("display", "")
         if tool_name:
-            self._output.show_tool_call_executing(tool_name, arguments)
+            self._output.show_tool_call_executing(tool_name, arguments, display)
 
     def handle_tool_result(self, **kwargs) -> None:
         """处理工具执行结果事件 - 直接显示
@@ -181,7 +185,9 @@ class Renderer:
         """
         tool_name = kwargs.get("tool_name", "")
         result = kwargs.get("result", "")
-        self._output.show_tool_result(tool_name, result)
+        show_result = kwargs.get("show_result", True)
+        if show_result:
+            self._output.show_tool_result(tool_name, result)
 
     def handle_error(self, **kwargs) -> None:
         """处理错误事件 - 直接显示

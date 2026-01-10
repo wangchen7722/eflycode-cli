@@ -109,11 +109,15 @@ class ListDirectoryTool(BaseTool):
     def description(self) -> str:
         return "直接列出指定目录路径下的文件和子目录的名称。可以选择性地忽略与提供的通配符模式匹配的条目。文本文件会显示行数，文件夹会显示包含的项目数量。"
 
+    @property
+    def display_name(self) -> str:
+        return "List"
+
     def display(self, dir_path: str = "", **kwargs) -> str:
         """工具显示名称"""
         if dir_path:
-            return f"列出目录 {dir_path}"
-        return "列出目录"
+            return f"{self.display_name} {dir_path}"
+        return self.display_name
 
     @property
     def parameters(self) -> ToolFunctionParameters:
@@ -361,11 +365,15 @@ class ReadFileTool(BaseTool):
     def description(self) -> str:
         return "读取并返回指定文件的内容。如果文件很大，内容将被截断。工具响应会清楚地指示是否发生了截断，并提供如何使用 'offset' 和 'limit' 参数读取更多文件的详细信息。处理文本、图片（PNG、JPG、GIF、WEBP、SVG、BMP）、音频文件（MP3、WAV、AIFF、AAC、OGG、FLAC）和 PDF 文件。对于文本文件，可以读取特定的行范围。"
 
+    @property
+    def display_name(self) -> str:
+        return "Read"
+
     def display(self, file_path: str = "", **kwargs) -> str:
         """工具显示名称"""
         if file_path:
-            return f"读取文件 {file_path}"
-        return "读取文件"
+            return f"{self.display_name} {file_path}"
+        return self.display_name
 
     @property
     def parameters(self) -> ToolFunctionParameters:
@@ -532,11 +540,15 @@ class SearchFileContentTool(BaseTool):
     def description(self) -> str:
         return "在文件内容中搜索正则表达式模式，并可通过 glob 过滤。"
 
+    @property
+    def display_name(self) -> str:
+        return "Search"
+
     def display(self, pattern: str = "", **kwargs) -> str:
         """工具显示名称"""
         if pattern:
-            return f"搜索文本 '{pattern}'"
-        return "搜索文本"
+            return f"{self.display_name} '{pattern}'"
+        return self.display_name
 
     @property
     def parameters(self) -> ToolFunctionParameters:
@@ -767,11 +779,16 @@ class ReadManyFilesTool(BaseTool):
     def description(self) -> str:
         return "从配置的目标目录中读取由 glob 模式指定的多个文件的内容。"
 
+    @property
+    def display_name(self) -> str:
+        return "Read"
+
     def display(self, include: List[str] = None, **kwargs) -> str:
         """工具显示名称"""
         if include:
-            return f"批量读取文件 ({len(include)} 个模式)"
-        return "批量读取文件"
+            parts = [f"{self.display_name} {file_path}" for file_path in include]
+            return ", ".join(parts)
+        return self.display_name
 
     @property
     def parameters(self) -> ToolFunctionParameters:
@@ -954,11 +971,15 @@ class GlobSearchTool(BaseTool):
     def description(self) -> str:
         return "高效地查找匹配特定 glob 模式的文件，会返回按\"最近修改优先\"排序的绝对路径列表。"
 
+    @property
+    def display_name(self) -> str:
+        return "Glob"
+
     def display(self, pattern: str = "", **kwargs) -> str:
         """工具显示名称"""
         if pattern:
-            return f"查找文件 '{pattern}'"
-        return "查找文件"
+            return f"{self.display_name} '{pattern}'"
+        return self.display_name
 
     @property
     def parameters(self) -> ToolFunctionParameters:
@@ -1075,11 +1096,15 @@ class WriteFileTool(BaseTool):
     def description(self) -> str:
         return "将内容写入本地文件系统中的指定文件。用户能够修改 content。如果被修改，将在响应中说明。"
 
+    @property
+    def display_name(self) -> str:
+        return "Write"
+
     def display(self, file_path: str = "", **kwargs) -> str:
         """工具显示名称"""
         if file_path:
-            return f"写入文件 {file_path}"
-        return "写入文件"
+            return f"{self.display_name} {file_path}"
+        return self.display_name
 
     @property
     def parameters(self) -> ToolFunctionParameters:
@@ -1172,11 +1197,15 @@ class ReplaceTool(BaseTool):
     def description(self) -> str:
         return "替换文件中的文本。默认情况下，替换单个匹配项，但当指定 expected_replacements 时，可以替换多个匹配项。此工具需要提供围绕更改的大量上下文以确保精确定位。在尝试文本替换之前，始终使用 read_file 工具检查文件的当前内容。"
 
+    @property
+    def display_name(self) -> str:
+        return "Edit"
+
     def display(self, file_path: str = "", **kwargs) -> str:
         """工具显示名称"""
         if file_path:
-            return f"编辑文件 {file_path}"
-        return "编辑文件"
+            return f"{self.display_name} {file_path}"
+        return self.display_name
 
     @property
     def parameters(self) -> ToolFunctionParameters:
@@ -1374,11 +1403,15 @@ class DeleteFileTool(BaseTool):
     def description(self) -> str:
         return "按照文件名删除文件。"
 
+    @property
+    def display_name(self) -> str:
+        return "Delete"
+
     def display(self, file_path: str = "", **kwargs) -> str:
         """工具显示名称"""
         if file_path:
-            return f"删除文件 {file_path}"
-        return "删除文件"
+            return f"{self.display_name} {file_path}"
+        return self.display_name
 
     @property
     def parameters(self) -> ToolFunctionParameters:
@@ -1446,13 +1479,17 @@ class MoveFileTool(BaseTool):
     def description(self) -> str:
         return "移动文件（重命名）。如果目标文件已存在，会抛出错误。"
 
+    @property
+    def display_name(self) -> str:
+        return "Move"
+
     def display(self, source_path: str = "", target_path: str = "", **kwargs) -> str:
         """工具显示名称"""
         if source_path and target_path:
-            return f"移动文件 {source_path} -> {target_path}"
+            return f"{self.display_name} {source_path} -> {target_path}"
         elif source_path:
-            return f"移动文件 {source_path}"
-        return "移动文件"
+            return f"{self.display_name} {source_path}"
+        return self.display_name
 
     @property
     def parameters(self) -> ToolFunctionParameters:

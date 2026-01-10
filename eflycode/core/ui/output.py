@@ -65,12 +65,18 @@ class UIOutput(ABC):
         pass
 
     @abstractmethod
-    def show_tool_call_executing(self, tool_name: str, arguments: Dict) -> None:
+    def show_tool_call_executing(
+        self,
+        tool_name: str,
+        arguments: Dict,
+        display: str = "",
+    ) -> None:
         """显示工具正在执行
 
         Args:
             tool_name: 工具名称
             arguments: 工具参数
+            display: 工具显示内容
         """
         pass
 

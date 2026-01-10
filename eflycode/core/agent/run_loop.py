@@ -142,8 +142,8 @@ class AgentRunLoop:
                     if conversation.completion.usage:
                         statistics.add_usage(conversation.completion.usage)
 
-                tool_call = self._parse_tool_call(conversation.completion)
-                if not tool_call:
+                tool_calls = self._parse_tool_calls(conversation.completion)
+                if not tool_calls:
                     statistics.tool_calls_count = self.current_iteration - 1
                     result_content = response_content
 
@@ -170,26 +170,32 @@ class AgentRunLoop:
                     self.agent.event_bus.emit("agent.task.stop", agent=self.agent, result=result_content)
                     return TaskConversation(conversation=conversation, statistics=statistics)
 
-                tool_name = tool_call.get("name")
-                arguments = tool_call.get("arguments", {})
-                tool_call_id = tool_call.get("id", "")
+                tool_results = []
+                for tool_call in tool_calls:
+                    tool_name = tool_call.get("name")
+                    arguments = tool_call.get("arguments", {})
+                    tool_call_id = tool_call.get("id", "")
 
-                if not tool_name:
-                    continue
+                    if not tool_name:
+                        continue
 
-                logger.info(f"执行工具: {tool_name}, 参数: {arguments}")
+                    logger.info(f"执行工具: {tool_name}, 参数: {arguments}")
 
-                statistics.tool_calls_count += 1
-                tool_result = self._execute_tool(tool_name, arguments, tool_call_id)
-                
-                tool_result_length = len(tool_result)
-                logger.info(f"工具 {tool_name} 执行完成，结果长度: {tool_result_length} 字符")
+                    statistics.tool_calls_count += 1
+                    tool_result = self._execute_tool(tool_name, arguments, tool_call_id)
 
-                # 将工具执行结果作为工具消息添加到 session 中
-                # 这是 OpenAI API 的要求：当 assistant 消息包含 tool_calls 时，必须紧接着发送工具消息
-                self.agent.session.add_message("tool", content=tool_result, tool_call_id=tool_call_id)
+                    tool_result_length = len(tool_result)
+                    logger.info(f"工具 {tool_name} 执行完成，结果长度: {tool_result_length} 字符")
 
-                user_input = f"工具 {tool_name} 的执行结果：\n{tool_result}\n\n请根据工具执行结果继续处理任务。"
+                    # 将工具执行结果作为工具消息添加到 session 中
+                    # 这是 OpenAI API 的要求：当 assistant 消息包含 tool_calls 时，必须紧接着发送工具消息
+                    self.agent.session.add_message("tool", content=tool_result, tool_call_id=tool_call_id)
+                    tool_results.append((tool_name, tool_result))
+
+                results_text = "\n\n".join(
+                    f"工具 {name} 的执行结果：\n{result}" for name, result in tool_results
+                )
+                user_input = f"{results_text}\n\n请根据工具执行结果继续处理任务。"
 
             if last_conversation:
                 statistics.tool_calls_count = self.current_iteration - 1
@@ -227,7 +233,7 @@ class AgentRunLoop:
                     self.agent.session.id, workspace_dir
                 )
 
-    def _parse_tool_call(self, completion) -> Optional[Dict]:
+    def _parse_tool_calls(self, completion) -> Optional[list[Dict]]:
         """解析响应中的工具调用
 
         从 ChatCompletion 的 tool_calls 中提取工具调用信息
@@ -236,21 +242,27 @@ class AgentRunLoop:
             completion: ChatCompletion 对象
 
         Returns:
-            Optional[Dict]: 工具调用信息，格式为 {"name": str, "arguments": dict, "id": str}，如果不存在则返回 None
+            Optional[list[Dict]]: 工具调用信息列表，格式为 {"name": str, "arguments": dict, "id": str}，如果不存在则返回 None
         """
-        if completion.message.tool_calls:
-            tool_call = completion.message.tool_calls[0]
+        tool_calls = completion.message.tool_calls or []
+        if not tool_calls:
+            return None
+
+        parsed_calls = []
+        for tool_call in tool_calls:
             try:
                 arguments = tool_call.function.arguments_dict
-                return {
-                    "name": tool_call.function.name,
-                    "arguments": arguments,
-                    "id": tool_call.id,
-                }
+                parsed_calls.append(
+                    {
+                        "name": tool_call.function.name,
+                        "arguments": arguments,
+                        "id": tool_call.id,
+                    }
+                )
             except Exception:
-                pass
+                continue
 
-        return None
+        return parsed_calls or None
 
     def _execute_tool(self, tool_name: str, arguments: Dict, tool_call_id: str = "") -> str:
         """执行工具

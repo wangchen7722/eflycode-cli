@@ -13,6 +13,7 @@ import sys
 from eflycode.cli.commands.init import init_command
 from eflycode.cli.commands.mcp import mcp_add, mcp_list, mcp_remove
 from eflycode.cli.commands.restore import restore_command
+from eflycode.cli.commands.resume import resume_command
 from eflycode.cli.main import run_interactive_cli
 
 
@@ -21,13 +22,6 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         prog="eflycode",
         description="Eflycode CLI，AI 驱动的编程助手",
-    )
-    
-    # 全局参数
-    parser.add_argument(
-        "--verbose", "-v",
-        action="store_true",
-        help="启用详细日志模式，记录所有 LLM 请求和响应",
     )
     
     subparsers = parser.add_subparsers(dest="command", help="可用命令")
@@ -88,15 +82,25 @@ def main() -> None:
     restore_parser = subparsers.add_parser("restore", help="恢复 checkpoint；无参数列出可用的 checkpoint")
     restore_parser.add_argument("name", nargs="?", help="checkpoint 名称（不含 .json 可省略）")
     restore_parser.set_defaults(func=restore_command)
+
+    # resume 命令
+    resume_parser = subparsers.add_parser("resume", help="恢复会话并继续对话")
+    resume_parser.add_argument("session_id", nargs="?", help="会话 ID")
+    resume_parser.set_defaults(func=resume_command)
     
     # 解析参数
     args = parser.parse_args()
+    
+    # 初始化应用程序（init、resume 和交互式模式除外）
+    if args.command not in {"init", "resume", None}:
+        from eflycode.cli.main import initialize_application
+        initialize_application(setup_ui=False)
     
     # 如果没有提供命令，运行交互式 CLI
     # 注意：当使用子命令时，例如 mcp add，args.command 可能为 None
     # 需要检查是否有 func 属性来判断是否有命令需要执行
     if args.command is None and not hasattr(args, "func"):
-        asyncio.run(run_interactive_cli(verbose=args.verbose))
+        asyncio.run(run_interactive_cli())
     else:
         # 执行对应的命令函数
         if hasattr(args, "func"):

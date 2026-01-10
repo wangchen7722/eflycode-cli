@@ -6,6 +6,7 @@
 import asyncio
 import os
 import time
+from dataclasses import dataclass
 
 from eflycode.cli.components.composer import ComposerComponent
 from eflycode.cli.command_registry import get_command_registry
@@ -15,6 +16,7 @@ from eflycode.core.agent.run_loop import AgentRunLoop
 from eflycode.core.config import Config
 from eflycode.core.config.config_manager import ConfigManager
 from eflycode.core.context.manager import ContextManager
+from eflycode.core.agent.session_store import SessionStore
 from eflycode.core.llm.advisors.request_log_advisor import RequestLogAdvisor
 from eflycode.core.llm.providers.openai import OpenAiProvider
 from eflycode.core.mcp import MCPClient, MCPToolGroup, load_mcp_config
@@ -27,6 +29,87 @@ from eflycode.core.ui.renderer import Renderer
 from eflycode.core.ui.ui_event_queue import UIEventQueue
 from eflycode.core.utils.file_manager import get_file_manager
 from eflycode.core.utils.logger import logger
+from eflycode.core.event.event_bus import get_global_event_bus
+
+
+@dataclass
+class ApplicationContext:
+    """应用上下文"""
+
+    config: Config
+    ui_queue: UIEventQueue | None = None
+    output: TerminalOutput | None = None
+    renderer: Renderer | None = None
+    event_bridge: EventBridge | None = None
+
+
+def initialize_application(setup_ui: bool = False) -> ApplicationContext:
+    """初始化应用程序
+    
+    加载配置、设置工作区目录，执行应用程序初始化
+    
+    Returns:
+        ApplicationContext: 应用上下文
+    """
+    logger.info("初始化应用程序")
+    
+    # 加载配置
+    config_manager = ConfigManager.get_instance()
+    config = config_manager.load()
+    logger.info(f"配置加载完成，工作区目录: {config.workspace_dir}")
+    
+    # 设置工作区目录
+    if config.workspace_dir:
+        os.chdir(config.workspace_dir)
+        logger.info(f"切换到工作区目录: {config.workspace_dir}")
+    
+    app_context = ApplicationContext(config=config)
+
+    if setup_ui:
+        ui_queue = UIEventQueue()
+        output = TerminalOutput()
+        renderer = Renderer(ui_queue, output)
+        event_bridge = EventBridge(
+            event_bus=get_global_event_bus(),
+            ui_queue=ui_queue,
+            event_types=[
+                "app.startup",
+                "app.initialized",
+                "app.shutdown",
+                "agent.task.start",
+                "agent.task.stop",
+                "agent.message.start",
+                "agent.message.delta",
+                "agent.message.stop",
+                "agent.tool.call.start",
+                "agent.tool.call.ready",
+                "agent.tool.call",
+                "agent.tool.result",
+                "agent.tool.error",
+                "agent.error",
+            ],
+        )
+        event_bridge.start()
+
+        app_context.ui_queue = ui_queue
+        app_context.output = output
+        app_context.renderer = renderer
+        app_context.event_bridge = event_bridge
+
+        event_bus = get_global_event_bus()
+        event_bus.emit("app.startup")
+        event_bus.emit("app.initialized", config=config)
+
+        deadline = time.monotonic() + 0.2
+        while time.monotonic() < deadline:
+            ui_queue.process_events()
+            renderer.tick()
+            if ui_queue.size() == 0:
+                time.sleep(0.01)
+            else:
+                time.sleep(0)
+
+    return app_context
 
 
 def create_agent(config: Config) -> BaseAgent:
@@ -173,42 +256,72 @@ def run_agent_task(agent: BaseAgent, user_input: str, run_loop: AgentRunLoop) ->
         agent.event_bus.emit("agent.error", agent=agent, error=e)
 
 
-async def run_interactive_cli(verbose: bool = False) -> None:
+def _render_resumed_history(output: TerminalOutput, session_messages: list) -> None:
+    """渲染恢复会话的历史消息"""
+    if not session_messages:
+        return
+    output.write("\n[已恢复历史消息]\n")
+    for message in session_messages:
+        content = message.content or ""
+        role = message.role
+        if role == "tool":
+            continue
+        if role == "assistant" and message.tool_calls:
+            for tool_call in message.tool_calls:
+                args = tool_call.function.arguments or ""
+                args_preview = args if len(args) <= 120 else f"{args[:120]}..."
+                output.write(f"\n[tool] {tool_call.function.name} {args_preview}\n")
+        output.write(f"\n{role}: {content}\n")
+    output.write("\n")
+
+async def run_interactive_cli(
+    resume_session_id: str | None = None,
+    app_context: ApplicationContext | None = None,
+) -> None:
     """运行交互式 CLI
 
     Args:
-        verbose: 是否启用详细日志模式，记录所有 LLM 请求和响应
+        resume_session_id: 要恢复的会话 ID
+        app_context: 应用上下文，可选
     """
     
     logger.info("启动 eflycode CLI")
-    if verbose:
-        logger.info("详细日志模式已启用")
-    
-    # 加载配置
-    config_manager = ConfigManager.get_instance()
-    config = config_manager.load()
-    logger.info(f"配置加载完成，工作区目录: {config.workspace_dir}")
-    
-    # 设置工作区目录
-    workspace_dir = config.workspace_dir
-    if workspace_dir:
-        os.chdir(workspace_dir)
-        logger.info(f"切换到工作区目录: {workspace_dir}")
+
+    if not app_context:
+        app_context = initialize_application(setup_ui=True)
+    if not app_context.ui_queue or not app_context.output or not app_context.renderer:
+        raise RuntimeError("应用上下文未初始化 UI 组件")
+    if not app_context.event_bridge:
+        raise RuntimeError("应用上下文未初始化 EventBridge")
+
+    config = app_context.config
+    logger.info(f"使用配置，工作区目录: {config.workspace_dir}")
     
     # 创建 Agent
     agent = create_agent(config)
     logger.info(f"Agent 创建完成，模型: {config.model_name}")
 
-    # 如果启用了 verbose 模式，添加 RequestLogAdvisor
-    if verbose:
-        request_log_advisor = RequestLogAdvisor(session_id=agent.session.id)
-        agent.provider.add_advisors([request_log_advisor])
-        logger.info(f"RequestLogAdvisor 已添加，日志文件: {request_log_advisor.log_file}")
+    session_data = None
+    if resume_session_id:
+        session_data = SessionStore.get_instance().load(resume_session_id)
+        if not session_data:
+            raise ValueError(f"未找到会话: {resume_session_id}")
+        agent.session.load_state(
+            session_id=session_data["id"],
+            messages=session_data["messages"],
+            initial_user_question=session_data.get("initial_user_question"),
+        )
+        logger.info(f"已恢复会话: {agent.session.id}")
+
+    # 默认启用请求日志
+    request_log_advisor = RequestLogAdvisor(session_id=agent.session.id)
+    agent.provider.add_advisors([request_log_advisor])
+    logger.info(f"RequestLogAdvisor 已添加，日志文件: {request_log_advisor.log_file}")
     
-    # 创建 UI 组件
-    ui_queue = UIEventQueue()
-    output = TerminalOutput()
-    renderer = Renderer(ui_queue, output)
+    # UI 组件从初始化上下文获取
+    ui_queue = app_context.ui_queue
+    output = app_context.output
+    renderer = app_context.renderer
     file_manager = get_file_manager()
     file_manager.start_watching()
     # 创建智能命令 completer
@@ -216,39 +329,9 @@ async def run_interactive_cli(verbose: bool = False) -> None:
     smart_completer = composer.get_completer()
     registry = get_command_registry()
     
-    # 创建事件桥接
-    event_bridge = EventBridge(
-        event_bus=agent.event_bus,
-        ui_queue=ui_queue,
-        event_types=[
-            "app.startup",
-            "app.initialized",
-            "app.shutdown",
-            "agent.task.start",
-            "agent.task.stop",
-            "agent.message.start",
-            "agent.message.delta",
-            "agent.message.stop",
-            "agent.tool.call.start",
-            "agent.tool.call.ready",
-            "agent.tool.call",
-            "agent.tool.result",
-            "agent.tool.error",
-            "agent.error",
-        ],
-    )
-    event_bridge.start()
-
-    agent.event_bus.emit("app.startup")
-    agent.event_bus.emit("app.initialized", config=config)
-    deadline = time.monotonic() + 0.2
-    while time.monotonic() < deadline:
-        ui_queue.process_events()
-        renderer.tick()
-        if ui_queue.size() == 0:
-            await asyncio.sleep(0.01)
-        else:
-            await asyncio.sleep(0)
+    event_bridge = app_context.event_bridge
+    if session_data:
+        _render_resumed_history(output, agent.session.get_messages())
     
     try:
         # 主循环
@@ -335,7 +418,7 @@ async def run_interactive_cli(verbose: bool = False) -> None:
     
     finally:
         # 清理资源
-        agent.event_bus.emit("app.shutdown")
+        get_global_event_bus().emit("app.shutdown")
         event_bridge.stop()
         renderer.close()
         file_manager.stop_watching()
@@ -358,4 +441,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

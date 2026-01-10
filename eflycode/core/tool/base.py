@@ -128,6 +128,11 @@ class BaseTool(ABC):
         """工具描述"""
         pass
 
+    @property
+    def display_name(self) -> str:
+        """工具显示名称"""
+        return self.name
+
     def display(self, **kwargs) -> str:
         """工具显示名称
 
@@ -137,7 +142,7 @@ class BaseTool(ABC):
         Returns:
             工具显示名称
         """
-        return "使用此工具"
+        return self.display_name
 
     @property
     @abstractmethod

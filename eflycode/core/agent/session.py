@@ -11,13 +11,17 @@ from eflycode.core.utils.logger import logger
 class Session:
     """会话管理，管理 Agent 的对话历史"""
 
-    def __init__(self, context_config: Optional[ContextStrategyConfig] = None):
+    def __init__(
+        self,
+        context_config: Optional[ContextStrategyConfig] = None,
+        session_id: Optional[str] = None,
+    ):
         """初始化会话
 
         Args:
             context_config: 上下文管理配置，如果为 None 则不启用上下文管理
         """
-        self._id = str(uuid.uuid4())
+        self._id = session_id or str(uuid.uuid4())
         self._messages: List[Message] = []
         self._initial_user_question: Optional[str] = None
         self.context_config = context_config
@@ -31,6 +35,29 @@ class Session:
             str: 会话唯一标识符
         """
         return self._id
+
+    @property
+    def initial_user_question(self) -> Optional[str]:
+        """获取初始用户问题"""
+        return self._initial_user_question
+
+    def load_state(
+        self,
+        session_id: str,
+        messages: List[Message],
+        initial_user_question: Optional[str] = None,
+    ) -> None:
+        """加载会话状态"""
+        self._id = session_id
+        self._messages = list(messages)
+        if initial_user_question:
+            self._initial_user_question = initial_user_question
+        else:
+            self._initial_user_question = None
+            for msg in self._messages:
+                if msg.role == "user" and msg.content:
+                    self._initial_user_question = msg.content
+                    break
 
     def add_message(
         self,
@@ -66,6 +93,9 @@ class Session:
             question_preview = content[:50]
             logger.debug(f"记录初始用户提问: session_id={self._id}, question_preview={question_preview}...")
 
+        from eflycode.core.agent.session_store import SessionStore
+        SessionStore.get_instance().save(self)
+
     def get_messages(self) -> List[Message]:
         """获取所有消息
 
@@ -80,6 +110,9 @@ class Session:
         self._messages.clear()
         self._initial_user_question = None
         logger.info(f"清空会话历史: session_id={self._id}, cleared_messages={message_count}")
+
+        from eflycode.core.agent.session_store import SessionStore
+        SessionStore.get_instance().save(self)
 
     def get_context(
         self,

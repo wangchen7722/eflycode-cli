@@ -24,6 +24,7 @@ CHECKPOINTS_DIR = "checkpoints"
 LOG_DIR = "logs"
 VERBOSE_DIR = "verbose"
 REQUESTS_DIR = "requests"
+SESSIONS_DIR = "sessions"
 
 # ============================================================================
 # 日志配置常量

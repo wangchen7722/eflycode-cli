@@ -381,6 +381,7 @@ class BaseAgent:
                                     agent=self,
                                     tool_name=delta_tc.function.name,
                                     tool_call_id=delta_tc.id or "",
+                                    show_call=False,
                                 )
                         else:
                             # 累积 arguments
@@ -399,12 +400,20 @@ class BaseAgent:
                     tool_calls_list = [accumulated_tool_calls[i] for i in sorted(accumulated_tool_calls.keys())]
                     # 当工具调用完整时，触发工具正在执行事件
                     for tool_call in tool_calls_list:
+                        display_text = ""
+                        tool = self._tools.get(tool_call.function.name)
+                        if tool:
+                            try:
+                                display_text = tool.display(**tool_call.function.arguments_dict)
+                            except Exception:
+                                display_text = ""
                         self.event_bus.emit(
                             "agent.tool.call.ready",
                             agent=self,
                             tool_name=tool_call.function.name,
                             tool_call_id=tool_call.id,
                             arguments=tool_call.function.arguments_dict,
+                            display=display_text,
                         )
                 self.session.add_message("assistant", content=full_content, tool_calls=tool_calls_list)
             
@@ -545,7 +554,15 @@ class BaseAgent:
                         hook_result.system_message or "Hook requested to stop execution"
                     )
 
-            self.event_bus.emit("agent.tool.result", agent=self, tool_name=tool_name, result=result, tool_call_id=tool_call_id)
+            show_result = tool.permission in {"edit", "delete"}
+            self.event_bus.emit(
+                "agent.tool.result",
+                agent=self,
+                tool_name=tool_name,
+                result=result,
+                tool_call_id=tool_call_id,
+                show_result=show_result,
+            )
             return result
         except ToolExecutionError as e:
             error_message = str(e)

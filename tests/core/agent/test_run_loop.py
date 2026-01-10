@@ -411,7 +411,7 @@ class TestAgentRunLoopDetailed(unittest.TestCase):
         self.assertIsNotNone(result)
         self.assertEqual(result.statistics.iterations, 3)
 
-    def test_parse_tool_call_from_tool_calls(self):
+    def test_parse_tool_calls_from_tool_calls(self):
         """测试从 tool_calls 解析工具调用"""
         completion = ChatCompletion(
             id="chatcmpl-1",
@@ -430,14 +430,15 @@ class TestAgentRunLoopDetailed(unittest.TestCase):
             ),
         )
 
-        tool_call = self.run_loop._parse_tool_call(completion)
+        tool_calls = self.run_loop._parse_tool_calls(completion)
 
-        self.assertIsNotNone(tool_call)
-        self.assertEqual(tool_call["name"], "test_tool")
-        self.assertEqual(tool_call["arguments"]["arg1"], "value1")
+        self.assertIsNotNone(tool_calls)
+        self.assertEqual(len(tool_calls), 1)
+        self.assertEqual(tool_calls[0]["name"], "test_tool")
+        self.assertEqual(tool_calls[0]["arguments"]["arg1"], "value1")
 
 
-    def test_parse_tool_call_none(self):
+    def test_parse_tool_calls_none(self):
         """测试解析不到工具调用"""
         completion = ChatCompletion(
             id="chatcmpl-1",
@@ -447,9 +448,9 @@ class TestAgentRunLoopDetailed(unittest.TestCase):
             message=Message(role="assistant", content="Just a message"),
         )
 
-        tool_call = self.run_loop._parse_tool_call(completion)
+        tool_calls = self.run_loop._parse_tool_calls(completion)
 
-        self.assertIsNone(tool_call)
+        self.assertIsNone(tool_calls)
 
     def test_execute_tool(self):
         """测试执行工具"""

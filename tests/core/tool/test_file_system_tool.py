@@ -9,6 +9,7 @@ from eflycode.core.tool.file_system_tool import (
     ListDirectoryTool,
     MoveFileTool,
     ReadFileTool,
+    ReadManyFilesTool,
     ReplaceTool,
     SearchFileContentTool,
     WriteFileTool,
@@ -40,8 +41,8 @@ class TestFileSystemTools(unittest.TestCase):
     def test_list_directory_tool_display(self):
         """测试 ListDirectoryTool 的 display 方法"""
         tool = ListDirectoryTool()
-        self.assertEqual(tool.display(dir_path="/test"), "列出目录 /test")
-        self.assertEqual(tool.display(), "列出目录")
+        self.assertEqual(tool.display(dir_path="/test"), "List /test")
+        self.assertEqual(tool.display(), "List")
 
     def test_list_directory_tool(self):
         """测试 ListDirectoryTool 功能"""
@@ -64,8 +65,8 @@ class TestFileSystemTools(unittest.TestCase):
     def test_read_file_tool_display(self):
         """测试 ReadFileTool 的 display 方法"""
         tool = ReadFileTool()
-        self.assertEqual(tool.display(file_path="file1.txt"), "读取文件 file1.txt")
-        self.assertEqual(tool.display(), "读取文件")
+        self.assertEqual(tool.display(file_path="file1.txt"), "Read file1.txt")
+        self.assertEqual(tool.display(), "Read")
 
     def test_read_file_tool_basic(self):
         """测试 ReadFileTool 基本功能"""
@@ -92,8 +93,17 @@ class TestFileSystemTools(unittest.TestCase):
     def test_search_file_content_tool_display(self):
         """测试 SearchFileContentTool 的 display 方法"""
         tool = SearchFileContentTool()
-        self.assertEqual(tool.display(pattern="test"), "搜索文本 'test'")
-        self.assertEqual(tool.display(), "搜索文本")
+        self.assertEqual(tool.display(pattern="test"), "Search 'test'")
+        self.assertEqual(tool.display(), "Search")
+
+    def test_read_many_files_tool_display(self):
+        """测试 ReadManyFilesTool 的 display 方法"""
+        tool = ReadManyFilesTool()
+        self.assertEqual(
+            tool.display(include=["a.txt", "b.txt"]),
+            "Read a.txt, Read b.txt",
+        )
+        self.assertEqual(tool.display(), "Read")
 
     def test_search_file_content_tool(self):
         """测试 SearchFileContentTool 基本功能"""
@@ -111,8 +121,8 @@ class TestFileSystemTools(unittest.TestCase):
     def test_glob_search_tool_display(self):
         """测试 GlobSearchTool 的 display 方法"""
         tool = GlobSearchTool()
-        self.assertEqual(tool.display(pattern="*.py"), "查找文件 '*.py'")
-        self.assertEqual(tool.display(), "查找文件")
+        self.assertEqual(tool.display(pattern="*.py"), "Glob '*.py'")
+        self.assertEqual(tool.display(), "Glob")
 
     def test_glob_search_tool(self):
         """测试 GlobSearchTool 基本功能"""
@@ -145,8 +155,8 @@ class TestFileSystemTools(unittest.TestCase):
     def test_write_file_tool_display(self):
         """测试 WriteFileTool 的 display 方法"""
         tool = WriteFileTool()
-        self.assertEqual(tool.display(file_path="/test/file.txt"), "写入文件 /test/file.txt")
-        self.assertEqual(tool.display(), "写入文件")
+        self.assertEqual(tool.display(file_path="/test/file.txt"), "Write /test/file.txt")
+        self.assertEqual(tool.display(), "Write")
 
     def test_write_file_tool_create(self):
         """测试 WriteFileTool 创建文件"""
@@ -183,9 +193,9 @@ class TestFileSystemTools(unittest.TestCase):
         tool = ReplaceTool()
         self.assertEqual(
             tool.display(file_path="/test.txt"),
-            "编辑文件 /test.txt"
+            "Edit /test.txt"
         )
-        self.assertEqual(tool.display(), "编辑文件")
+        self.assertEqual(tool.display(), "Edit")
 
     def test_replace_tool(self):
         """测试 ReplaceTool 替换内容"""
@@ -229,7 +239,7 @@ class TestFileSystemTools(unittest.TestCase):
     def test_delete_file_tool_display(self):
         """测试 DeleteFileTool 的 display 方法"""
         tool = DeleteFileTool()
-        self.assertEqual(tool.display(file_path="/test.txt"), "删除文件 /test.txt")
+        self.assertEqual(tool.display(file_path="/test.txt"), "Delete /test.txt")
 
     def test_delete_file_tool(self):
         """测试 DeleteFileTool 删除文件"""
@@ -253,7 +263,7 @@ class TestFileSystemTools(unittest.TestCase):
         tool = MoveFileTool()
         self.assertEqual(
             tool.display(source_path="/source.txt", target_path="/target.txt"),
-            "移动文件 /source.txt -> /target.txt"
+            "Move /source.txt -> /target.txt"
         )
 
     def test_move_file_tool(self):

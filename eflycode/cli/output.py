@@ -78,13 +78,23 @@ class TerminalOutput(UIOutput):
         """
         self._console.print(f"\n[dim]检测到工具调用:[/dim] [bold]{tool_name}[/bold]")
 
-    def show_tool_call_executing(self, tool_name: str, arguments: Dict) -> None:
+    def show_tool_call_executing(
+        self,
+        tool_name: str,
+        arguments: Dict,
+        display: str = "",
+    ) -> None:
         """显示工具正在执行
 
         Args:
             tool_name: 工具名称
             arguments: 工具参数
+            display: 工具显示内容
         """
+        if display:
+            self._console.print(f"\n[yellow]{display}[/yellow]")
+            return
+
         self._console.print(f"\n[yellow]工具 {tool_name} 正在执行...[/yellow]")
         if arguments:
             self._console.print(f"  参数: {arguments}")
@@ -96,10 +106,8 @@ class TerminalOutput(UIOutput):
             tool_name: 工具名称
             result: 执行结果
         """
-        self._console.print(f"\n[green]工具 {tool_name} 执行成功[/green]")
         if result:
-            result_preview = result[:200] + "..." if len(result) > 200 else result
-            self._console.print(f"  结果: {result_preview}")
+            self._console.print(f"\n{result}")
 
     def show_error(self, error: Exception) -> None:
         """显示错误信息

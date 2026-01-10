@@ -41,8 +41,10 @@ class MockOutput(UIOutput):
     def show_tool_call_detected(self, tool_name: str) -> None:
         self.tool_calls_detected.append({"name": tool_name})
 
-    def show_tool_call_executing(self, tool_name: str, arguments: dict) -> None:
-        self.tool_calls_executing.append({"name": tool_name, "arguments": arguments})
+    def show_tool_call_executing(self, tool_name: str, arguments: dict, display: str = "") -> None:
+        self.tool_calls_executing.append(
+            {"name": tool_name, "arguments": arguments, "display": display}
+        )
 
     def show_tool_result(self, tool_name: str, result: str) -> None:
         self.tool_results.append({"name": tool_name, "result": result})
@@ -162,6 +164,14 @@ class TestRenderer(unittest.TestCase):
         # 验证结果直接显示到输出
         self.assertEqual(len(self.output.tool_results), 1)
         self.assertEqual(self.output.tool_results[0]["result"], "success")
+
+    def test_handle_tool_result_hidden(self):
+        """测试工具结果隐藏"""
+        self.ui_queue.emit("agent.tool.result", tool_name="test_tool", tool_call_id="call_1", result="success", show_result=False)
+        self.ui_queue.process_events()
+        self.renderer.tick()
+
+        self.assertEqual(len(self.output.tool_results), 0)
 
     def test_handle_error(self):
         """测试处理错误事件"""

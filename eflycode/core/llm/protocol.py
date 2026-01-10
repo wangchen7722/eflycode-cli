@@ -124,6 +124,8 @@ class LLMRequest(BaseModel):
     generate_config: Optional[Dict[str, Any]] = None
 
 class LLMConfig(BaseModel):
+    model: Optional[str] = None
+    name: Optional[str] = None
     api_key: Optional[str] = None
     base_url: Optional[str] = None
     timeout: float = DEFAULT_TIMEOUT

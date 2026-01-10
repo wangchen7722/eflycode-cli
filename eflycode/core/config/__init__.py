@@ -5,10 +5,10 @@
 
 # 导入配置管理功能
 from eflycode.core.config.config_manager import (
-    Config,
     ConfigManager,
     find_config_files,
     get_max_context_length,
+    get_model_display_name_from_config,
     get_model_name_from_config,
     get_user_config_dir,
     load_config_from_file,
@@ -16,6 +16,7 @@ from eflycode.core.config.config_manager import (
     parse_model_config,
     resolve_workspace_dir,
 )
+from eflycode.core.config.models import Config
 
 # 导入忽略文件管理功能
 from eflycode.core.config.ignore import (
@@ -33,6 +34,7 @@ __all__ = [
     "ConfigManager",
     "find_config_files",
     "get_max_context_length",
+    "get_model_display_name_from_config",
     "get_model_name_from_config",
     "get_user_config_dir",
     "load_config_from_file",

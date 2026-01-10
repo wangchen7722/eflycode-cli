@@ -5,10 +5,11 @@
 
 import asyncio
 import os
+import time
 
 from eflycode.cli.components.composer import ComposerComponent
-from eflycode.cli.components.model_list import ModelListComponent
 from eflycode.cli.components.smart_completer import SmartCompleter
+from eflycode.cli.handlers import build_model_command_handler
 from eflycode.cli.output import TerminalOutput
 from eflycode.core.agent.base import BaseAgent
 from eflycode.core.agent.run_loop import AgentRunLoop
@@ -128,7 +129,7 @@ def create_agent(config: Config) -> BaseAgent:
         )
 
     # 创建最终的 LLM Provider
-    provider = OpenAiProvider(config.model_config)
+    provider = OpenAiProvider(config.llm_config)
     
     # 创建 HookSystem
     from eflycode.core.hooks.system import HookSystem
@@ -211,58 +212,14 @@ async def run_interactive_cli(verbose: bool = False) -> None:
     renderer = Renderer(ui_queue, output)
     file_manager = get_file_manager()
     file_manager.start_watching()
-    
     # 创建智能命令 completer
     smart_completer = SmartCompleter()
     
-    # 注册 /model 命令处理函数
-    async def handle_model_command(command: str) -> bool:
-        """处理 /model 命令
-
-        Args:
-            command: 命令字符串
-
-        Returns:
-            bool: 如果命令已处理返回 True，否则返回 False
-        """
-        if command.strip() == "/model":
-            try:
-                # 显示模型列表
-                model_list = ModelListComponent()
-                selected_model = await model_list.show()
-
-                if selected_model:
-                    # 更新项目配置
-                    config_manager = ConfigManager.get_instance()
-                    config_manager.update_project_model_default(selected_model)
-                    output.write(f"\n[已更新默认模型: {selected_model}]\n")
-                    logger.info(f"用户选择模型: {selected_model}")
-                else:
-                    output.write("\n[取消选择]\n")
-            except Exception as e:
-                output.write(f"\n[错误: {str(e)}]\n")
-                logger.error(f"处理 /model 命令失败: {e}", exc_info=True)
-            return True
-        return False
-    
     # 设置 /model 命令的处理函数
-    smart_completer.set_command_handler("/model", handle_model_command)
-    
-    # 创建命令处理回调，异步函数
-    async def handle_command(command: str) -> bool:
-        """处理命令
-        
-        Args:
-            command: 命令字符串
-            
-        Returns:
-            bool: 如果命令已处理返回 True，否则返回 False
-        """
-        handler = smart_completer.get_command_handler(command)
-        if handler:
-            # handler 现在是异步的，需要 await
-            return await handler(command)
-        return False
+    smart_completer.set_command_handler(
+        "/model",
+        build_model_command_handler(output, ConfigManager.get_instance()),
+    )
     
     composer = ComposerComponent()
     
@@ -271,6 +228,9 @@ async def run_interactive_cli(verbose: bool = False) -> None:
         event_bus=agent.event_bus,
         ui_queue=ui_queue,
         event_types=[
+            "app.startup",
+            "app.initialized",
+            "app.shutdown",
             "agent.task.start",
             "agent.task.stop",
             "agent.message.start",
@@ -285,6 +245,17 @@ async def run_interactive_cli(verbose: bool = False) -> None:
         ],
     )
     event_bridge.start()
+
+    agent.event_bus.emit("app.startup")
+    agent.event_bus.emit("app.initialized", config=config)
+    deadline = time.monotonic() + 0.2
+    while time.monotonic() < deadline:
+        ui_queue.process_events()
+        renderer.tick()
+        if ui_queue.size() == 0:
+            await asyncio.sleep(0.01)
+        else:
+            await asyncio.sleep(0)
     
     try:
         # 主循环
@@ -297,14 +268,14 @@ async def run_interactive_cli(verbose: bool = False) -> None:
                     placeholder="share your ideas...",
                     toolbar_text="Press Ctrl+M to submit, Ctrl+D to exit, /model to select model",
                     completer=smart_completer,
-                    on_complete=handle_command,
+                    on_complete=smart_completer.handle_command_async,
                 )
                 
                 if not user_input or not user_input.strip():
                     continue
 
                 if user_input.strip().startswith("/"):
-                    handled = await handle_command(user_input)
+                    handled = await smart_completer.handle_command_async(user_input)
                     if handled:
                         continue
                     continue
@@ -373,6 +344,7 @@ async def run_interactive_cli(verbose: bool = False) -> None:
     
     finally:
         # 清理资源
+        agent.event_bus.emit("app.shutdown")
         event_bridge.stop()
         renderer.close()
         file_manager.stop_watching()

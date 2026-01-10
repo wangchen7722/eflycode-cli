@@ -1,7 +1,7 @@
 from typing import Any, Dict, Iterator, List, Optional
 
 from eflycode.core.agent.session import Session
-from eflycode.core.event.event_bus import EventBus
+from eflycode.core.event.event_bus import EventBus, get_global_event_bus
 from eflycode.core.llm.advisor import Advisor
 from eflycode.core.llm.protocol import (
     ChatCompletion,
@@ -134,7 +134,13 @@ class BaseAgent:
             hook_system: Hook 系统实例，如果为 None 则不使用 hooks
         """
         self.model_name = model
-        self.event_bus = event_bus or EventBus()
+        global_bus = get_global_event_bus()
+        if event_bus is None:
+            self.event_bus = global_bus
+            self._owns_event_bus = False
+        else:
+            self.event_bus = event_bus
+            self._owns_event_bus = event_bus is not global_bus
         self.session = Session()
         self.max_context_length = DEFAULT_MAX_CONTEXT_LENGTH
         self._advisors: List[Advisor] = advisors or []
@@ -155,7 +161,7 @@ class BaseAgent:
 
         # 创建 SystemPromptAdvisor 并添加到 advisors
         # 延迟导入以避免循环导入
-        from eflycode.core.prompt.system_prompt_advisor import SystemPromptAdvisor
+        from eflycode.core.llm.advisors.system_prompt_advisor import SystemPromptAdvisor
         
         system_prompt_advisor = SystemPromptAdvisor(agent=self)
         self._advisors.append(system_prompt_advisor)
@@ -165,11 +171,20 @@ class BaseAgent:
         if self._advisors and hasattr(provider, "add_advisors"):
             provider.add_advisors(self._advisors)
 
+        self.event_bus.subscribe("app.config.llm.changed", self._handle_model_changed)
+
         logger.info(
             f"Agent 初始化完成: model={model}, tools={len(self._tools)}, "
             f"tool_groups={len(self._tool_groups)}, advisors={len(self._advisors)}, "
             f"hook_system={'enabled' if hook_system else 'disabled'}"
         )
+
+    def _handle_model_changed(self, **kwargs) -> None:
+        event = kwargs.get("event")
+        if event is None:
+            return
+        target = event.target
+        self.model_name = target.model or self.model_name
 
     def chat(self, message: str = "") -> ChatConversation:
         """发送消息并获取响应
@@ -668,4 +683,5 @@ class BaseAgent:
 
     def shutdown(self) -> None:
         """关闭 Agent，清理资源"""
-        self.event_bus.shutdown(wait=True)
+        if self._owns_event_bus:
+            self.event_bus.shutdown(wait=True)

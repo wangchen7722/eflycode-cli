@@ -1,20 +1,18 @@
 from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field
-from uuid import UUID, uuid4
-from datetime import datetime
 
-class BaseEvent(BaseModel):
-    model_config = ConfigDict(
-        forzen=True, extra="allow"
-    )
-    v: int = 1
-    event_id: UUID = Field(default_factory=uuid4)
-    ts: datetime = Field(default_factory=datetime.now)
-    
-    type: str
+from eflycode.core.event.base import BaseEvent
+from eflycode.core.llm.protocol import LLMConfig
 
 class AppStartUpEvent(BaseEvent):
     type: Literal["app.startup"] = "app.startup"
+
+class AppInitializedEvent(BaseEvent):
+    type: Literal["app.initialized"] = "app.initialized"
+
+class AppConfigLLMChangedEvent(BaseEvent):
+    type: Literal["app.config.llm.changed"] = "app.config.llm.changed"
+    source: LLMConfig
+    target: LLMConfig
 
 class AppShutDownEvent(BaseEvent):
     type: Literal["app.shutdown"] = "app.shutdown"

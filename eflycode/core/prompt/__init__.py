@@ -4,7 +4,6 @@
 """
 
 from eflycode.core.prompt.loader import PromptLoader
-from eflycode.core.prompt.system_prompt_advisor import SystemPromptAdvisor
 
-__all__ = ["PromptLoader", "SystemPromptAdvisor"]
+__all__ = ["PromptLoader"]
 

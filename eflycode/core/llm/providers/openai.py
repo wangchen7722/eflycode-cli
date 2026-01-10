@@ -18,6 +18,7 @@ from eflycode.core.llm.protocol import (
     Usage,
 )
 from eflycode.core.llm.providers.base import LLMProvider, ProviderCapabilities
+from eflycode.core.event.event_bus import get_global_event_bus
 
 
 class OpenAiProvider(LLMProvider):
@@ -39,6 +40,9 @@ class OpenAiProvider(LLMProvider):
             timeout=config.timeout,
             max_retries=config.max_retries,
         )
+        get_global_event_bus().subscribe(
+            "app.config.llm.changed", self._handle_model_changed
+        )
 
     def add_advisors(self, advisors: List[Advisor]) -> None:
         """添加 Advisor 到现有列表并更新 AdvisorChain
@@ -48,6 +52,22 @@ class OpenAiProvider(LLMProvider):
         """
         self._advisors.extend(advisors)
         self.advisor_chain = AdvisorChain(self._advisors.copy())
+
+    def update_config(self, config: LLMConfig) -> None:
+        """更新配置并重建客户端"""
+        self.config = config
+        self.client = OpenAI(
+            api_key=config.api_key,
+            base_url=config.base_url,
+            timeout=config.timeout,
+            max_retries=config.max_retries,
+        )
+
+    def _handle_model_changed(self, **kwargs) -> None:
+        event = kwargs.get("event")
+        if event is None:
+            return
+        self.update_config(event.target)
 
     @property
     def capabilities(self) -> ProviderCapabilities:

@@ -1,4 +1,5 @@
 from eflycode.core.event.event_bus import EventBus
+from eflycode.core.event.base import BaseEvent
 from eflycode.core.event.events import (
     AgentEvent,
     AgentMessageDeltaEvent,
@@ -11,13 +12,16 @@ from eflycode.core.event.events import (
     AgentToolCallEvent,
     AppShutDownEvent,
     AppStartUpEvent,
-    BaseEvent,
+    AppInitializedEvent,
+    AppConfigLLMChangedEvent,
 )
 
 __all__ = [
     "EventBus",
     "BaseEvent",
     "AppStartUpEvent",
+    "AppInitializedEvent",
+    "AppConfigLLMChangedEvent",
     "AppShutDownEvent",
     "AgentEvent",
     "AgentTaskStartEvent",

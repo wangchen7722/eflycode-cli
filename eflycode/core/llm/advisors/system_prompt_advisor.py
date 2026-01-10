@@ -140,13 +140,5 @@ class SystemPromptAdvisor(Advisor):
         return self._add_system_prompt(request)
 
     def before_stream(self, request: LLMRequest) -> LLMRequest:
-        """在流式请求发送前添加系统提示词
-
-        Args:
-            request: LLM 请求
-
-        Returns:
-            LLMRequest: 修改后的请求
-        """
+        """在流式请求发送前添加系统提示词"""
         return self._add_system_prompt(request)
-

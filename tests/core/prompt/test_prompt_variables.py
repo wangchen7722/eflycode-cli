@@ -11,7 +11,7 @@ from pathlib import Path
 from eflycode.core.agent.base import BaseAgent
 from eflycode.core.config.config_manager import Config, ConfigManager, LLMConfig
 from eflycode.core.llm.providers.base import LLMProvider
-from eflycode.core.prompt.system_prompt_advisor import SystemPromptAdvisor
+from eflycode.core.llm.advisors.system_prompt_advisor import SystemPromptAdvisor
 from eflycode.core.tool.base import BaseTool, ToolGroup
 
 

@@ -13,51 +13,19 @@ from typing import Any, Dict, List, Optional
 import yaml
 
 from eflycode.core.constants import (
+    DEFAULT_MAX_RETRIES,
+    DEFAULT_MODEL,
     DEFAULT_SYSTEM_VERSION,
+    DEFAULT_TIMEOUT,
     EFLYCODE_DIR,
     CONFIG_FILE,
     WORKSPACE_SEARCH_MAX_DEPTH,
 )
 from eflycode.core.context.strategies import ContextStrategyConfig
 from eflycode.core.llm.protocol import DEFAULT_MAX_CONTEXT_LENGTH, LLMConfig
+from eflycode.core.config.models import Config, ConfigMeta
 from eflycode.core.utils.logger import logger
 
-
-class Config:
-    """配置类，包含模型配置和工作区信息"""
-
-    def __init__(
-        self,
-        model_config: LLMConfig,
-        model_name: str,
-        workspace_dir: Path,
-        config_file_path: Optional[Path] = None,
-        context_config: Optional[ContextStrategyConfig] = None,
-        checkpointing_enabled: bool = False,
-        source: str = "default",
-    ):
-        """初始化配置
-
-        Args:
-            model_config: LLM 配置
-            model_name: 模型名称
-            workspace_dir: 工作区根目录
-            config_file_path: 配置文件路径，如果是从文件加载的
-            context_config: 上下文管理配置
-            checkpointing_enabled: 是否启用 checkpointing
-            source: 配置来源，"user"、"project" 或 "default"，TODO: 未来支持 "team" 作为配置来源
-        """
-        self.model_config = model_config
-        self.model_name = model_name
-        self.workspace_dir = workspace_dir
-        self.config_file_path = config_file_path
-        self.context_config = context_config
-        self.checkpointing_enabled = checkpointing_enabled
-        # source 只能是 "user", "project", "default" 之一
-        # TODO: 支持 "team" 作为配置来源
-        if source not in ("user", "project", "default"):
-            raise ValueError(f"无效的配置来源: {source}，必须是 'user', 'project' 或 'default'")
-        self.source = source
 
 
 def _merge_entries_by_key(
@@ -225,20 +193,10 @@ def load_config_from_file(config_path: Path) -> dict:
 
 
 def parse_model_config(config_data: dict) -> LLMConfig:
-    """解析模型配置
-
-    Args:
-        config_data: 配置字典
-
-    Returns:
-        LLMConfig: LLM 配置对象
-    """
+    """解析模型配置"""
     model_section = config_data.get("model", {})
-    
-    # 获取默认模型配置
     default_model = model_section.get("default", "")
-    
-    # 查找对应的模型条目
+
     model_entry = None
     entries = model_section.get("entries", [])
     if isinstance(entries, list):
@@ -246,27 +204,23 @@ def parse_model_config(config_data: dict) -> LLMConfig:
             if entry.get("model") == default_model:
                 model_entry = entry
                 break
-    
-    # 如果没有找到，使用第一个条目
     if not model_entry and entries:
         model_entry = entries[0] if isinstance(entries, list) else entries
-    
-    # 如果还是没有，使用默认值
     if not model_entry:
         model_entry = {}
-    
-    # 从环境变量或配置中获取 API Key
+
     api_key = (
         os.getenv("OPENAI_API_KEY")
         or model_entry.get("api_key")
         or os.getenv("EFLYCODE_API_KEY")
     )
-    
     return LLMConfig(
+        model=default_model or model_entry.get("model"),
+        name=model_entry.get("name"),
         api_key=api_key,
         base_url=model_entry.get("base_url"),
-        timeout=60.0,
-        max_retries=3,
+        timeout=DEFAULT_TIMEOUT,
+        max_retries=DEFAULT_MAX_RETRIES,
         temperature=model_entry.get("temperature"),
         max_tokens=model_entry.get("max_tokens"),
     )
@@ -290,9 +244,20 @@ def get_model_name_from_config(config_data: dict) -> str:
     # 如果没有默认模型，使用第一个条目的模型
     entries = model_section.get("entries", [])
     if isinstance(entries, list) and entries:
-        return entries[0].get("model", "gpt-4")
+        return entries[0].get("model", DEFAULT_MODEL)
     
-    return "gpt-4"
+    return DEFAULT_MODEL
+
+
+def get_model_display_name_from_config(config_data: dict, model_name: str) -> str:
+    """从配置中获取模型展示名称"""
+    model_section = config_data.get("model", {})
+    entries = model_section.get("entries", [])
+    if isinstance(entries, list):
+        for entry in entries:
+            if entry.get("model") == model_name:
+                return entry.get("name", model_name)
+    return model_name
 
 
 def parse_context_config(config_data: dict) -> Optional[ContextStrategyConfig]:
@@ -431,43 +396,27 @@ class ConfigManager:
         # 3. 如果有配置数据，解析并返回
         if config_data:
             try:
-                model_config = parse_model_config(config_data)
-                model_name = get_model_name_from_config(config_data)
-                context_config = parse_context_config(config_data)
-                checkpointing_enabled = get_checkpointing_enabled(config_data)
-
-                return Config(
-                    model_config=model_config,
-                    model_name=model_name,
+                meta = ConfigMeta(
                     workspace_dir=workspace_dir,
                     config_file_path=config_file_path,
-                    context_config=context_config,
-                    checkpointing_enabled=checkpointing_enabled,
                     source=source,
+                    system_version=self._load_version(),
                 )
+                payload = dict(config_data)
+                payload["meta"] = meta
+                return Config.model_validate(payload)
             except Exception as e:
                 logger.warning(f"解析配置失败: {e}，使用默认配置")
 
         # 4. 使用默认配置
         default_workspace = Path.cwd().resolve()
-        default_model_config = LLMConfig(
-            api_key=os.getenv("OPENAI_API_KEY") or os.getenv("EFLYCODE_API_KEY"),
-            base_url=None,
-            timeout=60.0,
-            max_retries=3,
-            temperature=None,
-            max_tokens=None,
-        )
-
-        return Config(
-            model_config=default_model_config,
-            model_name="gpt-4",
+        meta = ConfigMeta(
             workspace_dir=default_workspace,
             config_file_path=None,
-            context_config=None,
-            checkpointing_enabled=False,
             source="default",
+            system_version=self._load_version(),
         )
+        return Config.model_validate({"meta": meta})
 
     def load(self) -> Config:
         """显式加载配置
@@ -496,12 +445,9 @@ class ConfigManager:
             int: 最大上下文长度，如果未配置则返回默认值
         """
         config = self.get_config()
-        if config.config_file_path:
-            try:
-                config_data = load_config_from_file(config.config_file_path)
-                return get_max_context_length(config_data)
-            except Exception:
-                pass
+        entry = config.get_current_model_entry()
+        if entry and entry.max_context_length:
+            return entry.max_context_length
         return DEFAULT_MAX_CONTEXT_LENGTH
 
     def _load_version(self) -> str:

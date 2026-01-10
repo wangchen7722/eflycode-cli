@@ -14,6 +14,7 @@ from eflycode.core.config import (
     parse_model_config,
     get_model_name_from_config,
 )
+from eflycode.core.constants import DEFAULT_MODEL
 from eflycode.core.config.config_manager import (
     _deep_merge,
     _merge_entries_by_key,
@@ -206,7 +207,7 @@ workspace: /tmp/test
 
         model_name = get_model_name_from_config(config)
 
-        self.assertEqual(model_name, "gpt-4")  # 或其他默认值
+        self.assertEqual(model_name, DEFAULT_MODEL)
 
     def test_load_config(self):
         """测试加载完整配置"""

@@ -1,6 +1,8 @@
 import time
 from typing import Optional
 
+from prompt_toolkit.utils import get_cwidth
+
 from eflycode.core.ui.output import UIOutput
 from eflycode.core.ui.ui_event_queue import UIEventQueue
 
@@ -43,6 +45,7 @@ class Renderer:
 
     def _subscribe_events(self) -> None:
         """订阅 UI 事件"""
+        self._ui_queue.subscribe("app.initialized", self.handle_app_initialized)
         self._ui_queue.subscribe("agent.task.start", self.handle_task_start)
         self._ui_queue.subscribe("agent.task.stop", self.handle_task_stop)
         self._ui_queue.subscribe("agent.message.start", self.handle_message_start)
@@ -61,6 +64,31 @@ class Renderer:
                 self._output.write(chunk)
         self._message_buffer = ""
         self._message_index = 0
+
+    def _format_banner(self, title: str, body_lines: list[str]) -> str:
+        content_lines = [title, ""] + body_lines
+        width = max(get_cwidth(line) for line in content_lines)
+        top = "╭" + "─" * (width + 2) + "╮"
+        bottom = "╰" + "─" * (width + 2) + "╯"
+        rendered = [top]
+        for line in content_lines:
+            pad = " " * (width - get_cwidth(line))
+            rendered.append(f"│ {line}{pad} │")
+        rendered.append(bottom)
+        return "\n".join(rendered)
+
+    def handle_app_initialized(self, **kwargs) -> None:
+        """处理初始化完成事件，输出 banner"""
+        config = kwargs.get("config")
+        if config is None:
+            return
+        title = f">_ eflycode (v{config.system_version})"
+        body_lines = [
+            f"model:     {config.model_display_name}   /model to change",
+            f"directory: {config.workspace_dir}",
+        ]
+        banner = self._format_banner(title, body_lines)
+        self._output.write(f"{banner}\n")
 
     def handle_task_start(self, **kwargs) -> None:
         """处理任务开始事件

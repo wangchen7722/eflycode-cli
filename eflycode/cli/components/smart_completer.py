@@ -3,6 +3,7 @@
 统一处理所有命令的补全和执行
 """
 
+import asyncio
 from typing import Callable, Dict, Iterable, Optional
 
 from prompt_toolkit.completion import Completer, Completion
@@ -123,6 +124,20 @@ class SmartCompleter(Completer):
             handler = self._commands[command].get("handler")
             if handler:
                 return handler(command)
+        return False
+
+    async def handle_command_async(self, command: str) -> bool:
+        """异步处理命令"""
+        command = command.strip()
+        if command in self._commands:
+            handler = self._commands[command].get("handler")
+            if handler:
+                if asyncio.iscoroutinefunction(handler):
+                    return bool(await handler(command))
+                result = handler(command)
+                if asyncio.iscoroutine(result):
+                    return bool(await result)
+                return bool(result)
         return False
 
     def get_command_handler(self, command: str) -> Optional[Callable[[str], bool]]:

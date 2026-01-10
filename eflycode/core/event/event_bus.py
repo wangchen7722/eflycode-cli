@@ -1,11 +1,23 @@
 import logging
 from concurrent.futures import ThreadPoolExecutor
-from typing import Callable, Dict, List
+from typing import Callable, Dict, List, Union
+
+from eflycode.core.event.base import BaseEvent
 
 logger = logging.getLogger(__name__)
 
 # 事件总线配置常量
 EVENT_BUS_MAX_WORKERS = 10
+_GLOBAL_EVENT_BUS: "EventBus | None" = None
+
+
+def get_global_event_bus() -> "EventBus":
+    global _GLOBAL_EVENT_BUS
+    if _GLOBAL_EVENT_BUS is not None and getattr(_GLOBAL_EVENT_BUS, "_shutdown", False):
+        raise RuntimeError("Global EventBus has been shut down")
+    if _GLOBAL_EVENT_BUS is None:
+        _GLOBAL_EVENT_BUS = EventBus()
+    return _GLOBAL_EVENT_BUS
 
 
 class HandlerInfo:
@@ -80,17 +92,22 @@ class EventBus:
         if handler_info in self._handlers[event_type]:
             self._handlers[event_type].remove(handler_info)
 
-    def emit(self, event_type: str, **kwargs) -> None:
+    def emit(self, event_type: Union[str, BaseEvent], **kwargs) -> None:
         """发布事件
 
         异步非阻塞，立即返回，不等待 handler 执行完成
 
         Args:
-            event_type: 事件类型
+            event_type: 事件类型或事件对象
             **kwargs: 事件参数
         """
         if self._shutdown:
             return
+
+        if isinstance(event_type, BaseEvent):
+            event = event_type
+            event_type = event.type
+            kwargs = {"event": event}
 
         if event_type not in self._handlers:
             return
@@ -99,6 +116,23 @@ class EventBus:
 
         for handler_info in handlers:
             self._executor.submit(self._execute_handler, handler_info.handler, kwargs)
+
+    def emit_sync(self, event_type: Union[str, BaseEvent], **kwargs) -> None:
+        """同步发布事件（立即执行 handler）"""
+        if self._shutdown:
+            return
+
+        if isinstance(event_type, BaseEvent):
+            event = event_type
+            event_type = event.type
+            kwargs = {"event": event}
+
+        if event_type not in self._handlers:
+            return
+
+        handlers = self._handlers[event_type].copy()
+        for handler_info in handlers:
+            self._execute_handler(handler_info.handler, kwargs)
 
     def _execute_handler(self, handler: Callable, kwargs: dict) -> None:
         """在线程池中执行 handler

@@ -8,8 +8,7 @@ import os
 import time
 
 from eflycode.cli.components.composer import ComposerComponent
-from eflycode.cli.components.smart_completer import SmartCompleter
-from eflycode.cli.handlers import build_model_command_handler
+from eflycode.cli.command_registry import get_command_registry
 from eflycode.cli.output import TerminalOutput
 from eflycode.core.agent.base import BaseAgent
 from eflycode.core.agent.run_loop import AgentRunLoop
@@ -213,15 +212,9 @@ async def run_interactive_cli(verbose: bool = False) -> None:
     file_manager = get_file_manager()
     file_manager.start_watching()
     # 创建智能命令 completer
-    smart_completer = SmartCompleter()
-    
-    # 设置 /model 命令的处理函数
-    smart_completer.set_command_handler(
-        "/model",
-        build_model_command_handler(output, ConfigManager.get_instance()),
-    )
-    
     composer = ComposerComponent()
+    smart_completer = composer.get_completer()
+    registry = get_command_registry()
     
     # 创建事件桥接
     event_bridge = EventBridge(
@@ -267,19 +260,17 @@ async def run_interactive_cli(verbose: bool = False) -> None:
                     busy_prompt_text="🤔> ",
                     placeholder="share your ideas...",
                     toolbar_text="Press Ctrl+M to submit, Ctrl+D to exit, /model to select model",
-                    completer=smart_completer,
-                    on_complete=smart_completer.handle_command_async,
                 )
                 
                 if not user_input or not user_input.strip():
                     continue
 
                 if user_input.strip().startswith("/"):
-                    handled = await smart_completer.handle_command_async(user_input)
+                    handled = await registry.handle_command_async(user_input)
                     if handled:
                         continue
                     continue
-                
+
                 logger.info(f"收到用户输入: {user_input[:50]}...")
                 
                 session_messages = agent.session.get_messages()

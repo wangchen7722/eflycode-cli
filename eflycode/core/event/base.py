@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class BaseEvent(BaseModel):
     model_config = ConfigDict(
-        forzen=True, extra="allow"
+        frozen=True, extra="allow"
     )
     v: int = 1
     event_id: UUID = Field(default_factory=uuid4)

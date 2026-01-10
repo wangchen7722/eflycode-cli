@@ -10,6 +10,7 @@ from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.document import Document
 
 from eflycode.core.utils.file_manager import get_file_manager
+from eflycode.cli.command_registry import get_command_registry
 
 
 class SmartCompleter(Completer):
@@ -17,16 +18,7 @@ class SmartCompleter(Completer):
 
     def __init__(self):
         """初始化 SmartCompleter"""
-        self._commands: Dict[str, Dict[str, any]] = {}
-        self._register_default_commands()
-
-    def _register_default_commands(self) -> None:
-        """注册默认命令"""
-        self.register_command(
-            command="/model",
-            description="选择模型配置",
-            handler=None,  # handler 在外部设置
-        )
+        self._commands = get_command_registry().list_commands()
 
     def register_command(
         self,
@@ -41,13 +33,7 @@ class SmartCompleter(Completer):
             description: 命令描述
             handler: 命令处理函数，接收命令字符串，返回是否已处理
         """
-        if not command.startswith("/"):
-            raise ValueError(f"命令必须以 '/' 开头: {command}")
-
-        self._commands[command] = {
-            "description": description,
-            "handler": handler,
-        }
+        get_command_registry().register_command(command, description, handler)
 
     def get_completions(
         self, document: Document, complete_event
@@ -121,7 +107,7 @@ class SmartCompleter(Completer):
         """
         command = command.strip()
         if command in self._commands:
-            handler = self._commands[command].get("handler")
+            handler = get_command_registry().get_command_handler(command)
             if handler:
                 return handler(command)
         return False
@@ -150,7 +136,7 @@ class SmartCompleter(Completer):
             Optional[Callable]: 命令处理函数，如果不存在返回 None
         """
         if command in self._commands:
-            return self._commands[command].get("handler")
+            return get_command_registry().get_command_handler(command)
         return None
 
     def set_command_handler(self, command: str, handler: Callable[[str], bool]) -> None:
@@ -160,7 +146,5 @@ class SmartCompleter(Completer):
             command: 命令字符串
             handler: 命令处理函数
         """
-        if command not in self._commands:
-            raise ValueError(f"命令未注册: {command}")
-        self._commands[command]["handler"] = handler
+        get_command_registry().set_command_handler(command, handler)
 

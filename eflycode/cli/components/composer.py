@@ -20,6 +20,7 @@ from prompt_toolkit.layout.dimension import Dimension
 
 from eflycode.core.ui.style import build_prompt_toolkit_style
 from eflycode.core.ui.errors import UserCanceledError
+from eflycode.cli.components.smart_completer import SmartCompleter
 
 def build_get_line_prefix(
     prompt_text: str,
@@ -56,6 +57,12 @@ def build_placeholder_visible(buffer: Buffer) -> Callable[[], bool]:
 
 class ComposerComponent:
 
+    def __init__(self) -> None:
+        self._completer = SmartCompleter()
+
+    def get_completer(self) -> SmartCompleter:
+        return self._completer
+
     async def show(
         self,
         *,
@@ -70,20 +77,25 @@ class ComposerComponent:
         on_complete: Optional[Union[Callable[[str], bool], Callable[[str], Awaitable[bool]]]] = None,
         on_busy: Optional[Callable[[], bool]] = None,
     ) -> str:
+        completer = completer or self._completer
+        if on_complete is None:
+            on_complete = self._completer.handle_command_async
         buffer = Buffer(
             completer=completer,
             multiline=multiline,
-            complete_while_typing=True,
+            complete_while_typing=False,
         )
         if completer is not None:
             def _on_text_changed(_):
                 text = buffer.text.strip()
                 last_token = text.rsplit(" ", 1)[-1] if text else ""
                 if not last_token.startswith(("/", "#", "@")):
+                    if buffer.complete_state:
+                        buffer.cancel_completion()
                     return
                 if buffer.complete_state and buffer.complete_state.completions:
                     return
-                buffer.start_completion(select_first=True)
+                buffer.start_completion(select_first=False)
             buffer.on_text_changed += _on_text_changed
         get_prompt_width = build_get_line_prefix_width(prompt_text, busy_prompt_text, on_busy)
 

@@ -2,7 +2,7 @@ name: unitest
 
 on:
   push:
-    branches: [ master ]
+    branches: [ master, dev ]
   pull_request:
     branches: [ master ]
 
@@ -10,7 +10,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/astral-sh/uv:python3.11-slim
+      image: ghcr.io/astral-sh/uv:python3.11-trixie-slim
     
     steps:
       - name: 检出代码

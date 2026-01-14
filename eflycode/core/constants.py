@@ -14,6 +14,8 @@ EFLYCODE_DIR = ".eflycode"
 CONFIG_FILE = "config.yaml"
 MCP_CONFIG_FILE = "mcp.json"
 IGNORE_FILE = ".eflycodeignore"
+SKILLS_MANIFEST_FILE = "skills.json"
+SKILLS_DIR = "skills"
 
 # checkpointing 存储目录
 HISTORY_DIR = "history"

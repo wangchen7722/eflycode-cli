@@ -14,13 +14,16 @@ from eflycode.cli.output import TerminalOutput
 from eflycode.core.agent.base import BaseAgent
 from eflycode.core.agent.run_loop import AgentRunLoop
 from eflycode.core.config import Config
-from eflycode.core.config.config_manager import ConfigManager
+from eflycode.core.config.config_manager import ConfigManager, get_user_config_dir
 from eflycode.core.context.manager import ContextManager
 from eflycode.core.agent.session_store import SessionStore
 from eflycode.core.llm.advisors.request_log_advisor import RequestLogAdvisor
 from eflycode.core.llm.providers.openai import OpenAiProvider
 from eflycode.core.mcp import MCPClient, MCPToolGroup, load_mcp_config
 from eflycode.core.mcp.errors import MCPConnectionError, MCPConfigError
+from eflycode.core.skills import SkillsManager
+from eflycode.core.skills.activate_tool import ActivateSkillTool
+from eflycode.core.skills.skills_advisor import SkillsAdvisor
 from eflycode.core.tool.execute_command_tool import ExecuteCommandTool
 from eflycode.core.tool.file_system_tool import FILE_SYSTEM_TOOL_GROUP
 from eflycode.core.ui.bridge import EventBridge
@@ -122,9 +125,25 @@ def create_agent(config: Config) -> BaseAgent:
         BaseAgent: Agent 实例
     """
     # 使用文件系统工具组
-    
+
     # 创建执行命令工具
     execute_command_tool = ExecuteCommandTool()
+
+    # 初始化 SkillsManager（如果启用 skills 功能）
+    user_config_dir = get_user_config_dir()
+    project_workspace_dir = config.workspace_dir
+
+    if config.skills_enabled:
+        try:
+            skills_manager = SkillsManager.get_instance()
+            skills_manager.initialize(
+                user_config_dir=user_config_dir,
+                project_workspace_dir=project_workspace_dir,
+            )
+            logger.info("Skills 功能已启用")
+        except Exception as e:
+            logger.warning(f"初始化 SkillsManager 失败: {e}，禁用 skills 功能")
+            config.skills = None  # type: ignore
 
     # 获取最大上下文长度
     config_manager = ConfigManager.get_instance()
@@ -212,20 +231,36 @@ def create_agent(config: Config) -> BaseAgent:
 
     # 创建最终的 LLM Provider
     provider = OpenAiProvider(config.llm_config)
-    
+
     # 创建 HookSystem
     from eflycode.core.hooks.system import HookSystem
     from pathlib import Path
-    
+
     workspace_dir = config.workspace_dir or Path.cwd()
     hook_system = HookSystem(workspace_dir=workspace_dir)
-    
+
+    # 准备工具列表
+    tools = [execute_command_tool]
+    advisors = []
+
+    # 如果启用 skills 功能，添加 ActivateSkillTool 和 SkillsAdvisor
+    if config.skills_enabled:
+        try:
+            activate_skill_tool = ActivateSkillTool()
+            tools.append(activate_skill_tool)
+            skills_advisor = SkillsAdvisor(agent=None, config=config)  # type: ignore
+            advisors.append(skills_advisor)
+            logger.info("已添加 ActivateSkillTool 和 SkillsAdvisor")
+        except Exception as e:
+            logger.warning(f"添加 skills 相关组件失败: {e}")
+
     # 创建 Agent，SystemPromptAdvisor 会在 BaseAgent 初始化时自动创建
     agent = BaseAgent(
         model=config.model_name,
         provider=provider,
         tool_groups=tool_groups,
-        tools=[execute_command_tool],
+        tools=tools,
+        advisors=advisors if advisors else None,
         hook_system=hook_system,
     )
     agent.max_context_length = max_context_length

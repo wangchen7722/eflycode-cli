@@ -61,6 +61,10 @@ class CheckpointingSection(BaseModel):
     enabled: bool = False
 
 
+class SkillsSection(BaseModel):
+    enabled: bool = False
+
+
 class WorkspaceSection(BaseModel):
     workspace_dir: Optional[str] = None
     settings_dir: Optional[str] = None
@@ -81,6 +85,7 @@ class Config(BaseModel):
     context: Optional[ContextSection] = None
     checkpointing: Optional[CheckpointingSection] = None
     workspace: Optional[Union[WorkspaceSection, str]] = None
+    skills: Optional[SkillsSection] = None
     meta: ConfigMeta
 
     @property
@@ -136,6 +141,10 @@ class Config(BaseModel):
     @property
     def checkpointing_enabled(self) -> bool:
         return bool(self.checkpointing and self.checkpointing.enabled)
+
+    @property
+    def skills_enabled(self) -> bool:
+        return bool(self.skills and self.skills.enabled)
 
     @property
     def source(self) -> str:

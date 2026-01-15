@@ -1,4 +1,5 @@
 import logging
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from typing import Callable, Dict, List, Union
 
@@ -6,18 +7,43 @@ from eflycode.core.event.base import BaseEvent
 
 logger = logging.getLogger(__name__)
 
-# 事件总线配置常量
-EVENT_BUS_MAX_WORKERS = 10
-_GLOBAL_EVENT_BUS: "EventBus | None" = None
+
+class EventBusConfig:
+    """EventBus 配置类，封装全局配置和状态"""
+
+    MAX_WORKERS = 10
+    _global_event_bus: "EventBus | None" = None
+    _global_event_bus_lock = threading.Lock()
+
+
+# 向后兼容的模块级别别名
+EVENT_BUS_MAX_WORKERS = EventBusConfig.MAX_WORKERS
+_GLOBAL_EVENT_BUS = EventBusConfig._global_event_bus
+_GLOBAL_EVENT_BUS_LOCK = EventBusConfig._global_event_bus_lock
 
 
 def get_global_event_bus() -> "EventBus":
-    global _GLOBAL_EVENT_BUS
-    if _GLOBAL_EVENT_BUS is not None and getattr(_GLOBAL_EVENT_BUS, "_shutdown", False):
-        raise RuntimeError("Global EventBus has been shut down")
-    if _GLOBAL_EVENT_BUS is None:
-        _GLOBAL_EVENT_BUS = EventBus()
-    return _GLOBAL_EVENT_BUS
+    """获取全局 EventBus 单例，使用双重检查锁定模式确保线程安全
+
+    Returns:
+        EventBus: 全局 EventBus 实例
+
+    Raises:
+        RuntimeError: 如果 EventBus 已被关闭
+    """
+    # 第一次检查，无锁，快速返回已存在的实例
+    if EventBusConfig._global_event_bus is not None:
+        if getattr(EventBusConfig._global_event_bus, "_shutdown", False):
+            raise RuntimeError("Global EventBus has been shut down")
+        return EventBusConfig._global_event_bus
+
+    # 加锁并第二次检查，确保只创建一个实例
+    with EventBusConfig._global_event_bus_lock:
+        if EventBusConfig._global_event_bus is None:
+            EventBusConfig._global_event_bus = EventBus()
+            logger.debug("Global EventBus instance created")
+
+        return EventBusConfig._global_event_bus
 
 
 class HandlerInfo:
@@ -49,7 +75,7 @@ class HandlerInfo:
 class EventBus:
     """事件总线，使用线程池实现异步非阻塞事件处理"""
 
-    def __init__(self, max_workers: int = EVENT_BUS_MAX_WORKERS):
+    def __init__(self, max_workers: int = EventBusConfig.MAX_WORKERS):
         """初始化事件总线
 
         Args:
@@ -102,6 +128,7 @@ class EventBus:
             **kwargs: 事件参数
         """
         if self._shutdown:
+            logger.debug(f"EventBus 已关闭，忽略事件: {event_type}")
             return
 
         if isinstance(event_type, BaseEvent):
@@ -118,8 +145,14 @@ class EventBus:
             self._executor.submit(self._execute_handler, handler_info.handler, kwargs)
 
     def emit_sync(self, event_type: Union[str, BaseEvent], **kwargs) -> None:
-        """同步发布事件（立即执行 handler）"""
+        """同步发布事件（立即执行 handler）
+
+        Args:
+            event_type: 事件类型或事件对象
+            **kwargs: 事件参数
+        """
         if self._shutdown:
+            logger.debug(f"EventBus 已关闭，忽略同步事件: {event_type}")
             return
 
         if isinstance(event_type, BaseEvent):

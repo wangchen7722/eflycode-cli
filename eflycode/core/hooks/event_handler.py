@@ -3,8 +3,10 @@
 处理各种事件类型并应用结果
 """
 
+import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from pydantic import ValidationError
 
 from eflycode.core.hooks.aggregator import HookAggregator
 from eflycode.core.hooks.planner import HookPlanner
@@ -158,7 +160,7 @@ class HookEventHandler:
         )
 
         # 将 LLMRequest 转换为字典
-        request_dict = self._llm_request_to_dict(llm_request)
+        request_dict = self._serialize_llm_request(llm_request)
 
         result = self._execute_hooks(
             hook_groups,
@@ -171,7 +173,7 @@ class HookEventHandler:
         # 如果 hook 返回了修改后的 llm_request，应用修改
         modified_request = None
         if result.hook_specific_output and "llm_request" in result.hook_specific_output:
-            modified_request = self._dict_to_llm_request(
+            modified_request = self._deserialize_llm_request(
                 result.hook_specific_output["llm_request"]
             )
 
@@ -199,8 +201,8 @@ class HookEventHandler:
             HookEventName.AFTER_MODEL
         )
 
-        request_dict = self._llm_request_to_dict(llm_request)
-        response_dict = self._llm_response_to_dict(llm_response)
+        request_dict = self._serialize_llm_request(llm_request)
+        response_dict = self._serialize_llm_response(llm_response)
 
         return self._execute_hooks(
             hook_groups,
@@ -230,7 +232,7 @@ class HookEventHandler:
             HookEventName.BEFORE_TOOL_SELECTION
         )
 
-        tools_dict = [self._tool_definition_to_dict(tool) for tool in tools]
+        tools_dict = [self._serialize_tool_definition(tool) for tool in tools]
 
         result = self._execute_hooks(
             hook_groups,
@@ -244,7 +246,7 @@ class HookEventHandler:
         modified_tools = tools
         if result.hook_specific_output and "tools" in result.hook_specific_output:
             modified_tools = [
-                self._dict_to_tool_definition(tool_dict)
+                self._deserialize_tool_definition(tool_dict)
                 for tool_dict in result.hook_specific_output["tools"]
             ]
 
@@ -382,7 +384,7 @@ class HookEventHandler:
                 results = self.runner.execute_hooks_sequential(
                     hooks, event_name, current_input, session_id, workspace_dir
                 )
-                # 更新输入（将最后一个 hook 的输出合并到输入中）
+                # 更新输入，将最后一个 hook 的输出合并到输入中
                 if results and results[-1].success and results[-1].stdout:
                     try:
                         from eflycode.core.hooks.types import HookOutput
@@ -390,8 +392,8 @@ class HookEventHandler:
                         hook_output = HookOutput.from_json(results[-1].stdout)
                         if hook_output.hook_specific_output:
                             current_input.update(hook_output.hook_specific_output)
-                    except Exception:
-                        pass
+                    except (json.JSONDecodeError, KeyError, TypeError, ValueError) as e:
+                        logger.warning(f"解析 hook 输出失败: {e}")
             else:
                 # 并行执行
                 results = self.runner.execute_hooks_parallel(
@@ -406,8 +408,8 @@ class HookEventHandler:
         logger.debug(f"Hooks 执行完成: event={event_name}, total_results={total_results_count}, continue={aggregated.continue_}")
         return aggregated
 
-    def _llm_request_to_dict(self, request: LLMRequest) -> Dict[str, Any]:
-        """将 LLMRequest 转换为字典
+    def _serialize_llm_request(self, request: LLMRequest) -> Dict[str, Any]:
+        """将 LLMRequest 转换为字典，使用 Pydantic 原生方法
 
         Args:
             request: LLM 请求
@@ -415,66 +417,92 @@ class HookEventHandler:
         Returns:
             Dict[str, Any]: 字典表示
         """
-        result = {
-            "model": request.model,
-            "messages": [
-                {
-                    "role": msg.role,
-                    "content": msg.content,
-                    "tool_calls": [
-                        {
-                            "id": tc.id,
-                            "type": tc.type,
-                            "function": {
-                                "name": tc.function.name,
-                                "arguments": tc.function.arguments,
-                            },
-                        }
-                        for tc in (msg.tool_calls or [])
-                    ]
-                    if msg.tool_calls
-                    else None,
-                }
-                for msg in request.messages
-            ],
-        }
+        # 使用 Pydantic 的 model_dump 进行序列化
+        # exclude_none=True 排除 None 值
+        # mode='json' 确保与 JSON 序列化兼容，自动处理嵌套的 Pydantic 模型
+        return request.model_dump(exclude_none=True, mode="json")
 
-        if request.tools:
-            result["tools"] = [
-                self._tool_definition_to_dict(tool) for tool in request.tools
-            ]
-
-        if request.generate_config:
-            result["generate_config"] = request.generate_config
-
-        return result
-
-    def _dict_to_llm_request(self, data: Dict[str, Any]) -> LLMRequest:
-        """从字典创建 LLMRequest
+    def _deserialize_llm_request(self, data: Dict[str, Any]) -> LLMRequest:
+        """从字典创建 LLMRequest，包含输入验证和异常处理
 
         Args:
             data: 字典数据
 
         Returns:
             LLMRequest: LLM 请求对象
+
+        Raises:
+            ValueError: 如果输入数据格式无效
         """
-        from eflycode.core.llm.protocol import Message
+        from eflycode.core.llm.protocol import Message, ToolCall, ToolCallFunction
 
-        messages = [
-            Message(
-                role=msg_dict["role"],
-                content=msg_dict.get("content"),
-                tool_calls=None,  # 简化处理，不解析 tool_calls
-            )
-            for msg_dict in data.get("messages", [])
-        ]
+        if not isinstance(data, dict):
+            raise ValueError(f"期望输入为字典类型，实际为: {type(data)}")
 
+        # 验证并转换 messages
+        messages_data = data.get("messages", [])
+        if not isinstance(messages_data, list):
+            raise ValueError(f"messages 必须是列表，实际为: {type(messages_data)}")
+
+        messages = []
+        for i, msg_dict in enumerate(messages_data):
+            if not isinstance(msg_dict, dict):
+                logger.warning(f"消息格式无效，跳过索引 {i}: {msg_dict}")
+                continue
+
+            try:
+                # 验证必需字段
+                if "role" not in msg_dict:
+                    logger.warning(f"消息缺少 role 字段，跳过索引 {i}")
+                    continue
+
+                # 解析 tool_calls
+                tool_calls = None
+                if "tool_calls" in msg_dict and msg_dict["tool_calls"]:
+                    tool_calls_data = msg_dict["tool_calls"]
+                    if isinstance(tool_calls_data, list):
+                        tool_calls = []
+                        for tc in tool_calls_data:
+                            if isinstance(tc, dict) and "id" in tc and "function" in tc:
+                                try:
+                                    tool_calls.append(
+                                        ToolCall(
+                                            id=tc["id"],
+                                            type=tc.get("type", "function"),
+                                            function=ToolCallFunction(
+                                                name=tc["function"]["name"],
+                                                arguments=tc["function"].get("arguments", ""),
+                                            ),
+                                        )
+                                    )
+                                except (KeyError, TypeError, ValueError) as e:
+                                    logger.warning(f"解析 tool_call 失败，跳过: {e}")
+
+                messages.append(
+                    Message(
+                        role=msg_dict["role"],
+                        content=msg_dict.get("content"),
+                        tool_calls=tool_calls,
+                    )
+                )
+            except (KeyError, TypeError, ValueError) as e:
+                logger.warning(f"创建消息失败，跳过索引 {i}: {e}")
+
+        if not messages:
+            raise ValueError("至少需要一条有效消息")
+
+        # 转换 tools（可选）
         tools = None
         if "tools" in data:
-            tools = [
-                self._dict_to_tool_definition(tool_dict)
-                for tool_dict in data["tools"]
-            ]
+            tools_data = data["tools"]
+            if isinstance(tools_data, list):
+                try:
+                    tools = [
+                        self._deserialize_tool_definition(tool_dict)
+                        for tool_dict in tools_data
+                    ]
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"转换 tools 失败: {e}")
 
         return LLMRequest(
             model=data.get("model", ""),
@@ -483,8 +511,8 @@ class HookEventHandler:
             generate_config=data.get("generate_config"),
         )
 
-    def _tool_definition_to_dict(self, tool: ToolDefinition) -> Dict[str, Any]:
-        """将 ToolDefinition 转换为字典
+    def _serialize_tool_definition(self, tool: ToolDefinition) -> Dict[str, Any]:
+        """将 ToolDefinition 转换为字典，使用 Pydantic 原生方法
 
         Args:
             tool: 工具定义
@@ -492,41 +520,29 @@ class HookEventHandler:
         Returns:
             Dict[str, Any]: 字典表示
         """
-        return {
-            "type": tool.type,
-            "function": {
-                "name": tool.function.name,
-                "description": tool.function.description,
-                "parameters": tool.function.parameters.model_dump(),
-            },
-        }
+        return tool.model_dump()
 
-    def _dict_to_tool_definition(self, data: Dict[str, Any]) -> ToolDefinition:
-        """从字典创建 ToolDefinition
+    def _deserialize_tool_definition(self, data: Dict[str, Any]) -> ToolDefinition:
+        """从字典创建 ToolDefinition，使用 Pydantic model_validate 方法
 
         Args:
             data: 字典数据
 
         Returns:
             ToolDefinition: 工具定义对象
+
+        Raises:
+            ValueError: 如果输入数据格式无效
         """
-        from eflycode.core.llm.protocol import (
-            ToolFunction,
-            ToolFunctionParameters,
-        )
+        if not isinstance(data, dict):
+            raise ValueError(f"期望输入为字典类型，实际为: {type(data)}")
 
-        return ToolDefinition(
-            type=data.get("type", "function"),
-            function=ToolFunction(
-                name=data["function"]["name"],
-                description=data["function"].get("description", ""),
-                parameters=ToolFunctionParameters(
-                    **data["function"].get("parameters", {})
-                ),
-            ),
-        )
+        try:
+            return ToolDefinition.model_validate(data)
+        except ValidationError as e:
+            raise ValueError(f"验证 ToolDefinition 失败: {e}") from e
 
-    def _llm_response_to_dict(self, response: Any) -> Dict[str, Any]:
+    def _serialize_llm_response(self, response: Any) -> Dict[str, Any]:
         """将 LLM 响应转换为字典
 
         Args:
